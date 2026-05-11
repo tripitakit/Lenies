@@ -18,6 +18,7 @@ defmodule LeniesWeb.Router do
     pipe_through :browser
 
     live "/", DashboardLive, :index
+    live "/lenie/:id", LenieInspectorLive, :show
   end
 
   # Other scopes may use custom stacks.

@@ -67,6 +67,11 @@ defmodule Lenies.Lenie do
   end
 
   @impl true
+  def handle_call(:get_codeome, _from, state) do
+    {:reply, {:ok, state.codeome}, state}
+  end
+
+  @impl true
   def handle_call(:inspect_state, _from, state) do
     snapshot = %{
       id: state.id,
