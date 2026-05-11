@@ -34,4 +34,36 @@ defmodule Lenies.WorldTest do
     assert stats.total_resource == 0
     assert stats.total_carcass == 0
   end
+
+  test "tick_now/0 applies radiation to cells" do
+    {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+    stats_before = World.snapshot_stats()
+    assert stats_before.total_resource == 0
+
+    World.tick_now()
+    stats_after = World.snapshot_stats()
+    # radiation_per_tick default
+    assert stats_after.total_resource == 100
+    assert stats_after.tick_count == 1
+  end
+
+  test "tick_now/0 caps total resource at grid_size × cell_resource_cap" do
+    {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+    max_total = 65_536 * 100
+
+    # 1000 tick → 100_000 unità versate (ben sotto il cap globale)
+    for _ <- 1..1000, do: World.tick_now()
+
+    stats = World.snapshot_stats()
+    assert stats.total_resource <= max_total
+    assert stats.tick_count == 1000
+  end
+
+  test "auto-tick fires at the configured interval" do
+    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:tick")
+    {:ok, _pid} = World.start_link(tick_interval_ms: 50)
+
+    assert_receive {:tick, 1}, 500
+    assert_receive {:tick, 2}, 500
+  end
 end
