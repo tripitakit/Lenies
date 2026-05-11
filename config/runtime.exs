@@ -18,6 +18,7 @@ import Config
 # script that automatically sets the env var above.
 config :lenies,
   grid_size: {256, 256},
+  dashboard_throttle_ticks: 5,
   population_cap: 50_000,
   population_warning_threshold: 0.8,
   tick_interval_ms: 100,
