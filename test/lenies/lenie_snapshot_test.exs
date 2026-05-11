@@ -92,4 +92,40 @@ defmodule Lenies.LenieSnapshotTest do
 
     assert :ets.lookup(:lenies, "L2") == []
   end
+
+  test "snapshot preserves World-added fields like child_slot_id" do
+    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    [{key, cell}] = :ets.lookup(:cells, {5, 5})
+    :ets.insert(:cells, {key, %{cell | lenie_id: "L4"}})
+
+    codeome = Codeome.from_list([:nop_0, :nop_1])
+
+    {:ok, pid} =
+      Lenie.start_link(
+        id: "L4",
+        codeome: codeome,
+        energy: 100_000.0,
+        pos: {5, 5},
+        dir: :e,
+        lineage: {nil, 0}
+      )
+
+    Process.unlink(pid)
+
+    # World adds child_slot_id
+    Process.sleep(50)
+    [{"L4", record}] = :ets.lookup(:lenies, "L4")
+    merged = Map.put(record, :child_slot_id, "fake-slot-123")
+    :ets.insert(:lenies, {"L4", merged})
+
+    # Let the Lenie write another snapshot (cadence = 10, batches happen fast)
+    Process.sleep(500)
+
+    [{"L4", record_after}] = :ets.lookup(:lenies, "L4")
+
+    assert record_after.child_slot_id == "fake-slot-123",
+           "Lenie snapshot should NOT clobber World-added child_slot_id field"
+
+    GenServer.stop(pid)
+  end
 end

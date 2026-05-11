@@ -134,7 +134,7 @@ defmodule Lenies.Lenie do
     cadence = Application.get_env(:lenies, :snapshot_every_batches, 10)
 
     if rem(state.batch_count, cadence) == 0 do
-      snap = %{
+      new_snap = %{
         id: state.id,
         pid: self(),
         pos: state.interp.pos,
@@ -145,7 +145,14 @@ defmodule Lenies.Lenie do
         lineage: state.lineage
       }
 
-      :ets.insert(:lenies, {state.id, snap})
+      existing =
+        case :ets.lookup(:lenies, state.id) do
+          [{_, record}] -> record
+          [] -> %{}
+        end
+
+      merged = Map.merge(existing, new_snap)
+      :ets.insert(:lenies, {state.id, merged})
     end
   end
 
