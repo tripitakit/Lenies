@@ -141,6 +141,7 @@ defmodule Lenies.WorldPredationTest do
       :ets.insert(:cells, {key, %{cell | lenie_id: "VICTIM"}})
 
       codeome = Lenies.Codeome.from_list([:nop_0])
+
       {:ok, pid} =
         Lenies.Lenie.start_link(
           id: "VICTIM",
@@ -150,6 +151,7 @@ defmodule Lenies.WorldPredationTest do
           dir: :n,
           lineage: {nil, 0}
         )
+
       Process.unlink(pid)
       ref = Process.monitor(pid)
 
