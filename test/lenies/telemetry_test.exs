@@ -30,8 +30,10 @@ defmodule Lenies.TelemetryTest do
     World.tick_now()
     World.tick_now()
 
-    # tempo di propagazione del PubSub
+    # tempo di propagazione del PubSub; :sys.get_state/1 drena la mailbox prima
+    # di leggere la storia
     Process.sleep(50)
+    :sys.get_state(Lenies.Telemetry)
 
     entries = Lenies.Telemetry.history(:last_n, 10)
     assert length(entries) == 3
