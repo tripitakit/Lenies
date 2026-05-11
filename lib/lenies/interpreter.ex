@@ -182,12 +182,13 @@ defmodule Lenies.Interpreter do
       {:ok, match_pos} ->
         target_ip = Integer.mod(match_pos + length(template), size)
 
-        %{state | ip: target_ip, call_stack: [return_ip | state.call_stack]}
+        state
+        |> State.push_call(return_ip)
+        |> Map.put(:ip, target_ip)
         |> State.apply_cost(Costs.cost(:call_t, t_len))
         |> halt_if_dead()
 
       :not_found ->
-        # no jump; just advance past the template
         %{state | ip: return_ip}
         |> State.apply_cost(Costs.cost(:call_t, t_len))
         |> halt_if_dead()
@@ -195,15 +196,15 @@ defmodule Lenies.Interpreter do
   end
 
   defp dispatch(:ret, state, _codeome, size) do
-    case state.call_stack do
-      [return_ip | rest] ->
-        %{state | ip: return_ip, call_stack: rest}
+    case State.pop_call(state) do
+      {nil, _} ->
+        state
+        |> State.advance_ip(size, 1)
         |> State.apply_cost(Costs.cost(:ret, 0))
         |> halt_if_dead()
 
-      [] ->
-        state
-        |> State.advance_ip(size, 1)
+      {return_ip, new_state} ->
+        %{new_state | ip: return_ip}
         |> State.apply_cost(Costs.cost(:ret, 0))
         |> halt_if_dead()
     end

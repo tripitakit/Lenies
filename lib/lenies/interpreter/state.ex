@@ -25,6 +25,7 @@ defmodule Lenies.Interpreter.State do
         }
 
   @stack_max 16
+  @call_stack_max 32
   @slot_count 4
 
   defstruct ip: 0,
@@ -88,6 +89,16 @@ defmodule Lenies.Interpreter.State do
     idx = Integer.mod(slot_idx, @slot_count)
     Map.get(slots, idx, 0)
   end
+
+  @spec push_call(t(), non_neg_integer()) :: t()
+  def push_call(%__MODULE__{call_stack: cs} = s, return_ip) do
+    new_cs = [return_ip | cs] |> Enum.take(@call_stack_max)
+    %{s | call_stack: new_cs}
+  end
+
+  @spec pop_call(t()) :: {non_neg_integer() | nil, t()}
+  def pop_call(%__MODULE__{call_stack: []} = s), do: {nil, s}
+  def pop_call(%__MODULE__{call_stack: [top | rest]} = s), do: {top, %{s | call_stack: rest}}
 
   @spec apply_cost(t(), float()) :: t()
   def apply_cost(%__MODULE__{energy: e} = s, cost), do: %{s | energy: e - cost}
