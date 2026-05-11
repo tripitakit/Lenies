@@ -16,6 +16,17 @@ import Config
 #
 # Alternatively, you can use `mix phx.gen.release` to generate a `bin/server`
 # script that automatically sets the env var above.
+config :lenies,
+  grid_size: {256, 256},
+  population_cap: 50_000,
+  population_warning_threshold: 0.8,
+  tick_interval_ms: 100,
+  radiation_per_tick: 100,
+  radiation_uniform_ratio: 0.7,
+  hotspot_count: 8,
+  cell_resource_cap: 100,
+  carcass_decay: 0.05
+
 if System.get_env("PHX_SERVER") do
   config :lenies, LeniesWeb.Endpoint, server: true
 end
