@@ -260,6 +260,56 @@ defmodule Lenies.Interpreter do
     end
   end
 
+  # Replicazione: ritornano :wait_world. Il Lenie chiama il World e applica il risultato.
+
+  defp dispatch(:allocate, state, _c, size) do
+    {req_size, s1} = State.pop(state)
+    cost = Costs.cost(:allocate, req_size)
+
+    new_state =
+      s1
+      |> State.apply_cost(cost)
+      |> State.advance_ip(size, 1)
+
+    if new_state.energy <= 0 do
+      {:halt, :starvation, new_state}
+    else
+      {:wait_world, {:allocate, req_size, state.pos, state.dir}, new_state}
+    end
+  end
+
+  defp dispatch(:write_child, state, _c, size) do
+    {opcode_int, s1} = State.pop(state)
+    {child_addr, s2} = State.pop(s1)
+    cost = Costs.cost(:write_child, 0)
+
+    new_state =
+      s2
+      |> State.apply_cost(cost)
+      |> State.advance_ip(size, 1)
+
+    if new_state.energy <= 0 do
+      {:halt, :starvation, new_state}
+    else
+      {:wait_world, {:write_child, opcode_int, child_addr}, new_state}
+    end
+  end
+
+  defp dispatch(:divide, state, _c, size) do
+    cost = Costs.cost(:divide, 0)
+
+    new_state =
+      state
+      |> State.apply_cost(cost)
+      |> State.advance_ip(size, 1)
+
+    if new_state.energy <= 0 do
+      {:halt, :starvation, new_state}
+    else
+      {:wait_world, {:divide, new_state.energy, state.pos, state.dir}, new_state}
+    end
+  end
+
   # opcode sconosciuti → trattati come :nop_0
   defp dispatch(_unknown, state, _c, size), do: advance_and_charge(:nop_0, state, size, 1)
 
