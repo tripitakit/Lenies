@@ -98,6 +98,77 @@ defmodule Lenies.Interpreter do
     s2 |> State.push(res) |> advance_and_charge(:mod, size, 1)
   end
 
+  # Memoria locale
+  defp dispatch(:store, state, _c, size) do
+    {slot_idx, s1} = State.pop(state)
+    {value, s2} = State.pop(s1)
+    s2 |> State.store(slot_idx, value) |> advance_and_charge(:store, size, 1)
+  end
+
+  defp dispatch(:load, state, _c, size) do
+    {slot_idx, s1} = State.pop(state)
+    value = State.load(s1, slot_idx)
+    s1 |> State.push(value) |> advance_and_charge(:load, size, 1)
+  end
+
+  # Orientamento
+  defp dispatch(:turn_left, state, _c, size) do
+    new_dir =
+      case state.dir do
+        :n -> :w
+        :w -> :s
+        :s -> :e
+        :e -> :n
+      end
+
+    %{state | dir: new_dir} |> advance_and_charge(:turn_left, size, 1)
+  end
+
+  defp dispatch(:turn_right, state, _c, size) do
+    new_dir =
+      case state.dir do
+        :n -> :e
+        :e -> :s
+        :s -> :w
+        :w -> :n
+      end
+
+    %{state | dir: new_dir} |> advance_and_charge(:turn_right, size, 1)
+  end
+
+  # Senso locale (non tocca il mondo)
+  defp dispatch(:sense_self, state, _c, size) do
+    state |> State.push(1) |> advance_and_charge(:sense_self, size, 1)
+  end
+
+  defp dispatch(:sense_energy, state, _c, size) do
+    state |> State.push(trunc(state.energy)) |> advance_and_charge(:sense_energy, size, 1)
+  end
+
+  defp dispatch(:sense_age, state, _c, size) do
+    state |> State.push(state.age) |> advance_and_charge(:sense_age, size, 1)
+  end
+
+  defp dispatch(:sense_size, state, _c, size) do
+    state |> State.push(size) |> advance_and_charge(:sense_size, size, 1)
+  end
+
+  # Self-inspection
+  defp dispatch(:get_ip, state, _c, size) do
+    state |> State.push(state.ip) |> advance_and_charge(:get_ip, size, 1)
+  end
+
+  defp dispatch(:get_size, state, _c, size) do
+    state |> State.push(size) |> advance_and_charge(:get_size, size, 1)
+  end
+
+  defp dispatch(:read_self, state, c, size) do
+    {addr, s1} = State.pop(state)
+    op = Codeome.at(c, addr)
+    op_int = Lenies.Codeome.Opcodes.encode(op)
+    s1 |> State.push(op_int) |> advance_and_charge(:read_self, size, 1)
+  end
+
   # opcode sconosciuti → trattati come :nop_0
   defp dispatch(_unknown, state, _c, size), do: advance_and_charge(:nop_0, state, size, 1)
 
