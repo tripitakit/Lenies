@@ -27,6 +27,6 @@ defmodule Lenies.World.Cell do
   def add_resource(%__MODULE__{} = cell, _), do: cell
 
   def decay_carcass(%__MODULE__{} = cell, rate) when rate >= 0 and rate <= 1 do
-    %{cell | carcass: max(0, round(cell.carcass * (1 - rate)))}
+    %{cell | carcass: max(0, floor(cell.carcass * (1 - rate)))}
   end
 end

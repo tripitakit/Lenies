@@ -66,4 +66,30 @@ defmodule Lenies.WorldTest do
     assert_receive {:tick, 1}, 500
     assert_receive {:tick, 2}, 500
   end
+
+  test "tick_now/0 decays carcasses by configured rate" do
+    {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+
+    # iniettiamo una carcassa manualmente in una cella
+    [{key, cell}] = :ets.lookup(:cells, {10, 10})
+    :ets.insert(:cells, {key, %{cell | carcass: 100}})
+
+    World.tick_now()
+
+    [{_, after_cell}] = :ets.lookup(:cells, {10, 10})
+    # 5% decay → 100 → 95
+    assert after_cell.carcass == 95
+  end
+
+  test "tick_now/0 floors carcass at 0 over many ticks" do
+    {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+
+    [{key, cell}] = :ets.lookup(:cells, {5, 5})
+    :ets.insert(:cells, {key, %{cell | carcass: 10}})
+
+    for _ <- 1..200, do: World.tick_now()
+
+    [{_, after_cell}] = :ets.lookup(:cells, {5, 5})
+    assert after_cell.carcass == 0
+  end
 end
