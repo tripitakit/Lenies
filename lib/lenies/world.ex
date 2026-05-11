@@ -11,6 +11,7 @@ defmodule Lenies.World do
 
   alias Lenies.Config
   alias Lenies.World.{Cell, ChildSlots, Hotspots, Radiation, Tables}
+  alias Lenies.{Codeome, Mutator}
 
   @name __MODULE__
 
@@ -298,6 +299,21 @@ defmodule Lenies.World do
     end
   end
 
+  defp do_action({:write_child, opcode_int, child_addr, parent_id}, state) do
+    case :ets.lookup(:lenies, parent_id) do
+      [{^parent_id, %{child_slot_id: slot_id}}] when is_binary(slot_id) ->
+        rates = current_copy_rates()
+        outcome = Mutator.copy_outcome(rates)
+        opcode = Codeome.Opcodes.decode(opcode_int)
+
+        :ok = apply_copy_outcome(slot_id, child_addr, opcode, outcome)
+        {{:ok, :written}, state}
+
+      _ ->
+        {{:ok, :no_slot}, state}
+    end
+  end
+
   defp do_action(_unknown, state), do: {{:ok, {:error, :unknown_action}}, state}
 
   defp parent_already_allocated?(parent_id) do
@@ -349,5 +365,52 @@ defmodule Lenies.World do
       :s -> {x, Integer.mod(y + 1, h)}
       :w -> {Integer.mod(x - 1, w), y}
     end
+  end
+
+  defp current_copy_rates do
+    %{
+      substitution: Application.get_env(:lenies, :copy_substitution_rate, 0.005),
+      insert: Application.get_env(:lenies, :copy_insert_rate, 0.0005),
+      delete: Application.get_env(:lenies, :copy_delete_rate, 0.0005)
+    }
+  end
+
+  defp apply_copy_outcome(slot_id, child_addr, opcode, :write) do
+    ChildSlots.set_opcode(slot_id, child_addr, opcode)
+    :ok
+  end
+
+  defp apply_copy_outcome(slot_id, child_addr, _opcode, :substitute) do
+    ChildSlots.set_opcode(slot_id, child_addr, Mutator.random_opcode())
+    :ok
+  end
+
+  defp apply_copy_outcome(slot_id, child_addr, opcode, :insert) do
+    # Insert a random opcode AT child_addr, shifting subsequent positions
+    {:ok, slot} = ChildSlots.get(slot_id)
+    new_opcodes = insert_at(slot.opcodes, child_addr, Mutator.random_opcode(), slot.size)
+    :ets.insert(:child_slots, {slot_id, %{slot | opcodes: new_opcodes}})
+    # Then write the requested opcode at the next position (the original target shifted by 1)
+    ChildSlots.set_opcode(slot_id, child_addr + 1, opcode)
+    :ok
+  end
+
+  defp apply_copy_outcome(_slot_id, _child_addr, _opcode, :delete) do
+    # Skip the write entirely; downstream positions in the slot remain
+    # whatever they were (initialized to :nop_0). This effectively shortens
+    # the executed program by 1.
+    :ok
+  end
+
+  # Insert `op` at position `idx` in the tuple, shifting elements rightward.
+  # Last element is dropped to keep tuple size constant.
+  defp insert_at(opcodes_tuple, idx, op, size) do
+    idx = Integer.mod(idx, size)
+
+    list = Tuple.to_list(opcodes_tuple)
+    {head, tail} = Enum.split(list, idx)
+    # Drop the last element of tail to keep size constant
+    new_tail = [op | tail] |> Enum.take(length(tail))
+    (head ++ new_tail) |> List.to_tuple()
   end
 end

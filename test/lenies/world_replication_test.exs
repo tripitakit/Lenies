@@ -71,6 +71,45 @@ defmodule Lenies.WorldReplicationTest do
     end
   end
 
+  describe "write_child" do
+    setup do
+      # Ensure parent has an allocated slot at this point
+      {:ok, {:allocated, slot_id, _}} = World.action({:allocate, 20, {10, 10}, :e, "P1"})
+      %{slot_id: slot_id}
+    end
+
+    test "writes opcode at addr without mutation when rates are 0", %{slot_id: slot_id} do
+      saved_sub = Application.get_env(:lenies, :copy_substitution_rate)
+      saved_ins = Application.get_env(:lenies, :copy_insert_rate)
+      saved_del = Application.get_env(:lenies, :copy_delete_rate)
+      Application.put_env(:lenies, :copy_substitution_rate, 0.0)
+      Application.put_env(:lenies, :copy_insert_rate, 0.0)
+      Application.put_env(:lenies, :copy_delete_rate, 0.0)
+
+      try do
+        move_int = Lenies.Codeome.Opcodes.encode(:move)
+        result = World.action({:write_child, move_int, 3, "P1"})
+        assert result == {:ok, :written}
+
+        {:ok, slot} = Lenies.World.ChildSlots.get(slot_id)
+        assert elem(slot.opcodes, 3) == :move
+      after
+        Application.put_env(:lenies, :copy_substitution_rate, saved_sub || 0.005)
+        Application.put_env(:lenies, :copy_insert_rate, saved_ins || 0.0005)
+        Application.put_env(:lenies, :copy_delete_rate, saved_del || 0.0005)
+      end
+    end
+
+    test "fails when parent has no slot allocated" do
+      # remove the child_slot_id by re-inserting the lenies record without it
+      :ets.delete(:lenies, "P1")
+      :ets.insert(:lenies, {"P1", %{id: "P1", pos: {10, 10}, dir: :e}})
+
+      result = World.action({:write_child, 0, 0, "P1"})
+      assert result == {:ok, :no_slot}
+    end
+  end
+
   describe "Lenie + :allocate end-to-end" do
     test "Lenie that executes :allocate gets success pushed on stack" do
       # Codeome: build size 5 on stack via :push1 + :add, then :allocate

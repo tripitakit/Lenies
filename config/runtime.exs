@@ -33,7 +33,10 @@ config :lenies,
   interpreter_steps_per_batch: 10,
   snapshot_every_batches: 10,
   call_stack_max: 32,
-  codeome_length_bounds: {5, 500}
+  codeome_length_bounds: {5, 500},
+  copy_substitution_rate: 0.005,
+  copy_insert_rate: 0.0005,
+  copy_delete_rate: 0.0005
 
 # In the test environment disable carcass decay so that tick_now/0 can be
 # used as a GenServer-mailbox sync barrier without perturbing carcass values.
