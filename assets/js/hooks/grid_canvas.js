@@ -31,6 +31,17 @@ const GridCanvas = {
     // Initial clear
     this.ctx.fillStyle = "#000";
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    this.canvas.addEventListener("click", (event) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      const cellX = Math.floor((x / this.canvas.width) * this.gridW);
+      const cellY = Math.floor((y / this.canvas.height) * this.gridH);
+
+      this.pushEvent("cell_clicked", { x: cellX, y: cellY });
+    });
   },
 
   updated() {

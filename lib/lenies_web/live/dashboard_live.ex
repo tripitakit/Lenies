@@ -167,6 +167,17 @@ defmodule LeniesWeb.DashboardLive do
     {:noreply, assign(socket, :sterilize_confirming, false)}
   end
 
+  def handle_event("cell_clicked", %{"x" => x, "y" => y}, socket)
+      when is_integer(x) and is_integer(y) do
+    case :ets.lookup(:cells, {x, y}) do
+      [{_, %{lenie_id: id}}] when is_binary(id) ->
+        {:noreply, push_navigate(socket, to: ~p"/lenie/#{id}")}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
   def handle_event("toggle_pause", _, socket) do
     if socket.assigns.paused? do
       :ok = Lenies.World.resume()

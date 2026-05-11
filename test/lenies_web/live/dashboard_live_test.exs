@@ -122,4 +122,20 @@ defmodule LeniesWeb.DashboardLiveTest do
     # Population column for hashA = 2
     assert html =~ ~r/hashA[\s\S]+2/
   end
+
+  test "cell_clicked event on occupied cell triggers navigate to inspector", %{conn: conn} do
+    [{key, cell}] = :ets.lookup(:cells, {5, 5})
+    :ets.insert(:cells, {key, %{cell | lenie_id: "CLICKED"}})
+
+    {:ok, view, _html} = live(conn, "/")
+
+    assert {:error, {:live_redirect, %{to: "/lenie/CLICKED"}}} =
+             render_hook(view, "cell_clicked", %{"x" => 5, "y" => 5})
+  end
+
+  test "cell_clicked event on empty cell stays on dashboard", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/")
+    # Cell {7, 8} is empty by default
+    assert render_hook(view, "cell_clicked", %{"x" => 7, "y" => 8})
+  end
 end
