@@ -314,7 +314,84 @@ defmodule Lenies.World do
     end
   end
 
+  defp do_action({:divide, parent_energy, _pos, _dir, parent_id}, state) do
+    case :ets.lookup(:lenies, parent_id) do
+      [{^parent_id, %{child_slot_id: slot_id} = parent_record}] when is_binary(slot_id) ->
+        case ChildSlots.get(slot_id) do
+          {:ok, slot} ->
+            do_divide(parent_id, parent_record, slot_id, slot, parent_energy, state)
+
+          :not_found ->
+            {{:ok, :no_slot}, state}
+        end
+
+      _ ->
+        {{:ok, :no_slot}, state}
+    end
+  end
+
   defp do_action(_unknown, state), do: {{:ok, {:error, :unknown_action}}, state}
+
+  defp do_divide(parent_id, parent_record, slot_id, slot, parent_energy, state) do
+    target_cell = slot.target_cell
+
+    case :ets.lookup(:cells, target_cell) do
+      [{_, %{lenie_id: nil}}] ->
+        min_viable = Application.get_env(:lenies, :min_viable_codeome_opcodes, 10)
+        non_nops = Enum.count(Tuple.to_list(slot.opcodes), &(&1 not in [:nop_0, :nop_1]))
+
+        if non_nops < min_viable do
+          # slot has too many nops; "stillbirth" — release slot, energy not refunded
+          ChildSlots.delete(slot_id)
+          update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil))
+          {{:ok, :stillborn}, state}
+        else
+          spawn_child(parent_id, parent_record, slot_id, slot, parent_energy, state)
+        end
+
+      _ ->
+        # target now occupied; release slot, energy not refunded
+        ChildSlots.delete(slot_id)
+        update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil))
+        {{:ok, :target_blocked}, state}
+    end
+  end
+
+  defp spawn_child(parent_id, parent_record, slot_id, slot, parent_energy, state) do
+    child_id = generate_child_id()
+    child_energy = trunc(parent_energy / 2)
+    child_codeome = Codeome.from_list(Tuple.to_list(slot.opcodes))
+    parent_generation = parent_record |> Map.get(:lineage, {nil, 0}) |> elem(1)
+
+    child_opts = [
+      id: child_id,
+      codeome: child_codeome,
+      energy: child_energy * 1.0,
+      pos: slot.target_cell,
+      dir: parent_record.dir,
+      lineage: {parent_id, parent_generation + 1}
+    ]
+
+    {:ok, _child_pid} =
+      DynamicSupervisor.start_child(
+        Lenies.LenieSupervisor,
+        Supervisor.child_spec({Lenies.Lenie, child_opts}, restart: :temporary)
+      )
+
+    # Mark child cell occupied
+    [{key, cell}] = :ets.lookup(:cells, slot.target_cell)
+    :ets.insert(:cells, {key, %{cell | lenie_id: child_id}})
+
+    # Clean up parent's slot
+    ChildSlots.delete(slot_id)
+    update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil))
+
+    {{:ok, {:divided, child_id, child_energy}}, state}
+  end
+
+  defp generate_child_id do
+    :crypto.strong_rand_bytes(12) |> Base.encode16(case: :lower)
+  end
 
   defp parent_already_allocated?(parent_id) do
     case :ets.lookup(:lenies, parent_id) do

@@ -24,15 +24,12 @@ defmodule Lenies.LenieSupervisorTest do
   end
 
   test "starts as DynamicSupervisor with zero children" do
-    {:ok, pid} = LenieSupervisor.start_link([])
+    pid = Process.whereis(LenieSupervisor)
+    assert is_pid(pid)
     assert Process.alive?(pid)
-    assert Process.whereis(LenieSupervisor) == pid
 
-    assert DynamicSupervisor.count_children(LenieSupervisor) == %{
-             active: 0,
-             specs: 0,
-             supervisors: 0,
-             workers: 0
-           }
+    counts = DynamicSupervisor.count_children(LenieSupervisor)
+    assert counts.specs == 0
+    assert counts.active == 0
   end
 end

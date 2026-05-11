@@ -12,12 +12,13 @@ defmodule Lenies.Application do
       {DNSCluster, query: Application.get_env(:lenies, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Lenies.PubSub},
       Lenies.Registry,
+      Lenies.LenieSupervisor,
       LeniesWeb.Endpoint
     ]
 
     children =
       if Application.get_env(:lenies, :auto_start_simulation, true) do
-        children ++ [Lenies.LenieSupervisor, Lenies.World, Lenies.Telemetry]
+        children ++ [Lenies.World, Lenies.Telemetry]
       else
         children
       end

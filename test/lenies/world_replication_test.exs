@@ -110,6 +110,73 @@ defmodule Lenies.WorldReplicationTest do
     end
   end
 
+  describe "divide" do
+    setup do
+      # Ensure copy errors are off
+      Application.put_env(:lenies, :copy_substitution_rate, 0.0)
+      Application.put_env(:lenies, :copy_insert_rate, 0.0)
+      Application.put_env(:lenies, :copy_delete_rate, 0.0)
+      Application.put_env(:lenies, :min_viable_codeome_opcodes, 3)
+
+      # Parent already has an allocated slot — populate it with a real Codeome
+      {:ok, {:allocated, slot_id, _}} = World.action({:allocate, 5, {10, 10}, :e, "P1"})
+
+      # Write valid opcodes into the slot directly via ChildSlots
+      :ok = Lenies.World.ChildSlots.set_opcode(slot_id, 0, :nop_1)
+      :ok = Lenies.World.ChildSlots.set_opcode(slot_id, 1, :sense_front)
+      :ok = Lenies.World.ChildSlots.set_opcode(slot_id, 2, :drop)
+      :ok = Lenies.World.ChildSlots.set_opcode(slot_id, 3, :eat)
+      :ok = Lenies.World.ChildSlots.set_opcode(slot_id, 4, :nop_0)
+
+      %{slot_id: slot_id}
+    end
+
+    test "successful :divide spawns child Lenie, transfers half energy, clears slot", %{
+      slot_id: slot_id
+    } do
+      result = World.action({:divide, 100.0, {10, 10}, :e, "P1"})
+      assert {:ok, {:divided, child_id, energy_given}} = result
+      assert is_binary(child_id)
+      # floor(100 / 2)
+      assert energy_given == 50
+
+      # child slot deleted from :child_slots
+      assert Lenies.World.ChildSlots.get(slot_id) == :not_found
+
+      # child registered as Lenie process
+      child_pid = Lenies.Registry.whereis(child_id)
+      assert is_pid(child_pid)
+      assert Process.alive?(child_pid)
+
+      # child cell occupied
+      [{_, cell}] = :ets.lookup(:cells, {11, 10})
+      assert cell.lenie_id == child_id
+
+      # parent's child_slot_id cleared
+      [{"P1", record}] = :ets.lookup(:lenies, "P1")
+      assert Map.get(record, :child_slot_id) == nil
+
+      Process.unlink(child_pid)
+      GenServer.stop(child_pid)
+    end
+
+    test "fails if target cell now occupied", %{slot_id: _slot_id} do
+      [{key, cell}] = :ets.lookup(:cells, {11, 10})
+      :ets.insert(:cells, {key, %{cell | lenie_id: "BLOCKER"}})
+
+      result = World.action({:divide, 100.0, {10, 10}, :e, "P1"})
+      assert result == {:ok, :target_blocked}
+    end
+
+    test "fails if no slot allocated" do
+      :ets.delete(:lenies, "P1")
+      :ets.insert(:lenies, {"P1", %{id: "P1", pos: {10, 10}, dir: :e}})
+
+      result = World.action({:divide, 100.0, {10, 10}, :e, "P1"})
+      assert result == {:ok, :no_slot}
+    end
+  end
+
   describe "Lenie + :allocate end-to-end" do
     test "Lenie that executes :allocate gets success pushed on stack" do
       # Codeome: build size 5 on stack via :push1 + :add, then :allocate

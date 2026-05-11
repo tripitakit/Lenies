@@ -194,4 +194,15 @@ defmodule Lenies.Lenie do
       {:ok, :no_slot} -> {:ok, State.push(interp, 0)}
     end
   end
+
+  defp apply_world_action({:divide, _new_energy, _pos, _dir}, id, interp) do
+    case World.action({:divide, interp.energy, interp.pos, interp.dir, id}) do
+      {:ok, {:divided, _child_id, energy_given}} ->
+        {:ok, %{interp | energy: interp.energy - energy_given}}
+
+      {:ok, _failure} ->
+        # Failed: stillborn, target_blocked, no_slot — energy already deducted by opcode cost
+        {:ok, interp}
+    end
+  end
 end

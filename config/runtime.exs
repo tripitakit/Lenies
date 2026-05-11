@@ -36,7 +36,8 @@ config :lenies,
   codeome_length_bounds: {5, 500},
   copy_substitution_rate: 0.005,
   copy_insert_rate: 0.0005,
-  copy_delete_rate: 0.0005
+  copy_delete_rate: 0.0005,
+  min_viable_codeome_opcodes: 10
 
 # In the test environment disable carcass decay so that tick_now/0 can be
 # used as a GenServer-mailbox sync barrier without perturbing carcass values.
