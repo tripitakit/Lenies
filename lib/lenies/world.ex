@@ -10,7 +10,7 @@ defmodule Lenies.World do
   use GenServer
 
   alias Lenies.Config
-  alias Lenies.World.{Cell, Hotspots, Radiation, Tables}
+  alias Lenies.World.{Cell, ChildSlots, Hotspots, Radiation, Tables}
 
   @name __MODULE__
 
@@ -272,7 +272,47 @@ defmodule Lenies.World do
     end
   end
 
+  defp do_action({:allocate, size, {x, y}, dir, parent_id}, state) do
+    bounds = Application.get_env(:lenies, :codeome_length_bounds, {5, 500})
+    {min_size, max_size} = bounds
+
+    cond do
+      size < min_size or size > max_size ->
+        {{:ok, :invalid_size}, state}
+
+      parent_already_allocated?(parent_id) ->
+        {{:ok, :already_allocated}, state}
+
+      true ->
+        target_cell = front_cell({x, y}, dir, state.grid)
+
+        case :ets.lookup(:cells, target_cell) do
+          [{_, %{lenie_id: nil}}] ->
+            {:ok, slot_id} = ChildSlots.create(parent_id, target_cell, size)
+            update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, slot_id))
+            {{:ok, {:allocated, slot_id, target_cell}}, state}
+
+          _ ->
+            {{:ok, :blocked}, state}
+        end
+    end
+  end
+
   defp do_action(_unknown, state), do: {{:ok, {:error, :unknown_action}}, state}
+
+  defp parent_already_allocated?(parent_id) do
+    case :ets.lookup(:lenies, parent_id) do
+      [{^parent_id, record}] -> Map.get(record, :child_slot_id) != nil
+      _ -> false
+    end
+  end
+
+  defp update_lenie_record(id, fun) do
+    case :ets.lookup(:lenies, id) do
+      [{^id, record}] -> :ets.insert(:lenies, {id, fun.(record)})
+      _ -> :ok
+    end
+  end
 
   defp consume_eat(cell, eat_amount) do
     # Consume carcass first with 1.5x efficiency.
