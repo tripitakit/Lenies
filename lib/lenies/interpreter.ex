@@ -310,6 +310,38 @@ defmodule Lenies.Interpreter do
     end
   end
 
+  # Predazione: ritornano :wait_world. Il Lenie chiama il World e applica il risultato.
+
+  defp dispatch(:attack, state, _c, size) do
+    cost = Costs.cost(:attack, 0)
+
+    new_state =
+      state
+      |> State.apply_cost(cost)
+      |> State.advance_ip(size, 1)
+
+    if new_state.energy <= 0 do
+      {:halt, :starvation, new_state}
+    else
+      {:wait_world, {:attack, state.pos, state.dir}, new_state}
+    end
+  end
+
+  defp dispatch(:defend, state, _c, size) do
+    cost = Costs.cost(:defend, 0)
+
+    new_state =
+      state
+      |> State.apply_cost(cost)
+      |> State.advance_ip(size, 1)
+
+    if new_state.energy <= 0 do
+      {:halt, :starvation, new_state}
+    else
+      {:wait_world, :defend, new_state}
+    end
+  end
+
   # opcode sconosciuti → trattati come :nop_0
   defp dispatch(_unknown, state, _c, size), do: advance_and_charge(:nop_0, state, size, 1)
 
