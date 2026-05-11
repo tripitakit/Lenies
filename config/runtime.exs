@@ -40,7 +40,8 @@ config :lenies,
   min_viable_codeome_opcodes: 10,
   background_mutation_interval_ticks: 1000,
   defense_window_ticks: 5,
-  attack_damage: 10
+  attack_damage: 10,
+  defense_attacker_penalty: 5
 
 # In the test environment disable carcass decay so that tick_now/0 can be
 # used as a GenServer-mailbox sync barrier without perturbing carcass values.

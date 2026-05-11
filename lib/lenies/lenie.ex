@@ -111,6 +111,18 @@ defmodule Lenies.Lenie do
     {:noreply, %{state | codeome: new_codeome}}
   end
 
+  def handle_info({:take_damage, amount}, state) do
+    new_energy = state.interp.energy - amount
+    new_interp = %{state.interp | energy: new_energy}
+    new_state = %{state | interp: new_interp}
+
+    if new_energy <= 0 do
+      {:stop, :killed, new_state}
+    else
+      {:noreply, new_state}
+    end
+  end
+
   def handle_info(_msg, state), do: {:noreply, state}
 
   @impl true
@@ -208,6 +220,20 @@ defmodule Lenies.Lenie do
 
       {:ok, _failure} ->
         # Failed: stillborn, target_blocked, no_slot — energy already deducted by opcode cost
+        {:ok, interp}
+    end
+  end
+
+  defp apply_world_action({:attack, _pos, _dir}, id, interp) do
+    case World.action({:attack, interp.pos, interp.dir, id}) do
+      {:ok, {:attacked, damage}} ->
+        {:ok, %{interp | energy: interp.energy + damage}}
+
+      {:ok, {:defended, damage}} ->
+        penalty = Application.get_env(:lenies, :defense_attacker_penalty, 5)
+        {:ok, %{interp | energy: interp.energy + damage - penalty}}
+
+      {:ok, :no_target} ->
         {:ok, interp}
     end
   end
