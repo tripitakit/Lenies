@@ -209,6 +209,56 @@ defmodule Lenies.Interpreter do
     end
   end
 
+  # Azioni mondo: l'interprete avanza IP e paga il costo, poi ritorna
+  # :wait_world. Il Lenie process si occupa di chiamare il World e
+  # applicare il risultato (es. push valore percepito sullo stack,
+  # aggiornare pos su :move riuscito).
+
+  defp dispatch(:sense_front, state, _c, _size) do
+    cost = Costs.cost(:sense_front, 0)
+
+    new_state =
+      state
+      |> State.apply_cost(cost)
+      |> Map.update!(:ip, &(&1 + 1))
+
+    if new_state.energy <= 0 do
+      {:halt, :starvation, new_state}
+    else
+      {:wait_world, {:sense_front, state.pos, state.dir}, new_state}
+    end
+  end
+
+  defp dispatch(:move, state, _c, _size) do
+    cost = Costs.cost(:move, 0)
+
+    new_state =
+      state
+      |> State.apply_cost(cost)
+      |> Map.update!(:ip, &(&1 + 1))
+
+    if new_state.energy <= 0 do
+      {:halt, :starvation, new_state}
+    else
+      {:wait_world, {:move, state.pos, state.dir}, new_state}
+    end
+  end
+
+  defp dispatch(:eat, state, _c, _size) do
+    cost = Costs.cost(:eat, 0)
+
+    new_state =
+      state
+      |> State.apply_cost(cost)
+      |> Map.update!(:ip, &(&1 + 1))
+
+    if new_state.energy <= 0 do
+      {:halt, :starvation, new_state}
+    else
+      {:wait_world, {:eat, state.pos}, new_state}
+    end
+  end
+
   # opcode sconosciuti → trattati come :nop_0
   defp dispatch(_unknown, state, _c, size), do: advance_and_charge(:nop_0, state, size, 1)
 
