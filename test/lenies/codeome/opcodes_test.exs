@@ -11,11 +11,14 @@ defmodule Lenies.Codeome.OpcodesTest do
     assert :move in all
     assert :get_ip in all
     # opcodes per sotto-progetti futuri NON sono nella whitelist di sotto-progetto 2
-    refute :allocate in all
-    refute :write_child in all
-    refute :divide in all
     refute :attack in all
     refute :defend in all
+  end
+
+  test "replication opcodes are in the whitelist" do
+    assert :allocate in Opcodes.all()
+    assert :write_child in Opcodes.all()
+    assert :divide in Opcodes.all()
   end
 
   test "encode/1 returns an integer for known opcodes" do
@@ -40,7 +43,7 @@ defmodule Lenies.Codeome.OpcodesTest do
 
   test "known?/1 distinguishes whitelisted opcodes from others" do
     assert Opcodes.known?(:nop_0)
-    refute Opcodes.known?(:allocate)
+    assert Opcodes.known?(:allocate)
     refute Opcodes.known?(:foo_bar)
   end
 end

@@ -10,9 +10,8 @@ defmodule Lenies.Codeome.Opcodes do
   alle mutazioni: nessun "syntax error").
   """
 
-  # Whitelist completa di sotto-progetto 2.
-  # Replicazione (:allocate, :write_child, :divide) e predazione (:attack, :defend)
-  # saranno aggiunti nei sotto-progetti 3 e 4 rispettivamente.
+  # Whitelist completa di sotto-progetto 3.
+  # Predazione (:attack, :defend) sarà aggiunta nel sotto-progetto 4.
   @opcodes [
     # Template / bit
     :nop_0,
@@ -49,6 +48,10 @@ defmodule Lenies.Codeome.Opcodes do
     :get_ip,
     :get_size,
     :read_self,
+    # Replicazione
+    :allocate,
+    :write_child,
+    :divide,
     # Memoria locale
     :store,
     :load

@@ -32,4 +32,14 @@ defmodule Lenies.Codeome.CostsTest do
   test "cost/2 for unknown opcode returns 0.1 (treated as nop_0)" do
     assert Costs.cost(:foo_bar, 0) == 0.1
   end
+
+  test "cost/2 for replication opcodes" do
+    # :allocate is 5 + 0.05 * size; size passed as template_len convention re-used
+    assert Costs.cost(:allocate, 0) == 5.0
+    # 5 + 5
+    assert Costs.cost(:allocate, 100) == 10.0
+
+    assert Costs.cost(:write_child, 0) == 1.0
+    assert Costs.cost(:divide, 0) == 10.0
+  end
 end

@@ -43,6 +43,11 @@ defmodule Lenies.Codeome.Costs do
   # Azione mondo: movimento/mangiare
   def cost(op, _) when op in [:move, :eat], do: 2.0
 
+  # Replicazione
+  def cost(:allocate, size_arg), do: 5.0 + 0.05 * size_arg
+  def cost(:write_child, _), do: 1.0
+  def cost(:divide, _), do: 10.0
+
   # Opcode sconosciuto → trattato come :nop_0
   def cost(_, _), do: 0.1
 end
