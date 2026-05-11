@@ -44,4 +44,69 @@ defmodule LeniesWeb.DashboardLiveTest do
     {:ok, _view, html} = live(conn, "/")
     assert html =~ ~r/phx-hook="GridCanvas"/
   end
+
+  test "clicking sterilize_init shows confirm prompt", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/")
+
+    refute render(view) =~ "Sei sicuro?"
+
+    view
+    |> element("button", "STERILIZE")
+    |> render_click()
+
+    assert render(view) =~ "Sei sicuro?"
+  end
+
+  test "clicking sterilize_confirm resets the world", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/")
+
+    Lenies.World.tick_now()
+    stats_before = Lenies.World.snapshot_stats()
+    assert stats_before.tick_count >= 1
+
+    view
+    |> element("button", "STERILIZE")
+    |> render_click()
+
+    view
+    |> element("button", "Sì, sterilizza")
+    |> render_click()
+
+    stats_after = Lenies.World.snapshot_stats()
+    assert stats_after.tick_count == 0
+  end
+
+  test "clicking pause toggles state", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/")
+
+    refute Lenies.World.paused?()
+
+    view
+    |> element("button", "Pause")
+    |> render_click()
+
+    assert Lenies.World.paused?()
+
+    view
+    |> element("button", "Resume")
+    |> render_click()
+
+    refute Lenies.World.paused?()
+  end
+
+  test "toggling layer changes data attribute", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/")
+
+    # When true, Phoenix renders boolean attrs as empty-string (e.g. data-show-lenies="")
+    html_before = render(view)
+    assert html_before =~ ~r/data-show-lenies=""/
+
+    view
+    |> element("input[phx-value-layer='lenies']")
+    |> render_click()
+
+    # When false, the attribute is omitted entirely
+    html_after = render(view)
+    refute html_after =~ ~r/data-show-lenies/
+  end
 end
