@@ -11,11 +11,15 @@ defmodule Lenies.Application do
       LeniesWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:lenies, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Lenies.PubSub},
-      # Start a worker by calling: Lenies.Worker.start_link(arg)
-      # {Lenies.Worker, arg},
-      # Start to serve requests, typically the last entry
       LeniesWeb.Endpoint
     ]
+
+    children =
+      if Application.get_env(:lenies, :auto_start_simulation, true) do
+        children ++ [Lenies.LenieSupervisor, Lenies.World, Lenies.Telemetry]
+      else
+        children
+      end
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options

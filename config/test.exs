@@ -16,3 +16,7 @@ config :phoenix, :plug_init_mode, :runtime
 # Enable helpful, but potentially expensive runtime checks
 config :phoenix_live_view,
   enable_expensive_runtime_checks: true
+
+# Disable auto-start of simulation processes in test environment.
+# Tests start World, LenieSupervisor, and Telemetry manually as needed.
+config :lenies, auto_start_simulation: false
