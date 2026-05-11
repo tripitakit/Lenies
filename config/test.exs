@@ -20,3 +20,8 @@ config :phoenix_live_view,
 # Disable auto-start of simulation processes in test environment.
 # Tests start World, LenieSupervisor, and Telemetry manually as needed.
 config :lenies, auto_start_simulation: false
+
+# Disable carcass decay in tests so tick_now can be used as a sync barrier
+# without interfering with carcass assertions. Tests that need explicit decay
+# behaviour set carcass_decay via Application.put_env in their own setup.
+config :lenies, carcass_decay: 0

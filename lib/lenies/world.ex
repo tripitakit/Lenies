@@ -113,7 +113,7 @@ defmodule Lenies.World do
     case :ets.lookup(:cells, {x, y}) do
       [{key, cell}] ->
         carcass_value = max(0, trunc(energy_at_death * 0.5))
-        :ets.insert(:cells, {key, %{cell | lenie_id: nil, carcass: carcass_value}})
+        :ets.insert(:cells, {key, %{cell | lenie_id: nil, carcass: cell.carcass + carcass_value}})
 
       _ ->
         :ok
@@ -263,13 +263,43 @@ defmodule Lenies.World do
     case :ets.lookup(:cells, {x, y}) do
       [{key, cell}] ->
         eat_amount = Application.get_env(:lenies, :eat_amount, 20)
-        taken = min(eat_amount, cell.resource)
-        :ets.insert(:cells, {key, %{cell | resource: cell.resource - taken}})
-        {{:ok, {:ate, taken}}, state}
+        {energy_gained, new_cell} = consume_eat(cell, eat_amount)
+        :ets.insert(:cells, {key, new_cell})
+        {{:ok, {:ate, energy_gained}}, state}
 
       _ ->
         {{:ok, {:ate, 0}}, state}
     end
+  end
+
+  defp do_action(_unknown, state), do: {{:ok, {:error, :unknown_action}}, state}
+
+  defp consume_eat(cell, eat_amount) do
+    # Consume carcass first with 1.5x efficiency.
+    # remaining_quota is in raw food units; if carcass_energy already covers it
+    # (thanks to the 1.5x bonus), skip the resource phase entirely.
+    carcass_taken = min(cell.carcass, eat_amount)
+    carcass_energy = trunc(carcass_taken * 1.5)
+    remaining_quota = eat_amount - carcass_taken
+
+    # Only draw on biomass when carcass energy falls short of the remaining quota
+    {resource_taken, resource_energy} =
+      if carcass_energy >= remaining_quota do
+        {0, 0}
+      else
+        taken = min(cell.resource, remaining_quota)
+        {taken, taken}
+      end
+
+    total_energy = carcass_energy + resource_energy
+
+    new_cell = %{
+      cell
+      | carcass: cell.carcass - carcass_taken,
+        resource: cell.resource - resource_taken
+    }
+
+    {total_energy, new_cell}
   end
 
   defp front_cell({x, y}, dir, {w, h}) do

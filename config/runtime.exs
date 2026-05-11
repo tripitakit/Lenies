@@ -34,6 +34,14 @@ config :lenies,
   snapshot_every_batches: 10,
   call_stack_max: 32
 
+# In the test environment disable carcass decay so that tick_now/0 can be
+# used as a GenServer-mailbox sync barrier without perturbing carcass values.
+# Tests that explicitly verify decay behaviour restore the rate via
+# Application.put_env inside their own setup block.
+if config_env() == :test do
+  config :lenies, carcass_decay: 0
+end
+
 if System.get_env("PHX_SERVER") do
   config :lenies, LeniesWeb.Endpoint, server: true
 end

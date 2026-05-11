@@ -68,6 +68,10 @@ defmodule Lenies.WorldTest do
   end
 
   test "tick_now/0 decays carcasses by configured rate" do
+    Application.put_env(:lenies, :carcass_decay, 0.05)
+
+    on_exit(fn -> Application.put_env(:lenies, :carcass_decay, 0) end)
+
     {:ok, _pid} = World.start_link(tick_interval_ms: 0)
 
     # iniettiamo una carcassa manualmente in una cella
@@ -82,6 +86,10 @@ defmodule Lenies.WorldTest do
   end
 
   test "tick_now/0 floors carcass at 0 over many ticks" do
+    Application.put_env(:lenies, :carcass_decay, 0.05)
+
+    on_exit(fn -> Application.put_env(:lenies, :carcass_decay, 0) end)
+
     {:ok, _pid} = World.start_link(tick_interval_ms: 0)
 
     [{key, cell}] = :ets.lookup(:cells, {5, 5})

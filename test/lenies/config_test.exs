@@ -33,7 +33,14 @@ defmodule Lenies.ConfigTest do
   end
 
   test "carcass_decay/0 returns configured value" do
-    assert Config.carcass_decay() == 0.05
+    original = Application.get_env(:lenies, :carcass_decay)
+    Application.put_env(:lenies, :carcass_decay, 0.05)
+
+    try do
+      assert Config.carcass_decay() == 0.05
+    after
+      Application.put_env(:lenies, :carcass_decay, original)
+    end
   end
 
   test "population_warning_threshold/0 returns configured value" do
