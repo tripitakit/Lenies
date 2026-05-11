@@ -187,4 +187,11 @@ defmodule Lenies.Lenie do
         {:ok, State.push(interp, 0)}
     end
   end
+
+  defp apply_world_action({:write_child, opcode_int, child_addr}, id, interp) do
+    case World.action({:write_child, opcode_int, child_addr, id}) do
+      {:ok, :written} -> {:ok, State.push(interp, 1)}
+      {:ok, :no_slot} -> {:ok, State.push(interp, 0)}
+    end
+  end
 end
