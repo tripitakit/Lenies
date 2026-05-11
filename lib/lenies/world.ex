@@ -357,6 +357,19 @@ defmodule Lenies.World do
     end
   end
 
+  defp do_action({:defend, lenie_id}, state) do
+    window = Application.get_env(:lenies, :defense_window_ticks, 5)
+
+    case :ets.lookup(:lenies, lenie_id) do
+      [{^lenie_id, _record}] ->
+        update_lenie_record(lenie_id, &Map.put(&1, :defending_until, state.tick_count + window))
+        {{:ok, :defending}, state}
+
+      _ ->
+        {{:ok, :no_lenie}, state}
+    end
+  end
+
   defp do_action(_unknown, state), do: {{:ok, {:error, :unknown_action}}, state}
 
   defp do_divide(parent_id, parent_record, slot_id, slot, parent_energy, state) do

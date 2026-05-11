@@ -211,4 +211,11 @@ defmodule Lenies.Lenie do
         {:ok, interp}
     end
   end
+
+  defp apply_world_action(:defend, id, interp) do
+    case World.action({:defend, id}) do
+      {:ok, :defending} -> {:ok, interp}
+      {:ok, :no_lenie} -> {:ok, interp}
+    end
+  end
 end
