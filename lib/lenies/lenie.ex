@@ -164,6 +164,7 @@ defmodule Lenies.Lenie do
         dir: state.interp.dir,
         energy: state.interp.energy,
         age: state.interp.age,
+        ip: state.interp.ip,
         codeome_hash: Lenies.Codeome.hash(state.codeome),
         lineage: state.lineage
       }

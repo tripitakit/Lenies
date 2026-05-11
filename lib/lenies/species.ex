@@ -59,8 +59,12 @@ defmodule Lenies.Species do
   @doc "Return all `:lenies` records (raw {id, snap} tuples) with the given codeome_hash."
   @spec for_hash(binary()) :: [{binary(), map()}]
   def for_hash(hash) do
-    :ets.tab2list(:lenies)
-    |> Enum.filter(fn {_id, snap} -> snap.codeome_hash == hash end)
+    if :ets.info(:lenies) == :undefined do
+      []
+    else
+      :ets.tab2list(:lenies)
+      |> Enum.filter(fn {_id, snap} -> snap.codeome_hash == hash end)
+    end
   end
 
   @doc "Top N species by population. N defaults to 10."

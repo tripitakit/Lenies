@@ -115,7 +115,7 @@ defmodule LeniesWeb.DashboardLive do
               <%= for sp <- @species do %>
                 <tr>
                   <td>
-                    <.link href={"/species/#{sp.hash}"} class="species-link">
+                    <.link navigate={~p"/species/#{sp.hash}"} class="species-link">
                       {String.slice(sp.hash, 0..7)}...
                     </.link>
                   </td>
