@@ -171,6 +171,12 @@ defmodule Lenies.Lenie do
 
       merged = Map.merge(existing, new_snap)
       :ets.insert(:lenies, {state.id, merged})
+
+      Phoenix.PubSub.broadcast(
+        Lenies.PubSub,
+        "lenie:#{state.id}",
+        {:lenie_update, merged}
+      )
     end
   end
 
