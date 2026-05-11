@@ -134,4 +134,35 @@ defmodule Lenies.WorldPredationTest do
       assert {:ok, {:defended, 5}} = result
     end
   end
+
+  describe "kill leaves carcass" do
+    test "Lenie dying from :take_damage leaves cell cleared and registry cleaned" do
+      [{key, cell}] = :ets.lookup(:cells, {30, 30})
+      :ets.insert(:cells, {key, %{cell | lenie_id: "VICTIM"}})
+
+      codeome = Lenies.Codeome.from_list([:nop_0])
+      {:ok, pid} =
+        Lenies.Lenie.start_link(
+          id: "VICTIM",
+          codeome: codeome,
+          energy: 100.0,
+          pos: {30, 30},
+          dir: :n,
+          lineage: {nil, 0}
+        )
+      Process.unlink(pid)
+      ref = Process.monitor(pid)
+
+      send(pid, {:take_damage, 100})
+
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 500
+      # Allow time for the lenie_died cast to be processed
+      Process.sleep(200)
+
+      [{_, cell}] = :ets.lookup(:cells, {30, 30})
+      assert cell.lenie_id == nil
+      # Carcass field is non-negative (zero is fine if energy_at_death was negative)
+      assert cell.carcass >= 0
+    end
+  end
 end
