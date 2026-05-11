@@ -2,7 +2,7 @@ defmodule Lenies.WorldActionTest do
   use ExUnit.Case, async: false
 
   alias Lenies.World
-  alias Lenies.World.{Cell, Tables}
+  alias Lenies.World.Tables
 
   setup do
     on_exit(fn ->

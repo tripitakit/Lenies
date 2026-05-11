@@ -41,7 +41,7 @@ defmodule Lenies.World do
 
   @doc "Notifica al World che un Lenie è morto (libera cella, eventuale carcassa)."
   def lenie_died(id, pos, energy_at_death),
-    do: GenServer.call(@name, {:lenie_died, id, pos, energy_at_death})
+    do: GenServer.cast(@name, {:lenie_died, id, pos, energy_at_death})
 
   # ----- Server -----
 
@@ -108,7 +108,8 @@ defmodule Lenies.World do
     {:reply, result, new_state}
   end
 
-  def handle_call({:lenie_died, id, {x, y}, energy_at_death}, _from, state) do
+  @impl true
+  def handle_cast({:lenie_died, id, {x, y}, energy_at_death}, state) do
     case :ets.lookup(:cells, {x, y}) do
       [{key, cell}] ->
         carcass_value = max(0, trunc(energy_at_death * 0.5))
@@ -119,7 +120,7 @@ defmodule Lenies.World do
     end
 
     :ets.delete(:lenies, id)
-    {:reply, :ok, state}
+    {:noreply, state}
   end
 
   @impl true

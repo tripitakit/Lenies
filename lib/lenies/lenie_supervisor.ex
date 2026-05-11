@@ -6,7 +6,7 @@ defmodule Lenies.LenieSupervisor do
   non viene riavviato — è una morte definitiva. La replicazione (sotto-progetto 3)
   userà `DynamicSupervisor.start_child/2` per spawnare nuovi Lenies.
 
-  Vuoto in questo sotto-progetto; pronto per essere popolato dal sotto-progetto 2.
+  Vuoto in questo sotto-progetto; pronto per essere popolato dal sotto-progetto 3.
   """
 
   use DynamicSupervisor

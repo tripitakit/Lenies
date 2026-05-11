@@ -17,7 +17,7 @@ defmodule Lenies.Interpreter.StackArithTest do
   test ":push0 pushes 0 on the stack and advances IP" do
     {:cont, s} = run_step([:push0])
     assert s.stack == [0]
-    assert s.ip == 1
+    assert s.ip == 0
   end
 
   test ":push1 pushes 1" do

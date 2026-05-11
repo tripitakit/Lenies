@@ -1,7 +1,7 @@
 defmodule Lenies.IntegrationJumperTest do
   use ExUnit.Case, async: true
 
-  alias Lenies.{Codeome, Interpreter}
+  alias Lenies.Interpreter
   alias Lenies.Codeomes.TemplateJumper
   alias Lenies.Interpreter.State
 

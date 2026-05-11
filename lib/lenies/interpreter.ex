@@ -214,13 +214,13 @@ defmodule Lenies.Interpreter do
   # applicare il risultato (es. push valore percepito sullo stack,
   # aggiornare pos su :move riuscito).
 
-  defp dispatch(:sense_front, state, _c, _size) do
+  defp dispatch(:sense_front, state, _c, size) do
     cost = Costs.cost(:sense_front, 0)
 
     new_state =
       state
       |> State.apply_cost(cost)
-      |> Map.update!(:ip, &(&1 + 1))
+      |> State.advance_ip(size, 1)
 
     if new_state.energy <= 0 do
       {:halt, :starvation, new_state}
@@ -229,13 +229,13 @@ defmodule Lenies.Interpreter do
     end
   end
 
-  defp dispatch(:move, state, _c, _size) do
+  defp dispatch(:move, state, _c, size) do
     cost = Costs.cost(:move, 0)
 
     new_state =
       state
       |> State.apply_cost(cost)
-      |> Map.update!(:ip, &(&1 + 1))
+      |> State.advance_ip(size, 1)
 
     if new_state.energy <= 0 do
       {:halt, :starvation, new_state}
@@ -244,13 +244,13 @@ defmodule Lenies.Interpreter do
     end
   end
 
-  defp dispatch(:eat, state, _c, _size) do
+  defp dispatch(:eat, state, _c, size) do
     cost = Costs.cost(:eat, 0)
 
     new_state =
       state
       |> State.apply_cost(cost)
-      |> Map.update!(:ip, &(&1 + 1))
+      |> State.advance_ip(size, 1)
 
     if new_state.energy <= 0 do
       {:halt, :starvation, new_state}
@@ -275,13 +275,13 @@ defmodule Lenies.Interpreter do
     advance_and_charge(op, state, size, advance_by)
   end
 
-  defp advance_and_charge(op, state, _size, advance_by) when is_atom(op) do
+  defp advance_and_charge(op, state, size, advance_by) when is_atom(op) do
     cost = Costs.cost(op, 0)
 
     new_state =
       state
       |> State.apply_cost(cost)
-      |> Map.update!(:ip, &(&1 + advance_by))
+      |> State.advance_ip(size, advance_by)
 
     if new_state.energy <= 0 do
       {:halt, :starvation, new_state}
