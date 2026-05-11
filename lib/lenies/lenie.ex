@@ -105,6 +105,12 @@ defmodule Lenies.Lenie do
   end
 
   def handle_info(:sterilize, state), do: {:stop, :sterilized, state}
+
+  def handle_info(:background_mutate, state) do
+    new_codeome = Lenies.Mutator.background_mutation(state.codeome)
+    {:noreply, %{state | codeome: new_codeome}}
+  end
+
   def handle_info(_msg, state), do: {:noreply, state}
 
   @impl true

@@ -144,6 +144,7 @@ defmodule Lenies.World do
   defp do_tick(state) do
     apply_radiation(state)
     apply_carcass_decay()
+    maybe_background_mutation(state)
 
     hotspots = Hotspots.drift(state.hotspots, state.grid)
 
@@ -191,6 +192,32 @@ defmodule Lenies.World do
         nil,
         :cells
       )
+    end
+  end
+
+  defp maybe_background_mutation(state) do
+    interval = Application.get_env(:lenies, :background_mutation_interval_ticks, 1000)
+
+    if interval > 0 and rem(state.tick_count + 1, interval) == 0 do
+      apply_random_background_mutation()
+    end
+
+    :ok
+  end
+
+  defp apply_random_background_mutation do
+    case :ets.tab2list(:lenies) do
+      [] ->
+        :ok
+
+      records ->
+        # Pick a random Lenie's id
+        {id, _record} = Enum.random(records)
+
+        case Lenies.Registry.whereis(id) do
+          pid when is_pid(pid) -> send(pid, :background_mutate)
+          _ -> :ok
+        end
     end
   end
 
