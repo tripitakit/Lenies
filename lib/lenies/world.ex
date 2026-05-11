@@ -370,7 +370,47 @@ defmodule Lenies.World do
     end
   end
 
+  defp do_action({:attack, {x, y}, dir, _attacker_id}, state) do
+    target_cell = front_cell({x, y}, dir, state.grid)
+
+    case :ets.lookup(:cells, target_cell) do
+      [{_, %{lenie_id: target_id}}] when is_binary(target_id) ->
+        resolve_attack(target_id, state)
+
+      _ ->
+        {{:ok, :no_target}, state}
+    end
+  end
+
   defp do_action(_unknown, state), do: {{:ok, {:error, :unknown_action}}, state}
+
+  defp resolve_attack(target_id, state) do
+    base_damage = Application.get_env(:lenies, :attack_damage, 10)
+
+    case :ets.lookup(:lenies, target_id) do
+      [{^target_id, record}] ->
+        defending_until = Map.get(record, :defending_until, 0)
+
+        {damage, result_tag} =
+          if state.tick_count < defending_until do
+            {div(base_damage, 2), :defended}
+          else
+            {base_damage, :attacked}
+          end
+
+        # Send async damage message to the target Lenie
+        case Lenies.Registry.whereis(target_id) do
+          pid when is_pid(pid) -> send(pid, {:take_damage, damage})
+          _ -> :ok
+        end
+
+        {{:ok, {result_tag, damage}}, state}
+
+      _ ->
+        # No :lenies record for target (shouldn't happen with snapshot writes)
+        {{:ok, :no_target}, state}
+    end
+  end
 
   defp do_divide(parent_id, parent_record, slot_id, slot, parent_energy, state) do
     target_cell = slot.target_cell

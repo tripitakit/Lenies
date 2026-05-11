@@ -68,4 +68,70 @@ defmodule Lenies.WorldPredationTest do
       assert result == {:ok, :no_lenie}
     end
   end
+
+  describe "attack" do
+    setup do
+      # Spawn a real target Lenie with a permissive Codeome (loop of nop)
+      codeome = Lenies.Codeome.from_list([:nop_0, :nop_0, :nop_0])
+
+      # Mark target cell occupied
+      [{key, cell}] = :ets.lookup(:cells, {11, 10})
+      :ets.insert(:cells, {key, %{cell | lenie_id: "T1"}})
+
+      {:ok, target_pid} =
+        Lenies.Lenie.start_link(
+          id: "T1",
+          codeome: codeome,
+          energy: 1000.0,
+          pos: {11, 10},
+          dir: :w,
+          lineage: {nil, 0}
+        )
+
+      Process.unlink(target_pid)
+      # give the Lenie time to write its initial snapshot
+      Process.sleep(50)
+
+      on_exit(fn ->
+        if Process.alive?(target_pid), do: GenServer.stop(target_pid)
+      end)
+
+      %{target_pid: target_pid}
+    end
+
+    test "attack on empty front cell returns :no_target", %{target_pid: target_pid} do
+      # Move target away
+      GenServer.stop(target_pid)
+      Process.sleep(100)
+
+      [{key, cell}] = :ets.lookup(:cells, {11, 10})
+      :ets.insert(:cells, {key, %{cell | lenie_id: nil}})
+
+      result = World.action({:attack, {10, 10}, :e, "P1"})
+      assert result == {:ok, :no_target}
+    end
+
+    test "attack on undefended target deals full damage", %{target_pid: target_pid} do
+      # ensure no defending_until
+      result = World.action({:attack, {10, 10}, :e, "P1"})
+      assert {:ok, {:attacked, 10}} = result
+
+      # Wait for target to process :take_damage message asynchronously
+      Process.sleep(100)
+
+      snap = Lenies.Lenie.inspect_state(target_pid)
+      # Started with 1000.0, lost 10 to attack, plus some energy for own nop ops
+      assert snap.energy < 1000.0 - 9.5
+    end
+
+    test "attack on defended target deals halved damage and reports :defended" do
+      Process.sleep(50)
+      # Manually set defending_until in :lenies record for T1
+      [{"T1", record}] = :ets.lookup(:lenies, "T1")
+      :ets.insert(:lenies, {"T1", Map.put(record, :defending_until, 100)})
+
+      result = World.action({:attack, {10, 10}, :e, "P1"})
+      assert {:ok, {:defended, 5}} = result
+    end
+  end
 end
