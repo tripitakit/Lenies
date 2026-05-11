@@ -25,7 +25,9 @@ config :lenies,
   radiation_uniform_ratio: 0.7,
   hotspot_count: 8,
   cell_resource_cap: 100,
-  carcass_decay: 0.05
+  carcass_decay: 0.05,
+  template_max_len: 8,
+  template_search_radius: 256
 
 if System.get_env("PHX_SERVER") do
   config :lenies, LeniesWeb.Endpoint, server: true

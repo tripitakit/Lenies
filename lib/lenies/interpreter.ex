@@ -17,7 +17,7 @@ defmodule Lenies.Interpreter do
 
   alias Lenies.Codeome
   alias Lenies.Codeome.Costs
-  alias Lenies.Interpreter.State
+  alias Lenies.Interpreter.{State, Template}
 
   @type step_result ::
           {:cont, State.t()}
@@ -169,6 +169,46 @@ defmodule Lenies.Interpreter do
     s1 |> State.push(op_int) |> advance_and_charge(:read_self, size, 1)
   end
 
+  # Controllo template-based
+  defp dispatch(:jmp_t, state, codeome, size), do: do_jump(state, codeome, size, :jmp_t, :always)
+  defp dispatch(:jz_t, state, codeome, size), do: do_jump(state, codeome, size, :jz_t, :zero)
+  defp dispatch(:jnz_t, state, codeome, size), do: do_jump(state, codeome, size, :jnz_t, :nonzero)
+
+  defp dispatch(:call_t, state, codeome, size) do
+    {template, t_len} = Template.extract(codeome, state.ip + 1, template_max_len())
+    return_ip = Integer.mod(state.ip + 1 + t_len, size)
+
+    case Template.find_complement(codeome, template, state.ip, template_search_radius()) do
+      {:ok, match_pos} ->
+        target_ip = Integer.mod(match_pos + length(template), size)
+
+        %{state | ip: target_ip, call_stack: [return_ip | state.call_stack]}
+        |> State.apply_cost(Costs.cost(:call_t, t_len))
+        |> halt_if_dead()
+
+      :not_found ->
+        # no jump; just advance past the template
+        %{state | ip: return_ip}
+        |> State.apply_cost(Costs.cost(:call_t, t_len))
+        |> halt_if_dead()
+    end
+  end
+
+  defp dispatch(:ret, state, _codeome, size) do
+    case state.call_stack do
+      [return_ip | rest] ->
+        %{state | ip: return_ip, call_stack: rest}
+        |> State.apply_cost(Costs.cost(:ret, 0))
+        |> halt_if_dead()
+
+      [] ->
+        state
+        |> State.advance_ip(size, 1)
+        |> State.apply_cost(Costs.cost(:ret, 0))
+        |> halt_if_dead()
+    end
+  end
+
   # opcode sconosciuti → trattati come :nop_0
   defp dispatch(_unknown, state, _c, size), do: advance_and_charge(:nop_0, state, size, 1)
 
@@ -199,4 +239,59 @@ defmodule Lenies.Interpreter do
       {:cont, new_state}
     end
   end
+
+  defp do_jump(state, codeome, size, op, condition) do
+    {template, t_len} = Template.extract(codeome, state.ip + 1, template_max_len())
+    skip_to = Integer.mod(state.ip + 1 + t_len, size)
+
+    should_jump =
+      case condition do
+        :always ->
+          true
+
+        :zero ->
+          {top, _} = State.pop(state)
+          top == 0
+
+        :nonzero ->
+          {top, _} = State.pop(state)
+          top != 0
+      end
+
+    # For conditional jumps, consume the stack value
+    state_after_pop =
+      case condition do
+        :always ->
+          state
+
+        _ ->
+          {_, s} = State.pop(state)
+          s
+      end
+
+    target_ip =
+      if should_jump and t_len > 0 do
+        case Template.find_complement(codeome, template, state.ip, template_search_radius()) do
+          {:ok, match_pos} -> Integer.mod(match_pos + length(template), size)
+          :not_found -> skip_to
+        end
+      else
+        skip_to
+      end
+
+    %{state_after_pop | ip: target_ip}
+    |> State.apply_cost(Costs.cost(op, t_len))
+    |> halt_if_dead()
+  end
+
+  defp halt_if_dead(state) do
+    if state.energy <= 0 do
+      {:halt, :starvation, state}
+    else
+      {:cont, state}
+    end
+  end
+
+  defp template_max_len, do: Application.get_env(:lenies, :template_max_len, 8)
+  defp template_search_radius, do: Application.get_env(:lenies, :template_search_radius, 256)
 end
