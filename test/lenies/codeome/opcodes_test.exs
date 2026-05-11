@@ -10,9 +10,11 @@ defmodule Lenies.Codeome.OpcodesTest do
     assert :push0 in all
     assert :move in all
     assert :get_ip in all
-    # opcodes per sotto-progetti futuri NON sono nella whitelist di sotto-progetto 2
-    refute :attack in all
-    refute :defend in all
+  end
+
+  test "predation opcodes are in the whitelist" do
+    assert :attack in Opcodes.all()
+    assert :defend in Opcodes.all()
   end
 
   test "replication opcodes are in the whitelist" do

@@ -33,6 +33,11 @@ defmodule Lenies.Codeome.CostsTest do
     assert Costs.cost(:foo_bar, 0) == 0.1
   end
 
+  test "cost/2 for predation opcodes" do
+    assert Costs.cost(:attack, 0) == 5.0
+    assert Costs.cost(:defend, 0) == 2.0
+  end
+
   test "cost/2 for replication opcodes" do
     # :allocate is 5 + 0.05 * size; size passed as template_len convention re-used
     assert Costs.cost(:allocate, 0) == 5.0

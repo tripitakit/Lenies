@@ -10,8 +10,7 @@ defmodule Lenies.Codeome.Opcodes do
   alle mutazioni: nessun "syntax error").
   """
 
-  # Whitelist completa di sotto-progetto 3.
-  # Predazione (:attack, :defend) sarà aggiunta nel sotto-progetto 4.
+  # Whitelist completa di sotto-progetto 4 (include predazione).
   @opcodes [
     # Template / bit
     :nop_0,
@@ -44,6 +43,9 @@ defmodule Lenies.Codeome.Opcodes do
     :turn_left,
     :turn_right,
     :eat,
+    # Predazione
+    :attack,
+    :defend,
     # Self-inspection
     :get_ip,
     :get_size,
