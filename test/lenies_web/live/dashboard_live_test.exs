@@ -109,4 +109,17 @@ defmodule LeniesWeb.DashboardLiveTest do
     html_after = render(view)
     refute html_after =~ ~r/data-show-lenies/
   end
+
+  test "Species panel shows top-N species table from aggregator", %{conn: conn} do
+    :ets.insert(:lenies, {"a", %{id: "a", codeome_hash: "hashA", lineage: {nil, 0}}})
+    :ets.insert(:lenies, {"b", %{id: "b", codeome_hash: "hashA", lineage: {nil, 1}}})
+    :ets.insert(:lenies, {"c", %{id: "c", codeome_hash: "hashB", lineage: {nil, 0}}})
+
+    {:ok, _view, html} = live(conn, "/")
+
+    assert html =~ "hashA"
+    assert html =~ "hashB"
+    # Population column for hashA = 2
+    assert html =~ ~r/hashA[\s\S]+2/
+  end
 end

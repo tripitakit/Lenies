@@ -24,6 +24,14 @@ defmodule Lenies.Species do
   """
   @spec aggregate() :: [species_record()]
   def aggregate do
+    if :ets.info(:lenies) == :undefined do
+      []
+    else
+      do_aggregate()
+    end
+  end
+
+  defp do_aggregate do
     :ets.tab2list(:lenies)
     |> Enum.group_by(fn {_id, snap} -> snap.codeome_hash end)
     |> Enum.map(fn {hash, entries} ->

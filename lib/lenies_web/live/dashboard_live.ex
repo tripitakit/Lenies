@@ -31,6 +31,7 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:paused?, false)
       |> assign(:throttle_counter, 0)
       |> assign(:history, [])
+      |> assign(:species, Lenies.Species.top_n(10))
 
     {:ok, socket}
   end
@@ -101,8 +102,29 @@ defmodule LeniesWeb.DashboardLive do
         </div>
 
         <div class="panel species-panel">
-          <h2>Specie</h2>
-          <p>(SP6 — Inspector + Specie views)</p>
+          <h2>Specie ({length(@species)})</h2>
+          <table class="species-table">
+            <thead>
+              <tr>
+                <th>Hash</th>
+                <th>Pop.</th>
+                <th>Gen. media</th>
+              </tr>
+            </thead>
+            <tbody>
+              <%= for sp <- @species do %>
+                <tr>
+                  <td>
+                    <.link href={"/species/#{sp.hash}"} class="species-link">
+                      {String.slice(sp.hash, 0..7)}...
+                    </.link>
+                  </td>
+                  <td>{sp.population}</td>
+                  <td>{Float.round(sp.avg_generation, 2)}</td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
         </div>
 
         <div class="panel controls-panel">
@@ -164,9 +186,13 @@ defmodule LeniesWeb.DashboardLive do
       socket
       |> assign(:tick_count, n)
       |> assign(:throttle_counter, new_counter)
-      |> assign(:history, Lenies.Telemetry.history(:last_n, 100))
 
     if rem(new_counter, throttle) == 0 do
+      socket =
+        socket
+        |> assign(:history, Lenies.Telemetry.history(:last_n, 100))
+        |> assign(:species, Lenies.Species.top_n(10))
+
       payload = GridRenderer.encode_payload(socket.assigns.grid)
       {:noreply, push_event(socket, "render_frame", payload)}
     else
