@@ -40,6 +40,15 @@ defmodule Lenies.World do
   """
   def action(action_spec), do: GenServer.call(@name, {:action, action_spec})
 
+  @doc "Pause the environmental tick (auto-tick stops; tick_now still works)."
+  def pause, do: GenServer.call(@name, :pause)
+
+  @doc "Resume the environmental tick."
+  def resume, do: GenServer.call(@name, :resume)
+
+  @doc "Query current pause status."
+  def paused?, do: GenServer.call(@name, :paused?)
+
   @doc "Notifica al World che un Lenie è morto (libera cella, eventuale carcassa)."
   def lenie_died(id, pos, energy_at_death),
     do: GenServer.cast(@name, {:lenie_died, id, pos, energy_at_death})
@@ -60,7 +69,8 @@ defmodule Lenies.World do
       hotspots: hotspots,
       tick_interval_ms: tick_interval,
       tick_ref: nil,
-      tick_count: 0
+      tick_count: 0,
+      paused?: false
     }
 
     state = maybe_schedule_tick(state)
@@ -101,6 +111,21 @@ defmodule Lenies.World do
     )
 
     {:reply, :ok, new_state}
+  end
+
+  def handle_call(:pause, _from, state) do
+    if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
+    {:reply, :ok, %{state | paused?: true, tick_ref: nil}}
+  end
+
+  def handle_call(:resume, _from, state) do
+    new_state = %{state | paused?: false}
+    new_state = maybe_schedule_tick(new_state)
+    {:reply, :ok, new_state}
+  end
+
+  def handle_call(:paused?, _from, state) do
+    {:reply, state.paused?, state}
   end
 
   @impl true
@@ -231,6 +256,7 @@ defmodule Lenies.World do
 
   defp maybe_schedule_tick(%{tick_interval_ms: 0} = state), do: state
   defp maybe_schedule_tick(%{tick_interval_ms: nil} = state), do: state
+  defp maybe_schedule_tick(%{paused?: true} = state), do: state
 
   defp maybe_schedule_tick(state) do
     ref = Process.send_after(self(), :tick, state.tick_interval_ms)
