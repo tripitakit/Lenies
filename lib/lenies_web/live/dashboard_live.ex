@@ -29,6 +29,7 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:sterilize_confirming, false)
       |> assign(:paused?, false)
       |> assign(:throttle_counter, 0)
+      |> assign(:history, [])
 
     {:ok, socket}
   end
@@ -85,7 +86,17 @@ defmodule LeniesWeb.DashboardLive do
 
         <div class="panel telemetry-panel">
           <h2>Telemetria</h2>
-          <div id="telemetry-chart">Tick: {@tick_count}</div>
+          <div class="telemetry-stats">
+            <p>Tick: {@tick_count}</p>
+            <p>Snapshot entries: {length(@history)}</p>
+          </div>
+          <svg width="300" height="100" style="background: #eee">
+            <%= for {entry, idx} <- Enum.with_index(@history) do %>
+              <% x = idx * 3 %>
+              <% y = 100 - min(80, entry.population) %>
+              <circle cx={x} cy={y} r="2" fill="blue" />
+            <% end %>
+          </svg>
         </div>
 
         <div class="panel species-panel">
@@ -148,7 +159,11 @@ defmodule LeniesWeb.DashboardLive do
     throttle = Application.get_env(:lenies, :dashboard_throttle_ticks, 5)
     new_counter = socket.assigns.throttle_counter + 1
 
-    socket = assign(socket, :tick_count, n) |> assign(:throttle_counter, new_counter)
+    socket =
+      socket
+      |> assign(:tick_count, n)
+      |> assign(:throttle_counter, new_counter)
+      |> assign(:history, Lenies.Telemetry.history(:last_n, 100))
 
     if rem(new_counter, throttle) == 0 do
       payload = GridRenderer.encode_payload(socket.assigns.grid)
