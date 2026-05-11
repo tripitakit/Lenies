@@ -6,7 +6,11 @@ defmodule Lenies.World.TablesTest do
   setup do
     on_exit(fn ->
       for t <- [:cells, :lenies, :child_slots, :history] do
-        if :ets.whereis(t) != :undefined, do: :ets.delete(t)
+        try do
+          :ets.delete(t)
+        rescue
+          ArgumentError -> :ok
+        end
       end
     end)
 
