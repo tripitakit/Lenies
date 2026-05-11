@@ -35,6 +35,7 @@ defmodule Lenies.Telemetry do
   def init(opts) do
     max_entries = Keyword.get(opts, :max_entries, @default_max_entries)
     Phoenix.PubSub.subscribe(Lenies.PubSub, "world:tick")
+    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:control")
     {:ok, %{max_entries: max_entries, counter: 0}}
   end
 

@@ -32,7 +32,7 @@ defmodule Lenies.SterilizeTest do
     assert before_stats.tick_count == 10
     assert before_stats.total_resource > 0
 
-    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:tick")
+    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:control")
     :ok = World.sterilize()
 
     assert_receive {:sterilized, _ts}, 500

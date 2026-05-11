@@ -71,6 +71,7 @@ defmodule Lenies.World do
   end
 
   def handle_call(:sterilize, _from, state) do
+    terminate_all_lenies()
     if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
     Tables.clear_all()
     init_cells(state.grid)
@@ -80,7 +81,7 @@ defmodule Lenies.World do
 
     Phoenix.PubSub.broadcast(
       Lenies.PubSub,
-      "world:tick",
+      "world:control",
       {:sterilized, System.system_time(:millisecond)}
     )
 
@@ -171,5 +172,20 @@ defmodule Lenies.World do
   defp maybe_schedule_tick(state) do
     ref = Process.send_after(self(), :tick, state.tick_interval_ms)
     %{state | tick_ref: ref}
+  end
+
+  defp terminate_all_lenies do
+    case Process.whereis(Lenies.LenieSupervisor) do
+      nil ->
+        :ok
+
+      _pid ->
+        Lenies.LenieSupervisor
+        |> DynamicSupervisor.which_children()
+        |> Enum.each(fn {_, child_pid, _, _} ->
+          if is_pid(child_pid),
+            do: DynamicSupervisor.terminate_child(Lenies.LenieSupervisor, child_pid)
+        end)
+    end
   end
 end
