@@ -29,6 +29,16 @@ defmodule Lenies.World do
   @doc "Reset completo: kill di tutti i Lenies, clear ETS, riavvio del tick."
   def sterilize, do: GenServer.call(@name, :sterilize)
 
+  @doc """
+  Esegue un'azione richiesta da un Lenie. Chiamata sincrona.
+
+  Forms:
+  - `{:sense_front, {x, y}, dir}` — restituisce `{:ok, :empty | {:resource, n} | {:lenie, id}}`
+  - `{:move, {x, y}, dir, lenie_id}` — restituisce `{:ok, {:moved, {x2, y2}} | :blocked}`
+  - `{:eat, {x, y}}` — restituisce `{:ok, {:ate, amount}}`
+  """
+  def action(action_spec), do: GenServer.call(@name, {:action, action_spec})
+
   # ----- Server -----
 
   @impl true
@@ -86,6 +96,12 @@ defmodule Lenies.World do
     )
 
     {:reply, :ok, new_state}
+  end
+
+  @impl true
+  def handle_call({:action, action_spec}, _from, state) do
+    {result, new_state} = do_action(action_spec, state)
+    {:reply, result, new_state}
   end
 
   @impl true
@@ -186,6 +202,63 @@ defmodule Lenies.World do
           if is_pid(child_pid),
             do: DynamicSupervisor.terminate_child(Lenies.LenieSupervisor, child_pid)
         end)
+    end
+  end
+
+  defp do_action({:sense_front, {x, y}, dir}, state) do
+    front = front_cell({x, y}, dir, state.grid)
+
+    case :ets.lookup(:cells, front) do
+      [{_, cell}] ->
+        result =
+          cond do
+            cell.lenie_id != nil -> {:lenie, cell.lenie_id}
+            cell.resource > 0 -> {:resource, cell.resource}
+            true -> :empty
+          end
+
+        {{:ok, result}, state}
+
+      _ ->
+        {{:ok, :empty}, state}
+    end
+  end
+
+  defp do_action({:move, {x, y}, dir, lenie_id}, state) do
+    front = front_cell({x, y}, dir, state.grid)
+
+    case :ets.lookup(:cells, front) do
+      [{_, %{lenie_id: nil} = front_cell}] ->
+        # move successful
+        [{src_key, src_cell}] = :ets.lookup(:cells, {x, y})
+        :ets.insert(:cells, {src_key, %{src_cell | lenie_id: nil}})
+        :ets.insert(:cells, {front, %{front_cell | lenie_id: lenie_id}})
+        {{:ok, {:moved, front}}, state}
+
+      _ ->
+        {{:ok, :blocked}, state}
+    end
+  end
+
+  defp do_action({:eat, {x, y}}, state) do
+    case :ets.lookup(:cells, {x, y}) do
+      [{key, cell}] ->
+        eat_amount = Application.get_env(:lenies, :eat_amount, 20)
+        taken = min(eat_amount, cell.resource)
+        :ets.insert(:cells, {key, %{cell | resource: cell.resource - taken}})
+        {{:ok, {:ate, taken}}, state}
+
+      _ ->
+        {{:ok, {:ate, 0}}, state}
+    end
+  end
+
+  defp front_cell({x, y}, dir, {w, h}) do
+    case dir do
+      :n -> {x, Integer.mod(y - 1, h)}
+      :e -> {Integer.mod(x + 1, w), y}
+      :s -> {x, Integer.mod(y + 1, h)}
+      :w -> {Integer.mod(x - 1, w), y}
     end
   end
 end

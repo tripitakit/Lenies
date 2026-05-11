@@ -27,7 +27,8 @@ config :lenies,
   cell_resource_cap: 100,
   carcass_decay: 0.05,
   template_max_len: 8,
-  template_search_radius: 256
+  template_search_radius: 256,
+  eat_amount: 20
 
 if System.get_env("PHX_SERVER") do
   config :lenies, LeniesWeb.Endpoint, server: true
