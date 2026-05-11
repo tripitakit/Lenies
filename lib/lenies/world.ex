@@ -39,6 +39,10 @@ defmodule Lenies.World do
   """
   def action(action_spec), do: GenServer.call(@name, {:action, action_spec})
 
+  @doc "Notifica al World che un Lenie è morto (libera cella, eventuale carcassa)."
+  def lenie_died(id, pos, energy_at_death),
+    do: GenServer.call(@name, {:lenie_died, id, pos, energy_at_death})
+
   # ----- Server -----
 
   @impl true
@@ -102,6 +106,20 @@ defmodule Lenies.World do
   def handle_call({:action, action_spec}, _from, state) do
     {result, new_state} = do_action(action_spec, state)
     {:reply, result, new_state}
+  end
+
+  def handle_call({:lenie_died, id, {x, y}, energy_at_death}, _from, state) do
+    case :ets.lookup(:cells, {x, y}) do
+      [{key, cell}] ->
+        carcass_value = max(0, trunc(energy_at_death * 0.5))
+        :ets.insert(:cells, {key, %{cell | lenie_id: nil, carcass: carcass_value}})
+
+      _ ->
+        :ok
+    end
+
+    :ets.delete(:lenies, id)
+    {:reply, :ok, state}
   end
 
   @impl true
