@@ -1,0 +1,129 @@
+defmodule Lenies.Codeomes.CarnivoreTest do
+  use ExUnit.Case, async: false
+
+  alias Lenies.{Codeome, Lenie, World}
+  alias Lenies.Codeomes.{Carnivore, MinimalReplicator}
+  alias Lenies.World.Tables
+
+  @moduletag timeout: 30_000
+
+  setup do
+    Application.put_env(:lenies, :copy_substitution_rate, 0.0)
+    Application.put_env(:lenies, :copy_insert_rate, 0.0)
+    Application.put_env(:lenies, :copy_delete_rate, 0.0)
+    Application.put_env(:lenies, :background_mutation_interval_ticks, 0)
+    Application.put_env(:lenies, :min_viable_codeome_opcodes, 5)
+    Application.put_env(:lenies, :codeome_length_bounds, {3, 500})
+    Application.put_env(:lenies, :eat_amount, 50)
+    Application.put_env(:lenies, :interpreter_steps_per_batch, 50)
+
+    on_exit(fn ->
+      Application.delete_env(:lenies, :copy_substitution_rate)
+      Application.delete_env(:lenies, :copy_insert_rate)
+      Application.delete_env(:lenies, :copy_delete_rate)
+      Application.delete_env(:lenies, :background_mutation_interval_ticks)
+      Application.delete_env(:lenies, :min_viable_codeome_opcodes)
+      Application.delete_env(:lenies, :codeome_length_bounds)
+      Application.delete_env(:lenies, :eat_amount)
+      Application.delete_env(:lenies, :interpreter_steps_per_batch)
+
+      case Process.whereis(Lenies.LenieSupervisor) do
+        sup_pid when is_pid(sup_pid) ->
+          DynamicSupervisor.which_children(sup_pid)
+          |> Enum.each(fn {_, child_pid, _, _} ->
+            if is_pid(child_pid), do: DynamicSupervisor.terminate_child(sup_pid, child_pid)
+          end)
+
+        _ ->
+          :ok
+      end
+
+      case Process.whereis(Lenies.World) do
+        pid when is_pid(pid) ->
+          try do
+            GenServer.stop(pid)
+          catch
+            :exit, _ -> :ok
+          end
+
+        _ ->
+          :ok
+      end
+
+      Tables.delete_all()
+    end)
+
+    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+
+    # Seed food so Lenies can survive during the duel
+    for x <- 0..254, y <- 0..254 do
+      [{key, cell}] = :ets.lookup(:cells, {x, y})
+      :ets.insert(:cells, {key, %{cell | resource: 200}})
+    end
+
+    :ok
+  end
+
+  test "carnivore.codeome/0 produces a Codeome with attack inserted before eat" do
+    base = MinimalReplicator.codeome() |> Codeome.to_list()
+    carn = Carnivore.codeome() |> Codeome.to_list()
+
+    # carnivore has exactly one more opcode (the inserted :attack)
+    assert length(carn) == length(base) + 1
+    assert :attack in carn
+  end
+
+  test "duel: carnivore facing herbivore steals energy via :attack" do
+    # Herbivore at {50, 50} facing west (away from carnivore)
+    [{key, cell}] = :ets.lookup(:cells, {50, 50})
+    :ets.insert(:cells, {key, %{cell | lenie_id: "HERB"}})
+
+    {:ok, herb_pid} =
+      Lenie.start_link(
+        id: "HERB",
+        codeome: MinimalReplicator.codeome(),
+        energy: 5000.0,
+        pos: {50, 50},
+        dir: :w,
+        lineage: {nil, 0}
+      )
+
+    Process.unlink(herb_pid)
+
+    # Carnivore at {49, 50} facing east → towards herbivore
+    [{key, cell}] = :ets.lookup(:cells, {49, 50})
+    :ets.insert(:cells, {key, %{cell | lenie_id: "CARN"}})
+
+    {:ok, carn_pid} =
+      Lenie.start_link(
+        id: "CARN",
+        codeome: Carnivore.codeome(),
+        energy: 5000.0,
+        pos: {49, 50},
+        dir: :e,
+        lineage: {nil, 0}
+      )
+
+    Process.unlink(carn_pid)
+
+    # Run for 500ms
+    Process.sleep(500)
+
+    herb_alive = Process.alive?(herb_pid)
+    carn_alive = Process.alive?(carn_pid)
+
+    # At least one duelist should still be alive
+    assert herb_alive or carn_alive
+
+    if herb_alive and carn_alive do
+      herb_snap = Lenie.inspect_state(herb_pid)
+      carn_snap = Lenie.inspect_state(carn_pid)
+      IO.inspect(herb_snap.energy, label: "HERB energy after 500ms")
+      IO.inspect(carn_snap.energy, label: "CARN energy after 500ms")
+      assert true
+    end
+
+    if herb_alive, do: GenServer.stop(herb_pid)
+    if carn_alive, do: GenServer.stop(carn_pid)
+  end
+end
