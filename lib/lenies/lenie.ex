@@ -169,4 +169,15 @@ defmodule Lenies.Lenie do
       {:ok, {:ate, amount}} -> {:ok, %{interp | energy: interp.energy + amount}}
     end
   end
+
+  defp apply_world_action({:allocate, size, _pos, _dir}, id, interp) do
+    case World.action({:allocate, size, interp.pos, interp.dir, id}) do
+      {:ok, {:allocated, _slot_id, _target_cell}} ->
+        {:ok, State.push(interp, 1)}
+
+      {:ok, _failure_reason} ->
+        # blocked, already_allocated, invalid_size
+        {:ok, State.push(interp, 0)}
+    end
+  end
 end

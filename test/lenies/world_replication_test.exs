@@ -70,4 +70,44 @@ defmodule Lenies.WorldReplicationTest do
       assert result == {:ok, :invalid_size}
     end
   end
+
+  describe "Lenie + :allocate end-to-end" do
+    test "Lenie that executes :allocate gets success pushed on stack" do
+      # Codeome: build size 5 on stack via :push1 + :add, then :allocate
+      # Push 1 five times then add four times → 5 on stack
+      codeome =
+        Lenies.Codeome.from_list([
+          :push1,
+          :push1,
+          :add,
+          :push1,
+          :add,
+          :push1,
+          :add,
+          :push1,
+          :add,
+          :allocate,
+          :nop_0
+        ])
+
+      {:ok, pid} =
+        Lenies.Lenie.start_link(
+          id: "P1",
+          codeome: codeome,
+          energy: 10_000.0,
+          pos: {10, 10},
+          dir: :e,
+          lineage: {nil, 0}
+        )
+
+      Process.unlink(pid)
+      Process.sleep(200)
+
+      # After :allocate succeeded, a child slot for "P1" should exist in :child_slots
+      slots = :ets.tab2list(:child_slots)
+      assert Enum.any?(slots, fn {_id, slot} -> slot.parent_id == "P1" end)
+
+      GenServer.stop(pid)
+    end
+  end
 end
