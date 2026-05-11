@@ -52,9 +52,9 @@ const GridCanvas = {
     const rBytes = this.decodeBase64(resource);
     const cBytes = this.decodeBase64(carcass);
 
-    const showLenies = this.canvas.dataset.showLenies !== "false";
-    const showResource = this.canvas.dataset.showResource !== "false";
-    const showCarcass = this.canvas.dataset.showCarcass !== "false";
+    const showLenies = this.canvas.hasAttribute("data-show-lenies");
+    const showResource = this.canvas.hasAttribute("data-show-resource");
+    const showCarcass = this.canvas.hasAttribute("data-show-carcass");
 
     const imageData = this.bufferCtx.createImageData(width, height);
     const px = imageData.data; // RGBA, length = w*h*4

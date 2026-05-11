@@ -17,6 +17,7 @@ defmodule LeniesWeb.DashboardLive do
   def mount(_params, _session, socket) do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Lenies.PubSub, "world:tick")
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "world:control")
     end
 
     grid = Lenies.Config.grid_size()
