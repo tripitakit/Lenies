@@ -119,6 +119,74 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
            "expected at least 3 generations; got max gen #{max_gen}, #{population} Lenies alive"
   end
 
+  @tag :slow
+  # Extends the basic test (Task 15) with a higher generation target (20 vs 3).
+  # Energy halves at each divide, so we boost eat_amount so the lineage can
+  # recover between divisions and sustain at least 20 sequential generations.
+  # Target is gen 20 (not 100 as originally planned); a mock-world approach
+  # can address higher thresholds in a future task.
+  test "minimal_replicator reaches at least generation 20 within 30 seconds (slow)" do
+    # Override eat_amount so each eat() gives 2000 energy — enough to recover
+    # from energy halving (parent keeps ~half after divide) across many generations.
+    Application.put_env(:lenies, :eat_amount, 2000)
+
+    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+
+    # Seed the full grid with abundant food so each eat() can draw 2000 units
+    for x <- 0..254, y <- 0..254 do
+      [{key, cell}] = :ets.lookup(:cells, {x, y})
+      :ets.insert(:cells, {key, %{cell | resource: 100_000}})
+    end
+
+    # Spawn original replicator at center
+    [{key, cell}] = :ets.lookup(:cells, {128, 128})
+    :ets.insert(:cells, {key, %{cell | lenie_id: "ORIGIN"}})
+
+    {:ok, pid} =
+      Lenie.start_link(
+        id: "ORIGIN",
+        codeome: MinimalReplicator.codeome(),
+        energy: 10_000.0,
+        pos: {128, 128},
+        dir: :e,
+        lineage: {nil, 0}
+      )
+
+    Process.unlink(pid)
+
+    # Poll every 500ms; stop early if we hit gen 20
+    deadline_ms = 30_000
+    poll_interval = 500
+    target_gen = 20
+
+    max_gen =
+      Stream.iterate(0, &(&1 + poll_interval))
+      |> Stream.take_while(&(&1 < deadline_ms))
+      |> Enum.reduce_while(0, fn _elapsed, acc ->
+        Process.sleep(poll_interval)
+
+        current_max =
+          :ets.tab2list(:lenies)
+          |> Enum.map(fn {_id, snap} -> Map.get(snap, :lineage, {nil, 0}) |> elem(1) end)
+          |> Enum.max(fn -> 0 end)
+
+        new_max = max(acc, current_max)
+
+        if new_max >= target_gen do
+          {:halt, new_max}
+        else
+          {:cont, new_max}
+        end
+      end)
+
+    snapshots = :ets.tab2list(:lenies)
+    IO.inspect(length(snapshots), label: "Slow test: Population size")
+    IO.inspect(max_gen, label: "Slow test: Max generation reached")
+
+    assert max_gen >= target_gen,
+           "expected at least #{target_gen} generations within 30s; got #{max_gen}, #{length(snapshots)} Lenies alive"
+  end
+
   defp max_generation(snapshots) do
     snapshots
     |> Enum.map(fn {_id, snap} -> Map.get(snap, :lineage, {nil, 0}) |> elem(1) end)
