@@ -1,5 +1,5 @@
 defmodule Lenies.ConfigTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Lenies.Config
 
@@ -34,5 +34,21 @@ defmodule Lenies.ConfigTest do
 
   test "carcass_decay/0 returns configured value" do
     assert Config.carcass_decay() == 0.05
+  end
+
+  test "population_warning_threshold/0 returns configured value" do
+    assert Config.population_warning_threshold() == 0.8
+  end
+
+  describe "configuration override" do
+    setup do
+      on_exit(fn -> Application.put_env(:lenies, :grid_size, {256, 256}) end)
+      :ok
+    end
+
+    test "getters delegate to Application.get_env (override is observable)" do
+      Application.put_env(:lenies, :grid_size, {512, 512})
+      assert Config.grid_size() == {512, 512}
+    end
   end
 end
