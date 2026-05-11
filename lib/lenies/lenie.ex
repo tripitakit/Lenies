@@ -21,7 +21,7 @@ defmodule Lenies.Lenie do
   alias Lenies.{Codeome, Interpreter, World}
   alias Lenies.Interpreter.State
 
-  defstruct [:id, :codeome, :interp, :lineage]
+  defstruct [:id, :codeome, :interp, :lineage, batch_count: 0]
 
   # ----- Public API -----
 
@@ -57,9 +57,11 @@ defmodule Lenies.Lenie do
       id: id,
       codeome: codeome,
       interp: interp,
-      lineage: lineage
+      lineage: lineage,
+      batch_count: 0
     }
 
+    maybe_write_snapshot(state)
     schedule_metabolize()
     {:ok, state}
   end
@@ -120,8 +122,31 @@ defmodule Lenies.Lenie do
 
   defp age_and_continue(state, new_interp) do
     new_interp = %{new_interp | age: new_interp.age + 1}
+    new_batch_count = state.batch_count + 1
+    new_state = %{state | interp: new_interp, batch_count: new_batch_count}
+
+    maybe_write_snapshot(new_state)
     schedule_metabolize()
-    %{state | interp: new_interp}
+    new_state
+  end
+
+  defp maybe_write_snapshot(state) do
+    cadence = Application.get_env(:lenies, :snapshot_every_batches, 10)
+
+    if rem(state.batch_count, cadence) == 0 do
+      snap = %{
+        id: state.id,
+        pid: self(),
+        pos: state.interp.pos,
+        dir: state.interp.dir,
+        energy: state.interp.energy,
+        age: state.interp.age,
+        codeome_hash: Lenies.Codeome.hash(state.codeome),
+        lineage: state.lineage
+      }
+
+      :ets.insert(:lenies, {state.id, snap})
+    end
   end
 
   defp apply_world_action({:sense_front, _pos, _dir} = action, _id, interp) do

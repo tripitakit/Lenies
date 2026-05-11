@@ -30,7 +30,8 @@ config :lenies,
   template_search_radius: 256,
   eat_amount: 20,
   lenie_max_heap_size: 1_000_000,
-  interpreter_steps_per_batch: 10
+  interpreter_steps_per_batch: 10,
+  snapshot_every_batches: 10
 
 if System.get_env("PHX_SERVER") do
   config :lenies, LeniesWeb.Endpoint, server: true
