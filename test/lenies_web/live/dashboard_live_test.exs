@@ -165,7 +165,9 @@ defmodule LeniesWeb.DashboardLiveTest do
     Application.put_env(:lenies, :radiation_per_tick, 100)
     {:ok, view, _html} = live(conn, "/")
 
-    render_hook(view, "tune_param", %{"key" => "radiation_per_tick", "value" => "250"})
+    view
+    |> element("#tune-radiation_per_tick form")
+    |> render_change(%{"key" => "radiation_per_tick", "value" => "250"})
 
     assert Application.get_env(:lenies, :radiation_per_tick) == 250
 
@@ -181,7 +183,9 @@ defmodule LeniesWeb.DashboardLiveTest do
     base = "/tmp/lenies-ui-snapshot-test"
     File.rm_rf!(base)
 
-    render_hook(view, "snapshot_action", %{"path" => base, "action" => "save"})
+    view
+    |> form("form[phx-submit='snapshot_action']", %{path: base})
+    |> render_submit(%{action: "save"})
 
     assert File.exists?(Path.join(base, "cells.tab"))
     File.rm_rf!(base)
