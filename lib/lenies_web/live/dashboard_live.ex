@@ -141,6 +141,22 @@ defmodule LeniesWeb.DashboardLive do
           <button phx-click="toggle_pause">
             {if @paused?, do: "Resume", else: "Pause"}
           </button>
+
+          <form phx-submit="spawn_seed" class="seed-form">
+            <h3>Seed</h3>
+            <label>
+              Seed:
+              <select name="seed_id">
+                <%= for s <- Lenies.Seeds.all() do %>
+                  <option value={Atom.to_string(s.id)}>{s.name}</option>
+                <% end %>
+              </select>
+            </label>
+            <label>
+              Count: <input type="number" name="count" value="1" min="1" max="50" />
+            </label>
+            <button type="submit">Spawn</button>
+          </form>
         </div>
       </div>
     </div>
@@ -176,6 +192,25 @@ defmodule LeniesWeb.DashboardLive do
       _ ->
         {:noreply, socket}
     end
+  end
+
+  def handle_event("spawn_seed", %{"seed_id" => seed_id_str, "count" => count_str}, socket) do
+    seed_id = String.to_existing_atom(seed_id_str)
+    count = String.to_integer(count_str) |> max(1) |> min(50)
+
+    case Lenies.Seeds.get(seed_id) do
+      %{codeome: codeome, default_options: opts} ->
+        energy = Map.get(opts, :energy, 500.0)
+
+        for _ <- 1..count do
+          Lenies.World.spawn_lenie(codeome, energy: energy)
+        end
+
+      nil ->
+        :ok
+    end
+
+    {:noreply, socket}
   end
 
   def handle_event("toggle_pause", _, socket) do

@@ -138,4 +138,26 @@ defmodule LeniesWeb.DashboardLiveTest do
     # Cell {7, 8} is empty by default
     assert render_hook(view, "cell_clicked", %{"x" => 7, "y" => 8})
   end
+
+  test "Seed dropdown is rendered with available seeds", %{conn: conn} do
+    {:ok, _view, html} = live(conn, "/")
+    assert html =~ "Seed"
+    assert html =~ "Minimal Replicator"
+    assert html =~ "Carnivore"
+  end
+
+  test "clicking Spawn triggers world spawn_lenie", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/")
+
+    pop_before = :ets.info(:lenies, :size) || 0
+
+    view
+    |> form("form[phx-submit='spawn_seed']", %{seed_id: "minimal_replicator", count: "1"})
+    |> render_submit()
+
+    Process.sleep(100)
+
+    pop_after = :ets.info(:lenies, :size) || 0
+    assert pop_after >= pop_before + 1
+  end
 end
