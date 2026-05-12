@@ -25,13 +25,13 @@ defmodule Lenies.Seeds do
         id: :minimal_replicator,
         name: "Minimal Replicator",
         codeome: MinimalReplicator.codeome(),
-        default_options: %{energy: 2000.0}
+        default_options: %{energy: 10000.0}
       },
       %{
         id: :carnivore,
         name: "Carnivore",
         codeome: Carnivore.codeome(),
-        default_options: %{energy: 2000.0}
+        default_options: %{energy: 10000.0}
       },
       %{
         id: :random,
