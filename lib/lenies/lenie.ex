@@ -140,7 +140,8 @@ defmodule Lenies.Lenie do
   # ----- internals -----
 
   defp schedule_metabolize do
-    Process.send_after(self(), :metabolize, 0)
+    delay = Application.get_env(:lenies, :lenie_metabolize_delay_ms, 0)
+    Process.send_after(self(), :metabolize, delay)
   end
 
   defp age_and_continue(state, new_interp) do

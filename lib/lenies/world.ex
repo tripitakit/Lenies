@@ -325,7 +325,10 @@ defmodule Lenies.World do
   defp maybe_schedule_tick(%{paused?: true} = state), do: state
 
   defp maybe_schedule_tick(state) do
-    ref = Process.send_after(self(), :tick, state.tick_interval_ms)
+    # Re-read from Application env so the dashboard slider can change tick rate
+    # live on a running world. Falls back to the value supplied at start_link.
+    interval = Application.get_env(:lenies, :tick_interval_ms, state.tick_interval_ms)
+    ref = Process.send_after(self(), :tick, interval)
     %{state | tick_ref: ref}
   end
 

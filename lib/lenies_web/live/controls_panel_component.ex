@@ -9,7 +9,17 @@ defmodule LeniesWeb.ControlsPanelComponent do
   use LeniesWeb, :live_component
 
   @tunable_params [
-    %{key: :radiation_per_tick, label: "Radiation per tick", min: 0, max: 1000, step: 10},
+    %{key: :radiation_per_tick, label: "Radiation per tick", min: 0, max: 20000, step: 100},
+    %{key: :eat_amount, label: "Eat amount", min: 1, max: 1000, step: 10},
+    %{key: :carcass_decay, label: "Carcass decay/tick", min: 0.0, max: 0.2, step: 0.005},
+    %{
+      key: :lenie_metabolize_delay_ms,
+      label: "Lenie metabolize delay (ms)",
+      min: 0,
+      max: 500,
+      step: 5
+    },
+    %{key: :tick_interval_ms, label: "World tick interval (ms)", min: 20, max: 1000, step: 10},
     %{
       key: :copy_substitution_rate,
       label: "Copy substitution rate",
@@ -26,8 +36,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
       max: 10000,
       step: 100
     },
-    %{key: :attack_damage, label: "Attack damage", min: 0, max: 50, step: 1},
-    %{key: :eat_amount, label: "Eat amount", min: 1, max: 1000, step: 10}
+    %{key: :attack_damage, label: "Attack damage", min: 0, max: 50, step: 1}
   ]
 
   @impl true

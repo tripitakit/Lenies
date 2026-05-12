@@ -22,18 +22,19 @@ config :lenies,
   population_cap: 50_000,
   population_warning_threshold: 0.8,
   tick_interval_ms: 100,
-  radiation_per_tick: 100,
+  radiation_per_tick: 1000,
   initial_resource_per_cell: 30,
   initial_radiation_ticks: 50,
   radiation_uniform_ratio: 0.7,
   hotspot_count: 8,
   cell_resource_cap: 100,
-  carcass_decay: 0.05,
+  carcass_decay: 0.01,
   template_max_len: 8,
   template_search_radius: 256,
   eat_amount: 20,
   lenie_max_heap_size: 1_000_000,
   interpreter_steps_per_batch: 10,
+  lenie_metabolize_delay_ms: 50,
   snapshot_every_batches: 10,
   call_stack_max: 32,
   codeome_length_bounds: {5, 500},
@@ -54,6 +55,7 @@ if config_env() == :test do
   config :lenies, carcass_decay: 0
   config :lenies, initial_resource_per_cell: 0
   config :lenies, initial_radiation_ticks: 0
+  config :lenies, lenie_metabolize_delay_ms: 0
 end
 
 if System.get_env("PHX_SERVER") do
