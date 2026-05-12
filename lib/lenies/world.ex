@@ -53,6 +53,20 @@ defmodule Lenies.World do
   def lenie_died(id, pos, energy_at_death),
     do: GenServer.cast(@name, {:lenie_died, id, pos, energy_at_death})
 
+  @doc """
+  Spawn a new Lenie with `codeome` on a random free cell.
+
+  Options:
+  - `:energy` (default 500.0)
+  - `:dir` (default `:n`)
+  - `:lineage` (default `{nil, 0}`)
+
+  Returns `{:ok, {id, pos}}` on success or `{:error, :no_free_cell}` if the grid is full.
+  """
+  def spawn_lenie(codeome, opts \\ []) do
+    GenServer.call(@name, {:spawn_lenie, codeome, opts})
+  end
+
   # ----- Server -----
 
   @impl true
@@ -132,6 +146,40 @@ defmodule Lenies.World do
   def handle_call({:action, action_spec}, _from, state) do
     {result, new_state} = do_action(action_spec, state)
     {:reply, result, new_state}
+  end
+
+  @impl true
+  def handle_call({:spawn_lenie, codeome, opts}, _from, state) do
+    case find_random_free_cell(state.grid) do
+      {:ok, pos} ->
+        lenie_id = generate_lenie_id()
+        energy = Keyword.get(opts, :energy, 500.0)
+        dir = Keyword.get(opts, :dir, :n)
+        lineage = Keyword.get(opts, :lineage, {nil, 0})
+
+        child_opts = [
+          id: lenie_id,
+          codeome: codeome,
+          energy: energy * 1.0,
+          pos: pos,
+          dir: dir,
+          lineage: lineage
+        ]
+
+        {:ok, _pid} =
+          DynamicSupervisor.start_child(
+            Lenies.LenieSupervisor,
+            Supervisor.child_spec({Lenies.Lenie, child_opts}, restart: :temporary)
+          )
+
+        [{key, cell}] = :ets.lookup(:cells, pos)
+        :ets.insert(:cells, {key, %{cell | lenie_id: lenie_id}})
+
+        {:reply, {:ok, {lenie_id, pos}}, state}
+
+      :no_free_cell ->
+        {:reply, {:error, :no_free_cell}, state}
+    end
   end
 
   @impl true
@@ -493,6 +541,45 @@ defmodule Lenies.World do
     update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil))
 
     {{:ok, {:divided, child_id, child_energy}}, state}
+  end
+
+  defp find_random_free_cell({w, h}) do
+    max_tries = 100
+
+    case sample_free_cell({w, h}, max_tries) do
+      {:ok, pos} ->
+        {:ok, pos}
+
+      :exhausted ->
+        scan_for_free_cell({w, h})
+    end
+  end
+
+  defp sample_free_cell(_grid, 0), do: :exhausted
+
+  defp sample_free_cell({w, h} = grid, tries) do
+    x = :rand.uniform(w) - 1
+    y = :rand.uniform(h) - 1
+
+    case :ets.lookup(:cells, {x, y}) do
+      [{_, %{lenie_id: nil}}] -> {:ok, {x, y}}
+      _ -> sample_free_cell(grid, tries - 1)
+    end
+  end
+
+  defp scan_for_free_cell({w, h}) do
+    Enum.find_value(0..(w - 1), :no_free_cell, fn x ->
+      Enum.find_value(0..(h - 1), nil, fn y ->
+        case :ets.lookup(:cells, {x, y}) do
+          [{_, %{lenie_id: nil}}] -> {:ok, {x, y}}
+          _ -> nil
+        end
+      end)
+    end)
+  end
+
+  defp generate_lenie_id do
+    :crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)
   end
 
   defp generate_child_id do
