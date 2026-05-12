@@ -24,6 +24,7 @@ defmodule LeniesWeb.DashboardLive do
     end
 
     grid = Lenies.Config.grid_size()
+    {species, species_total} = top_species(10)
 
     socket =
       socket
@@ -32,9 +33,15 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:layers_visible, %{lenies: true, resource: true, carcass: true})
       |> assign(:throttle_counter, 0)
       |> assign(:history, [])
-      |> assign(:species, Lenies.Species.top_n(10))
+      |> assign(:species, species)
+      |> assign(:species_total, species_total)
 
     {:ok, socket}
+  end
+
+  defp top_species(n) do
+    all = Lenies.Species.aggregate()
+    {Enum.take(all, n), length(all)}
   end
 
   @impl true
@@ -54,7 +61,7 @@ defmodule LeniesWeb.DashboardLive do
             GRID <span class="text-cyan-300">{elem(@grid, 0)}×{elem(@grid, 1)}</span>
           </span>
           <span class="opacity-70">
-            SPECIE <span class="text-violet-300">{length(@species)}</span>
+            SPECIE <span class="text-violet-300">{@species_total}</span>
           </span>
           <button
             id="audio-toggle"
@@ -69,8 +76,8 @@ defmodule LeniesWeb.DashboardLive do
         </div>
       </header>
 
-      <div class="flex-1 flex flex-col gap-3 min-h-0">
-        <div class="flex gap-3 min-h-0 shrink-0">
+      <div class="flex-1 grid gap-3 min-h-0 grid-rows-[minmax(0,1fr)_auto]">
+        <div class="flex gap-3 min-h-0">
           <div class="panel p-3 flex flex-col gap-2 shrink-0">
             <h2 class="text-xs">▮ Mondo</h2>
             <div class="canvas-frame">
@@ -124,34 +131,67 @@ defmodule LeniesWeb.DashboardLive do
 
           <div class="flex-1 grid grid-rows-2 gap-3 min-h-0">
             <div class="panel p-3 flex flex-col gap-2 min-h-0">
-              <h2 class="text-xs">▮ Telemetria</h2>
-              <div class="grid grid-cols-2 gap-2 text-[11px]">
+              <h2 class="text-xs">▮ Telemetria — popolazione totale nel tempo</h2>
+              <% latest = List.last(@history) || %{population: 0, total_resource: 0, total_carcass: 0} %>
+              <div class="grid grid-cols-3 gap-2 text-[11px]">
                 <div class="border border-cyan-500/30 px-2 py-1">
-                  <div class="opacity-60">tick</div>
-                  <div class="text-cyan-300 font-bold tabular-nums text-base">{@tick_count}</div>
+                  <div class="opacity-60">popolaz.</div>
+                  <div class="text-cyan-300 font-bold tabular-nums text-base">
+                    {latest.population}
+                  </div>
                 </div>
-                <div class="border border-violet-500/30 px-2 py-1">
-                  <div class="opacity-60">snapshot</div>
-                  <div class="text-violet-300 font-bold tabular-nums text-base">
-                    {length(@history)}
+                <div class="border border-emerald-500/30 px-2 py-1">
+                  <div class="opacity-60">risorse</div>
+                  <div class="text-emerald-300 font-bold tabular-nums text-base">
+                    {latest.total_resource}
+                  </div>
+                </div>
+                <div class="border border-rose-500/30 px-2 py-1">
+                  <div class="opacity-60">carcasse</div>
+                  <div class="text-rose-300 font-bold tabular-nums text-base">
+                    {latest.total_carcass}
                   </div>
                 </div>
               </div>
+              <% pops = Enum.map(@history, & &1.population) %>
+              <% pop_max = Enum.max([1 | pops]) %>
+              <% n_points = max(1, length(pops)) %>
               <svg
                 viewBox="0 0 300 100"
                 preserveAspectRatio="none"
                 class="w-full flex-1 min-h-[60px] bg-slate-950/60 border border-cyan-500/20"
               >
-                <%= for {entry, idx} <- Enum.with_index(@history) do %>
-                  <% x = idx * 3 %>
-                  <% y = 100 - min(80, entry.population) %>
-                  <circle cx={x} cy={y} r="2" fill="#22d3ee" opacity="0.85" />
-                <% end %>
+                <line x1="0" y1="100" x2="300" y2="100" stroke="#334155" stroke-width="0.5" />
+                <line x1="0" y1="0" x2="300" y2="0" stroke="#334155" stroke-width="0.5" />
+                <polyline
+                  fill="none"
+                  stroke="#22d3ee"
+                  stroke-width="1.2"
+                  points={
+                    @history
+                    |> Enum.with_index()
+                    |> Enum.map(fn {entry, idx} ->
+                      x = idx / n_points * 300
+                      y = 100 - entry.population / pop_max * 95
+                      "#{Float.round(x, 1)},#{Float.round(y, 1)}"
+                    end)
+                    |> Enum.join(" ")
+                  }
+                />
+                <text x="4" y="10" fill="#64748b" font-size="8" font-family="monospace">
+                  max {pop_max}
+                </text>
+                <text x="4" y="96" fill="#64748b" font-size="8" font-family="monospace">0</text>
               </svg>
+              <p class="text-[9px] opacity-50 leading-tight">
+                Linea: popolazione totale (somma di tutte le specie). Per-specie nel pannello sotto.
+              </p>
             </div>
 
             <div class="panel p-3 flex flex-col gap-2 min-h-0">
-              <h2 class="text-xs">▮ Specie ({length(@species)})</h2>
+              <h2 class="text-xs">
+                ▮ Specie <span class="opacity-60">top {length(@species)} di {@species_total}</span>
+              </h2>
               <div class="flex-1 min-h-0 overflow-auto">
                 <table class="w-full text-[11px] tabular-nums">
                   <thead class="text-cyan-300/80 sticky top-0 bg-slate-950/80">
@@ -218,10 +258,13 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:throttle_counter, new_counter)
 
     if rem(new_counter, throttle) == 0 do
+      {species, species_total} = top_species(10)
+
       socket =
         socket
         |> assign(:history, Lenies.Telemetry.history(:last_n, 100))
-        |> assign(:species, Lenies.Species.top_n(10))
+        |> assign(:species, species)
+        |> assign(:species_total, species_total)
 
       payload = GridRenderer.encode_payload(socket.assigns.grid)
       {:noreply, push_event(socket, "render_frame", payload)}
