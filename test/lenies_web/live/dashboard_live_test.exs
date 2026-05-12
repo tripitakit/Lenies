@@ -34,7 +34,7 @@ defmodule LeniesWeb.DashboardLiveTest do
   test "mounts on / and renders dashboard panels", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/")
 
-    assert html =~ ~r/Lenies Dashboard/i
+    assert html =~ ~r/LENIES/
     assert html =~ "id=\"grid-canvas\""
     assert html =~ ~r/Sterilize/i
     assert html =~ ~r/(Pause|Resume)/i
@@ -51,7 +51,7 @@ defmodule LeniesWeb.DashboardLiveTest do
     refute render(view) =~ "Sei sicuro?"
 
     view
-    |> element("button", "STERILIZE")
+    |> element("button", "Sterilize")
     |> render_click()
 
     assert render(view) =~ "Sei sicuro?"
@@ -65,7 +65,7 @@ defmodule LeniesWeb.DashboardLiveTest do
     assert stats_before.tick_count >= 1
 
     view
-    |> element("button", "STERILIZE")
+    |> element("button", "Sterilize")
     |> render_click()
 
     view

@@ -47,58 +47,156 @@ defmodule LeniesWeb.ControlsPanelComponent do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="controls-root">
-      <div class="panel controls-panel">
-        <h2>Controllo</h2>
+    <div class="grid grid-cols-[minmax(260px,320px)_1fr] gap-3 min-h-0">
+      <div class="panel p-3 flex flex-col gap-3">
+        <h2 class="text-xs">▮ Controllo</h2>
 
-        <%= if @sterilize_confirming do %>
-          <p>Sei sicuro? Questo distrugge tutta la sandbox.</p>
-          <button phx-click="sterilize_confirm" phx-target={@myself}>Sì, sterilizza</button>
-          <button phx-click="sterilize_cancel" phx-target={@myself}>No, annulla</button>
-        <% else %>
-          <button phx-click="sterilize_init" phx-target={@myself} class="btn-red">STERILIZE</button>
-        <% end %>
+        <div class="flex gap-2">
+          <%= if @sterilize_confirming do %>
+            <div
+              id="sterilize-confirm"
+              phx-hook="ActionFeedback"
+              data-fx="danger"
+              class="flex-1 flex flex-col gap-1 p-2 border border-rose-500/60 bg-rose-950/40"
+            >
+              <p class="text-[11px] text-rose-200">Sei sicuro? Distrugge la sandbox.</p>
+              <div class="flex gap-1">
+                <button
+                  phx-click="sterilize_confirm"
+                  phx-target={@myself}
+                  class="flex-1 text-xs px-2 py-1 border border-rose-500 bg-rose-700/40 text-rose-100 hover:bg-rose-600/60"
+                >
+                  Sì, sterilizza
+                </button>
+                <button
+                  phx-click="sterilize_cancel"
+                  phx-target={@myself}
+                  class="flex-1 text-xs px-2 py-1 border border-slate-500 bg-slate-800 hover:bg-slate-700"
+                >
+                  Annulla
+                </button>
+              </div>
+            </div>
+          <% else %>
+            <button
+              id="sterilize-btn"
+              phx-hook="ActionFeedback"
+              data-fx="danger"
+              phx-click="sterilize_init"
+              phx-target={@myself}
+              class="flex-1 text-xs px-2 py-2 border border-rose-500/60 bg-rose-900/30 text-rose-200 hover:bg-rose-800/50 hover:text-rose-100 tracking-widest"
+            >
+              ⌷ Sterilize
+            </button>
+          <% end %>
 
-        <button phx-click="toggle_pause" phx-target={@myself}>
-          {if @paused?, do: "Resume", else: "Pause"}
-        </button>
+          <button
+            id="pause-btn"
+            phx-hook="ActionFeedback"
+            data-fx={if @paused?, do: "resume", else: "pause"}
+            phx-click="toggle_pause"
+            phx-target={@myself}
+            class={[
+              "flex-1 text-xs px-2 py-2 border tracking-widest",
+              if(@paused?,
+                do: "border-emerald-500/60 bg-emerald-900/30 text-emerald-200 hover:bg-emerald-800/50",
+                else: "border-cyan-500/60 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/50"
+              )
+            ]}
+          >
+            {if @paused?, do: "▶ Resume", else: "⏸ Pause"}
+          </button>
+        </div>
 
-        <form phx-submit="spawn_seed" phx-target={@myself} class="seed-form">
-          <h3>Seed</h3>
-          <label>
-            Seed:
-            <select name="seed_id">
+        <form
+          phx-submit="spawn_seed"
+          phx-target={@myself}
+          class="flex flex-col gap-1.5 border border-cyan-500/20 p-2"
+        >
+          <h3 class="text-[10px]">▸ Seed</h3>
+          <label class="flex items-center gap-2 text-[11px]">
+            <span class="opacity-70 w-12">tipo</span>
+            <select name="seed_id" class="flex-1 text-xs">
               <%= for s <- Lenies.Seeds.all() do %>
                 <option value={Atom.to_string(s.id)}>{s.name}</option>
               <% end %>
             </select>
           </label>
-          <label>
-            Count: <input type="number" name="count" value="1" min="1" max="50" />
+          <label class="flex items-center gap-2 text-[11px]">
+            <span class="opacity-70 w-12">count</span>
+            <input
+              type="number"
+              name="count"
+              value="1"
+              min="1"
+              max="50"
+              class="w-16 text-xs"
+            />
+            <button
+              type="submit"
+              class="ml-auto text-xs px-3 py-1 border border-cyan-500/60 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/50"
+            >
+              Spawn
+            </button>
           </label>
-          <button type="submit">Spawn</button>
         </form>
 
-        <form phx-submit="snapshot_action" phx-target={@myself} class="snapshot-form">
-          <h3>Snapshot</h3>
-          <label>
-            Path: <input type="text" name="path" value="/tmp/lenies-snapshot" />
+        <form
+          phx-submit="snapshot_action"
+          phx-target={@myself}
+          class="flex flex-col gap-1.5 border border-violet-500/20 p-2"
+        >
+          <h3 class="text-[10px]">▸ Snapshot</h3>
+          <label class="flex items-center gap-2 text-[11px]">
+            <span class="opacity-70 w-12">path</span>
+            <input
+              type="text"
+              name="path"
+              value="/tmp/lenies-snapshot"
+              class="flex-1 text-xs"
+            />
           </label>
-          <button type="submit" name="action" value="save">Save</button>
-          <button type="submit" name="action" value="restore">Restore</button>
+          <div class="flex gap-1">
+            <button
+              type="submit"
+              name="action"
+              value="save"
+              class="flex-1 text-xs px-2 py-1 border border-violet-500/60 bg-violet-900/30 text-violet-200 hover:bg-violet-800/50"
+            >
+              Save
+            </button>
+            <button
+              type="submit"
+              name="action"
+              value="restore"
+              class="flex-1 text-xs px-2 py-1 border border-violet-500/60 bg-violet-900/30 text-violet-200 hover:bg-violet-800/50"
+            >
+              Restore
+            </button>
+          </div>
         </form>
         <%= if @snapshot_status do %>
-          <p class="snapshot-status">{@snapshot_status}</p>
+          <p class="text-[11px] text-violet-300 opacity-90 border-l-2 border-violet-500 pl-2">
+            {@snapshot_status}
+          </p>
         <% end %>
       </div>
 
-      <div class="panel tuning-panel">
-        <h3>Tuning Live</h3>
-        <%= for p <- tunable_params() do %>
-          <div id={"tune-#{p.key}"} phx-update="ignore" class="tuning-row">
-            <form phx-change="tune_param" phx-target={@myself}>
-              <label>
-                <span>{p.label}</span>
+      <div class="panel p-3 flex flex-col gap-2 min-h-0">
+        <h2 class="text-xs">▮ Tuning Live</h2>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+          <%= for p <- tunable_params() do %>
+            <div id={"tune-#{p.key}"} phx-update="ignore">
+              <form phx-change="tune_param" phx-target={@myself} class="flex flex-col">
+                <div class="flex items-center justify-between">
+                  <span class="opacity-80 truncate">{p.label}</span>
+                  <span
+                    id={"val-#{p.key}"}
+                    class="text-cyan-300 font-bold tabular-nums ml-2 shrink-0"
+                  >
+                    {Application.get_env(:lenies, p.key, p.min)}
+                  </span>
+                </div>
                 <input
                   type="range"
                   name="value"
@@ -109,14 +207,11 @@ defmodule LeniesWeb.ControlsPanelComponent do
                   oninput={"document.getElementById('val-" <> Atom.to_string(p.key) <> "').textContent = this.value"}
                   phx-debounce="100"
                 />
-                <span id={"val-#{p.key}"} class="tuning-current">
-                  {Application.get_env(:lenies, p.key, p.min)}
-                </span>
-              </label>
-              <input type="hidden" name="key" value={Atom.to_string(p.key)} />
-            </form>
-          </div>
-        <% end %>
+                <input type="hidden" name="key" value={Atom.to_string(p.key)} />
+              </form>
+            </div>
+          <% end %>
+        </div>
       </div>
     </div>
     """

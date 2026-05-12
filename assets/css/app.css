@@ -102,4 +102,179 @@
 /* Make LiveView wrapper divs transparent for layout */
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
+/* ----- Lenies sci-fi dashboard ----- */
+
+/* Force dark sci-fi palette inside the dashboard regardless of user theme */
+.lenies-dashboard {
+  --neon-cyan: #22d3ee;
+  --neon-violet: #a78bfa;
+  --neon-magenta: #f472b6;
+  --neon-amber: #fbbf24;
+  --neon-red: #f87171;
+  --panel-bg: rgba(15, 23, 42, 0.85);
+  --panel-border: rgba(34, 211, 238, 0.25);
+  --panel-border-hot: rgba(244, 114, 182, 0.55);
+  --scan-line: rgba(34, 211, 238, 0.04);
+
+  background:
+    radial-gradient(1200px 800px at 30% 20%, rgba(34, 211, 238, 0.06), transparent 60%),
+    radial-gradient(900px 700px at 90% 100%, rgba(167, 139, 250, 0.06), transparent 60%),
+    repeating-linear-gradient(0deg, var(--scan-line) 0 1px, transparent 1px 3px),
+    #050816;
+  color: #e2e8f0;
+  font-family: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+}
+
+.lenies-dashboard h1,
+.lenies-dashboard h2,
+.lenies-dashboard h3 {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 6px rgba(34, 211, 238, 0.4);
+}
+
+.lenies-dashboard .panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.06) inset,
+    0 4px 30px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+}
+
+.lenies-dashboard .panel.is-hot {
+  border-color: var(--panel-border-hot);
+  box-shadow:
+    0 0 0 1px rgba(244, 114, 182, 0.15) inset,
+    0 4px 30px rgba(0, 0, 0, 0.6);
+}
+
+.lenies-dashboard button {
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: transform 80ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.lenies-dashboard button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.lenies-dashboard button:not(:disabled):active {
+  transform: translateY(0);
+}
+
+/* Visual feedback ping when an action fires */
+.lenies-dashboard .fx-ping {
+  animation: lenies-ping 320ms ease-out;
+}
+
+@keyframes lenies-ping {
+  0%   { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.6); }
+  60%  { box-shadow: 0 0 0 14px rgba(34, 211, 238, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); }
+}
+
+.lenies-dashboard .fx-ping-danger {
+  animation: lenies-ping-danger 420ms ease-out;
+}
+
+@keyframes lenies-ping-danger {
+  0%   { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.7); }
+  60%  { box-shadow: 0 0 0 16px rgba(248, 113, 113, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0); }
+}
+
+/* Subtle pulse for live indicators */
+.lenies-dashboard .pulse-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+
+/* Range slider styling — preserve user-agent but recolor track/thumb */
+.lenies-dashboard input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  width: 100%;
+}
+
+.lenies-dashboard input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-violet));
+  border-radius: 999px;
+}
+
+.lenies-dashboard input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  background: #0f172a;
+  border: 2px solid var(--neon-cyan);
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
+  cursor: pointer;
+}
+
+.lenies-dashboard input[type="range"]::-moz-range-track {
+  height: 4px;
+  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-violet));
+  border-radius: 999px;
+}
+
+.lenies-dashboard input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: #0f172a;
+  border: 2px solid var(--neon-cyan);
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
+  cursor: pointer;
+}
+
+.lenies-dashboard select,
+.lenies-dashboard input[type="text"],
+.lenies-dashboard input[type="number"] {
+  background: rgba(2, 6, 23, 0.6);
+  border: 1px solid var(--panel-border);
+  color: #e2e8f0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+.lenies-dashboard select:focus,
+.lenies-dashboard input[type="text"]:focus,
+.lenies-dashboard input[type="number"]:focus {
+  outline: none;
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 0 1px var(--neon-cyan), 0 0 12px rgba(34, 211, 238, 0.35);
+}
+
+.lenies-dashboard .canvas-frame {
+  position: relative;
+  border: 1px solid var(--neon-cyan);
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.15) inset,
+    0 0 24px rgba(34, 211, 238, 0.18);
+}
+
+.lenies-dashboard .canvas-frame::before,
+.lenies-dashboard .canvas-frame::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--neon-cyan);
+}
+.lenies-dashboard .canvas-frame::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+.lenies-dashboard .canvas-frame::after  { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+
 /* This file is for your main application CSS */
