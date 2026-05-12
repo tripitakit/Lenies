@@ -44,6 +44,13 @@ defmodule LeniesWeb.DashboardLive do
     {Enum.take(all, n), length(all)}
   end
 
+  @species_palette ~w(
+    #22d3ee #a78bfa #34d399 #fb7185 #fbbf24
+    #60a5fa #e879f9 #a3e635 #fb923c #38bdf8
+  )
+
+  defp species_color(idx), do: Enum.at(@species_palette, rem(idx, length(@species_palette)))
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -153,9 +160,16 @@ defmodule LeniesWeb.DashboardLive do
                   </div>
                 </div>
               </div>
-              <% pops = Enum.map(@history, & &1.population) %>
-              <% pop_max = Enum.max([1 | pops]) %>
-              <% n_points = max(1, length(pops)) %>
+              <% tracked = Enum.with_index(@species) %>
+              <% n_points = max(1, length(@history)) %>
+              <% species_pops =
+                for entry <- @history,
+                    do: Map.get(entry, :species, %{}) %>
+              <% species_max =
+                species_pops
+                |> Enum.flat_map(&Map.values/1)
+                |> Enum.max(fn -> 1 end)
+                |> max(1) %>
               <svg
                 viewBox="0 0 300 100"
                 preserveAspectRatio="none"
@@ -163,28 +177,32 @@ defmodule LeniesWeb.DashboardLive do
               >
                 <line x1="0" y1="100" x2="300" y2="100" stroke="#334155" stroke-width="0.5" />
                 <line x1="0" y1="0" x2="300" y2="0" stroke="#334155" stroke-width="0.5" />
-                <polyline
-                  fill="none"
-                  stroke="#22d3ee"
-                  stroke-width="1.2"
-                  points={
-                    @history
-                    |> Enum.with_index()
-                    |> Enum.map(fn {entry, idx} ->
-                      x = idx / n_points * 300
-                      y = 100 - entry.population / pop_max * 95
-                      "#{Float.round(x, 1)},#{Float.round(y, 1)}"
-                    end)
-                    |> Enum.join(" ")
-                  }
-                />
+                <%= for {sp, idx} <- tracked do %>
+                  <polyline
+                    fill="none"
+                    stroke={species_color(idx)}
+                    stroke-width="1"
+                    opacity="0.85"
+                    points={
+                      species_pops
+                      |> Enum.with_index()
+                      |> Enum.map(fn {pops_map, i} ->
+                        pop = Map.get(pops_map, sp.hash, 0)
+                        x = i / n_points * 300
+                        y = 100 - pop / species_max * 95
+                        "#{Float.round(x, 1)},#{Float.round(y, 1)}"
+                      end)
+                      |> Enum.join(" ")
+                    }
+                  />
+                <% end %>
                 <text x="4" y="10" fill="#64748b" font-size="8" font-family="monospace">
-                  max {pop_max}
+                  max {species_max}
                 </text>
                 <text x="4" y="96" fill="#64748b" font-size="8" font-family="monospace">0</text>
               </svg>
               <p class="text-[9px] opacity-50 leading-tight">
-                Linea: popolazione totale (somma di tutte le specie). Per-specie nel pannello sotto.
+                Una linea per ciascuna delle top {length(@species)} specie correnti (top 20/tick salvate in history).
               </p>
             </div>
 
@@ -202,9 +220,14 @@ defmodule LeniesWeb.DashboardLive do
                     </tr>
                   </thead>
                   <tbody>
-                    <%= for sp <- @species do %>
+                    <%= for {sp, idx} <- Enum.with_index(@species) do %>
                       <tr class="hover:bg-cyan-500/10">
-                        <td class="py-0.5">
+                        <td class="py-0.5 flex items-center gap-1.5">
+                          <span
+                            class="inline-block w-2 h-2 shrink-0"
+                            style={"background:#{species_color(idx)}"}
+                          >
+                          </span>
                           <.link
                             navigate={~p"/species/#{sp.hash}"}
                             class="text-cyan-400 hover:text-cyan-200 hover:underline"

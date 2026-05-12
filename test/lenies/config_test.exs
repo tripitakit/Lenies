@@ -12,7 +12,7 @@ defmodule Lenies.ConfigTest do
   end
 
   test "radiation_per_tick/0 returns configured value" do
-    assert Config.radiation_per_tick() == 100
+    assert Config.radiation_per_tick() == 1000
   end
 
   test "population_cap/0 returns configured value" do

@@ -162,6 +162,7 @@ defmodule LeniesWeb.DashboardLiveTest do
   end
 
   test "Tuning slider changes Application config in place", %{conn: conn} do
+    original = Application.get_env(:lenies, :radiation_per_tick)
     Application.put_env(:lenies, :radiation_per_tick, 100)
     {:ok, view, _html} = live(conn, "/")
 
@@ -171,7 +172,7 @@ defmodule LeniesWeb.DashboardLiveTest do
 
     assert Application.get_env(:lenies, :radiation_per_tick) == 250
 
-    Application.put_env(:lenies, :radiation_per_tick, 100)
+    Application.put_env(:lenies, :radiation_per_tick, original)
   end
 
   test "Save snapshot button triggers Snapshot.save_to_disk", %{conn: conn} do

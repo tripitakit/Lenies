@@ -12,6 +12,7 @@ defmodule Lenies.Telemetry do
 
   @name __MODULE__
   @default_max_entries 10_000
+  @species_per_snapshot 20
 
   # ----- Public API -----
 
@@ -49,6 +50,7 @@ defmodule Lenies.Telemetry do
       total_resource: stats.total_resource,
       total_carcass: stats.total_carcass,
       cells: stats.cells,
+      species: species_snapshot(),
       timestamp_ms: System.system_time(:millisecond)
     }
 
@@ -64,6 +66,14 @@ defmodule Lenies.Telemetry do
   end
 
   def handle_info(_msg, state), do: {:noreply, state}
+
+  # Snapshot of populations for the top-K species at this tick.
+  # Bounded to @species_per_snapshot to keep history entries small.
+  defp species_snapshot do
+    Lenies.Species.aggregate()
+    |> Enum.take(@species_per_snapshot)
+    |> Map.new(fn s -> {s.hash, s.population} end)
+  end
 
   defp enforce_ring_buffer(state) do
     current_size = :ets.info(:history, :size)
