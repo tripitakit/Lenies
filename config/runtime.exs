@@ -23,6 +23,8 @@ config :lenies,
   population_warning_threshold: 0.8,
   tick_interval_ms: 100,
   radiation_per_tick: 100,
+  initial_resource_per_cell: 30,
+  initial_radiation_ticks: 50,
   radiation_uniform_ratio: 0.7,
   hotspot_count: 8,
   cell_resource_cap: 100,
@@ -50,6 +52,8 @@ config :lenies,
 # Application.put_env inside their own setup block.
 if config_env() == :test do
   config :lenies, carcass_decay: 0
+  config :lenies, initial_resource_per_cell: 0
+  config :lenies, initial_radiation_ticks: 0
 end
 
 if System.get_env("PHX_SERVER") do

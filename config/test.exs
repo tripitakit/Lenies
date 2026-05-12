@@ -21,7 +21,6 @@ config :phoenix_live_view,
 # Tests start World, LenieSupervisor, and Telemetry manually as needed.
 config :lenies, auto_start_simulation: false
 
-# Disable carcass decay in tests so tick_now can be used as a sync barrier
-# without interfering with carcass assertions. Tests that need explicit decay
-# behaviour set carcass_decay via Application.put_env in their own setup.
-config :lenies, carcass_decay: 0
+# Note: simulation-specific test overrides (carcass_decay: 0, initial_resource_per_cell: 0,
+# initial_radiation_ticks: 0) are set in config/runtime.exs inside `if config_env() == :test`
+# because runtime.exs runs AFTER config/*.exs and would otherwise overwrite them.

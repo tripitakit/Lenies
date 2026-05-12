@@ -199,21 +199,27 @@ defmodule LeniesWeb.DashboardLive do
         <div class="tuning-panel">
           <h3>Tuning Live</h3>
           <%= for p <- tunable_params() do %>
-            <form phx-change="tune_param" class="tuning-row">
-              <label>
-                <span>{p.label}</span>
-                <input
-                  type="range"
-                  name="value"
-                  min={p.min}
-                  max={p.max}
-                  step={p.step}
-                  value={Application.get_env(:lenies, p.key, p.min)}
-                />
-                <span class="tuning-current">{Application.get_env(:lenies, p.key, p.min)}</span>
-              </label>
-              <input type="hidden" name="key" value={Atom.to_string(p.key)} />
-            </form>
+            <div id={"tune-#{p.key}"} phx-update="ignore" class="tuning-row">
+              <form phx-change="tune_param">
+                <label>
+                  <span>{p.label}</span>
+                  <input
+                    type="range"
+                    name="value"
+                    min={p.min}
+                    max={p.max}
+                    step={p.step}
+                    value={Application.get_env(:lenies, p.key, p.min)}
+                    oninput={"document.getElementById('val-" <> Atom.to_string(p.key) <> "').textContent = this.value"}
+                    phx-debounce="100"
+                  />
+                  <span id={"val-#{p.key}"} class="tuning-current">
+                    {Application.get_env(:lenies, p.key, p.min)}
+                  </span>
+                </label>
+                <input type="hidden" name="key" value={Atom.to_string(p.key)} />
+              </form>
+            </div>
           <% end %>
         </div>
       </div>

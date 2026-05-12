@@ -87,6 +87,7 @@ defmodule Lenies.World do
       paused?: false
     }
 
+    state = prewarm_radiation(state)
     state = maybe_schedule_tick(state)
     {:ok, state}
   end
@@ -116,6 +117,7 @@ defmodule Lenies.World do
     init_cells(state.grid)
     hotspots = Hotspots.initial(state.grid, Config.hotspot_count())
     new_state = %{state | hotspots: hotspots, tick_count: 0, tick_ref: nil}
+    new_state = prewarm_radiation(new_state)
     new_state = maybe_schedule_tick(new_state)
 
     Phoenix.PubSub.broadcast(
@@ -207,11 +209,27 @@ defmodule Lenies.World do
   # ----- internals -----
 
   defp init_cells({w, h}) do
+    initial_resource = Application.get_env(:lenies, :initial_resource_per_cell, 30)
+
     for x <- 0..(w - 1), y <- 0..(h - 1) do
-      :ets.insert(:cells, {{x, y}, Cell.new()})
+      :ets.insert(:cells, {{x, y}, %Cell{resource: initial_resource}})
     end
 
     :ok
+  end
+
+  defp prewarm_radiation(state) do
+    n = Application.get_env(:lenies, :initial_radiation_ticks, 50)
+
+    if n > 0 do
+      Enum.reduce(1..n, state, fn _i, acc ->
+        apply_radiation(acc)
+        hotspots = Hotspots.drift(acc.hotspots, acc.grid)
+        %{acc | hotspots: hotspots}
+      end)
+    else
+      state
+    end
   end
 
   defp do_tick(state) do
