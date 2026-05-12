@@ -13,6 +13,30 @@ defmodule LeniesWeb.DashboardLive do
 
   alias LeniesWeb.GridRenderer
 
+  @tunable_params [
+    %{key: :radiation_per_tick, label: "Radiation per tick", min: 0, max: 1000, step: 10},
+    %{
+      key: :copy_substitution_rate,
+      label: "Copy substitution rate",
+      min: 0.0,
+      max: 0.1,
+      step: 0.001
+    },
+    %{key: :copy_insert_rate, label: "Copy insert rate", min: 0.0, max: 0.05, step: 0.0005},
+    %{key: :copy_delete_rate, label: "Copy delete rate", min: 0.0, max: 0.05, step: 0.0005},
+    %{
+      key: :background_mutation_interval_ticks,
+      label: "BG mutation interval (ticks, 0=off)",
+      min: 0,
+      max: 10000,
+      step: 100
+    },
+    %{key: :attack_damage, label: "Attack damage", min: 0, max: 50, step: 1},
+    %{key: :eat_amount, label: "Eat amount", min: 1, max: 1000, step: 10}
+  ]
+
+  defp tunable_params, do: @tunable_params
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -158,6 +182,27 @@ defmodule LeniesWeb.DashboardLive do
             <button type="submit">Spawn</button>
           </form>
         </div>
+
+        <div class="tuning-panel">
+          <h3>Tuning Live</h3>
+          <%= for p <- tunable_params() do %>
+            <form phx-change="tune_param" class="tuning-row">
+              <label>
+                <span>{p.label}</span>
+                <input
+                  type="range"
+                  name="value"
+                  min={p.min}
+                  max={p.max}
+                  step={p.step}
+                  value={Application.get_env(:lenies, p.key, p.min)}
+                />
+                <span class="tuning-current">{Application.get_env(:lenies, p.key, p.min)}</span>
+              </label>
+              <input type="hidden" name="key" value={Atom.to_string(p.key)} />
+            </form>
+          <% end %>
+        </div>
       </div>
     </div>
     """
@@ -213,6 +258,13 @@ defmodule LeniesWeb.DashboardLive do
     {:noreply, socket}
   end
 
+  def handle_event("tune_param", %{"key" => key_str, "value" => value_str}, socket) do
+    key = String.to_existing_atom(key_str)
+    value = parse_tune_value(value_str)
+    Application.put_env(:lenies, key, value)
+    {:noreply, socket}
+  end
+
   def handle_event("toggle_pause", _, socket) do
     if socket.assigns.paused? do
       :ok = Lenies.World.resume()
@@ -220,6 +272,19 @@ defmodule LeniesWeb.DashboardLive do
     else
       :ok = Lenies.World.pause()
       {:noreply, assign(socket, :paused?, true)}
+    end
+  end
+
+  defp parse_tune_value(s) do
+    case Float.parse(s) do
+      {f, ""} ->
+        if f == trunc(f), do: trunc(f), else: f
+
+      _ ->
+        case Integer.parse(s) do
+          {i, ""} -> i
+          _ -> s
+        end
     end
   end
 

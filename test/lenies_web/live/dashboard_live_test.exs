@@ -160,4 +160,15 @@ defmodule LeniesWeb.DashboardLiveTest do
     pop_after = :ets.info(:lenies, :size) || 0
     assert pop_after >= pop_before + 1
   end
+
+  test "Tuning slider changes Application config in place", %{conn: conn} do
+    Application.put_env(:lenies, :radiation_per_tick, 100)
+    {:ok, view, _html} = live(conn, "/")
+
+    render_hook(view, "tune_param", %{"key" => "radiation_per_tick", "value" => "250"})
+
+    assert Application.get_env(:lenies, :radiation_per_tick) == 250
+
+    Application.put_env(:lenies, :radiation_per_tick, 100)
+  end
 end
