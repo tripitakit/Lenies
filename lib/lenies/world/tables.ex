@@ -27,7 +27,11 @@ defmodule Lenies.World.Tables do
 
   def delete_all do
     for t <- @tables do
-      if :ets.whereis(t) != :undefined, do: :ets.delete(t)
+      try do
+        :ets.delete(t)
+      rescue
+        ArgumentError -> :ok
+      end
     end
 
     :ok
@@ -35,7 +39,11 @@ defmodule Lenies.World.Tables do
 
   def clear_all do
     for t <- @tables do
-      if :ets.whereis(t) != :undefined, do: :ets.delete_all_objects(t)
+      try do
+        :ets.delete_all_objects(t)
+      rescue
+        ArgumentError -> :ok
+      end
     end
 
     :ok
