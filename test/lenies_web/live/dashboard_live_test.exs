@@ -181,9 +181,7 @@ defmodule LeniesWeb.DashboardLiveTest do
     base = "/tmp/lenies-ui-snapshot-test"
     File.rm_rf!(base)
 
-    view
-    |> form("form[phx-submit='save_snapshot']", %{path: base})
-    |> render_submit()
+    render_hook(view, "snapshot_action", %{"path" => base, "action" => "save"})
 
     assert File.exists?(Path.join(base, "cells.tab"))
     File.rm_rf!(base)

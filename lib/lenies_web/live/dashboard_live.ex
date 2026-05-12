@@ -183,15 +183,13 @@ defmodule LeniesWeb.DashboardLive do
             <button type="submit">Spawn</button>
           </form>
 
-          <form phx-submit="save_snapshot" class="snapshot-form">
+          <form phx-submit="snapshot_action" class="snapshot-form">
             <h3>Snapshot</h3>
             <label>
               Path: <input type="text" name="path" value="/tmp/lenies-snapshot" />
             </label>
-            <button type="submit">Save</button>
-            <button type="button" phx-click="restore_snapshot" phx-value-path="/tmp/lenies-snapshot">
-              Restore
-            </button>
+            <button type="submit" name="action" value="save">Save</button>
+            <button type="submit" name="action" value="restore">Restore</button>
           </form>
           <%= if @snapshot_status do %>
             <p class="snapshot-status">{@snapshot_status}</p>
@@ -290,7 +288,7 @@ defmodule LeniesWeb.DashboardLive do
     end
   end
 
-  def handle_event("save_snapshot", %{"path" => path}, socket) do
+  def handle_event("snapshot_action", %{"action" => "save", "path" => path}, socket) do
     status =
       case Lenies.Snapshot.save_to_disk(path) do
         :ok -> "Saved to #{path}"
@@ -300,7 +298,7 @@ defmodule LeniesWeb.DashboardLive do
     {:noreply, assign(socket, :snapshot_status, status)}
   end
 
-  def handle_event("restore_snapshot", %{"path" => path}, socket) do
+  def handle_event("snapshot_action", %{"action" => "restore", "path" => path}, socket) do
     status =
       case Lenies.Snapshot.restore_from_disk(path) do
         :ok -> "Restored from #{path}"
