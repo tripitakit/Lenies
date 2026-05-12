@@ -25,8 +25,9 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/lenies"
 import topbar from "../vendor/topbar"
 import GridCanvas from "./hooks/grid_canvas"
+import ActionFeedback from "./hooks/action_feedback"
 
-const Hooks = {GridCanvas, ...colocatedHooks}
+const Hooks = {GridCanvas, ActionFeedback, ...colocatedHooks}
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {

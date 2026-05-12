@@ -56,6 +56,16 @@ defmodule LeniesWeb.DashboardLive do
           <span class="opacity-70">
             SPECIE <span class="text-violet-300">{length(@species)}</span>
           </span>
+          <button
+            id="audio-toggle"
+            phx-update="ignore"
+            type="button"
+            title="Toggle audio feedback"
+            onclick="(function(b){var m=window.LeniesAudio&&window.LeniesAudio.isMuted();if(m){window.LeniesAudio.unmute();b.textContent='♪ AUDIO';b.dataset.muted='';}else{window.LeniesAudio&&window.LeniesAudio.mute();b.textContent='∅ MUTE';b.dataset.muted='1';}})(this)"
+            class="text-[10px] px-2 py-1 border border-cyan-500/40 hover:border-cyan-300 hover:text-cyan-200"
+          >
+            ♪ AUDIO
+          </button>
         </div>
       </header>
 

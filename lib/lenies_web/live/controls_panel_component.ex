@@ -133,6 +133,9 @@ defmodule LeniesWeb.ControlsPanelComponent do
               class="w-16 text-xs"
             />
             <button
+              id="spawn-btn"
+              phx-hook="ActionFeedback"
+              data-fx="success"
               type="submit"
               class="ml-auto text-xs px-3 py-1 border border-cyan-500/60 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/50"
             >
@@ -158,6 +161,9 @@ defmodule LeniesWeb.ControlsPanelComponent do
           </label>
           <div class="flex gap-1">
             <button
+              id="snapshot-save-btn"
+              phx-hook="ActionFeedback"
+              data-fx="success"
               type="submit"
               name="action"
               value="save"
@@ -166,6 +172,9 @@ defmodule LeniesWeb.ControlsPanelComponent do
               Save
             </button>
             <button
+              id="snapshot-restore-btn"
+              phx-hook="ActionFeedback"
+              data-fx="info"
               type="submit"
               name="action"
               value="restore"

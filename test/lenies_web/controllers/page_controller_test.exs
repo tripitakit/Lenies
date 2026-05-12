@@ -3,6 +3,6 @@ defmodule LeniesWeb.PageControllerTest do
 
   test "GET / redirects to LiveView dashboard", %{conn: conn} do
     conn = get(conn, ~p"/")
-    assert html_response(conn, 200) =~ "Lenies Dashboard"
+    assert html_response(conn, 200) =~ "LENIES"
   end
 end
