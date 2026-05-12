@@ -171,4 +171,21 @@ defmodule LeniesWeb.DashboardLiveTest do
 
     Application.put_env(:lenies, :radiation_per_tick, 100)
   end
+
+  test "Save snapshot button triggers Snapshot.save_to_disk", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/")
+
+    [{key, cell}] = :ets.lookup(:cells, {2, 2})
+    :ets.insert(:cells, {key, %{cell | resource: 42}})
+
+    base = "/tmp/lenies-ui-snapshot-test"
+    File.rm_rf!(base)
+
+    view
+    |> form("form[phx-submit='save_snapshot']", %{path: base})
+    |> render_submit()
+
+    assert File.exists?(Path.join(base, "cells.tab"))
+    File.rm_rf!(base)
+  end
 end

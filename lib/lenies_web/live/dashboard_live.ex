@@ -56,6 +56,7 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:throttle_counter, 0)
       |> assign(:history, [])
       |> assign(:species, Lenies.Species.top_n(10))
+      |> assign(:snapshot_status, nil)
 
     {:ok, socket}
   end
@@ -181,6 +182,20 @@ defmodule LeniesWeb.DashboardLive do
             </label>
             <button type="submit">Spawn</button>
           </form>
+
+          <form phx-submit="save_snapshot" class="snapshot-form">
+            <h3>Snapshot</h3>
+            <label>
+              Path: <input type="text" name="path" value="/tmp/lenies-snapshot" />
+            </label>
+            <button type="submit">Save</button>
+            <button type="button" phx-click="restore_snapshot" phx-value-path="/tmp/lenies-snapshot">
+              Restore
+            </button>
+          </form>
+          <%= if @snapshot_status do %>
+            <p class="snapshot-status">{@snapshot_status}</p>
+          <% end %>
         </div>
 
         <div class="tuning-panel">
@@ -273,6 +288,27 @@ defmodule LeniesWeb.DashboardLive do
       :ok = Lenies.World.pause()
       {:noreply, assign(socket, :paused?, true)}
     end
+  end
+
+  def handle_event("save_snapshot", %{"path" => path}, socket) do
+    status =
+      case Lenies.Snapshot.save_to_disk(path) do
+        :ok -> "Saved to #{path}"
+        {:error, reason} -> "Save failed: #{inspect(reason)}"
+      end
+
+    {:noreply, assign(socket, :snapshot_status, status)}
+  end
+
+  def handle_event("restore_snapshot", %{"path" => path}, socket) do
+    status =
+      case Lenies.Snapshot.restore_from_disk(path) do
+        :ok -> "Restored from #{path}"
+        {:error, :missing_file} -> "Missing snapshot files at #{path}"
+        {:error, reason} -> "Restore failed: #{inspect(reason)}"
+      end
+
+    {:noreply, assign(socket, :snapshot_status, status)}
   end
 
   defp parse_tune_value(s) do

@@ -17,6 +17,7 @@ defmodule Lenies.SnapshotTest do
         _ ->
           :ok
       end
+
       Tables.delete_all()
       File.rm_rf!("/tmp/lenies-snapshot-test")
     end)
