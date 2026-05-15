@@ -191,4 +191,62 @@ defmodule LeniesWeb.DashboardLiveTest do
     assert File.exists?(Path.join(base, "cells.tab"))
     File.rm_rf!(base)
   end
+
+  describe "species inspector panel" do
+    test "panel hidden by default", %{conn: conn} do
+      {:ok, _view, html} = live(conn, "/")
+      refute html =~ ~s(id="species-inspector")
+    end
+
+    test "clicking a species row opens the inspector for that hash", %{conn: conn} do
+      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-X", lineage: {nil, 0}}})
+      :ets.insert(:lenies, {"L2", %{id: "L2", codeome_hash: "HASH-X", lineage: {nil, 1}}})
+
+      {:ok, view, _} = live(conn, "/")
+
+      html =
+        view
+        |> element("tr[phx-click='select_species'][phx-value-hash='HASH-X']")
+        |> render_click()
+
+      assert html =~ ~s(id="species-inspector")
+      assert html =~ "HASH-X"
+    end
+
+    test "clicking the same row again closes the inspector", %{conn: conn} do
+      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-Y", lineage: {nil, 0}}})
+
+      {:ok, view, _} = live(conn, "/")
+
+      view
+      |> element("tr[phx-click='select_species'][phx-value-hash='HASH-Y']")
+      |> render_click()
+
+      html =
+        view
+        |> element("tr[phx-click='select_species'][phx-value-hash='HASH-Y']")
+        |> render_click()
+
+      refute html =~ ~s(id="species-inspector")
+    end
+
+    test "clicking another row swaps the inspected species", %{conn: conn} do
+      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-A", lineage: {nil, 0}}})
+      :ets.insert(:lenies, {"L2", %{id: "L2", codeome_hash: "HASH-B", lineage: {nil, 0}}})
+
+      {:ok, view, _} = live(conn, "/")
+
+      view
+      |> element("tr[phx-click='select_species'][phx-value-hash='HASH-A']")
+      |> render_click()
+
+      html =
+        view
+        |> element("tr[phx-click='select_species'][phx-value-hash='HASH-B']")
+        |> render_click()
+
+      assert html =~ ~s(id="species-inspector")
+      assert html =~ "HASH-B"
+    end
+  end
 end

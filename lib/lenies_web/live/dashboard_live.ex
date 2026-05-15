@@ -35,6 +35,8 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:history, [])
       |> assign(:species, species)
       |> assign(:species_total, species_total)
+      |> assign(:selected_hash, nil)
+      |> assign(:selected_species_record, nil)
 
     {:ok, socket}
   end
@@ -42,6 +44,33 @@ defmodule LeniesWeb.DashboardLive do
   defp top_species(n) do
     all = Lenies.Species.aggregate()
     {Enum.take(all, n), length(all)}
+  end
+
+  defp find_selected_record(nil, _species), do: nil
+
+  defp find_selected_record(hash, species) do
+    case Enum.find(species, &(&1.hash == hash)) do
+      %{} = found ->
+        found
+
+      nil ->
+        case Lenies.Species.for_hash(hash) do
+          [] ->
+            %{hash: hash, population: 0, avg_generation: 0.0}
+
+          records ->
+            gens =
+              records
+              |> Enum.map(fn {_id, snap} -> snap.lineage |> elem(1) end)
+
+            avg =
+              if Enum.empty?(gens),
+                do: 0.0,
+                else: Enum.sum(gens) / length(gens) * 1.0
+
+            %{hash: hash, population: length(records), avg_generation: avg}
+        end
+    end
   end
 
   @impl true
@@ -129,7 +158,7 @@ defmodule LeniesWeb.DashboardLive do
             </div>
           </div>
 
-          <div class="flex-1 grid grid-rows-2 gap-3 min-h-0">
+          <div class="flex-1 grid grid-rows-2 gap-3 min-h-0 min-w-0">
             <div class="panel p-3 flex flex-col gap-2 min-h-0">
               <h2 class="text-xs">▮ Telemetria — popolazione totale nel tempo</h2>
               <% latest = List.last(@history) || %{population: 0, total_resource: 0, total_carcass: 0} %>
@@ -213,19 +242,23 @@ defmodule LeniesWeb.DashboardLive do
                   </thead>
                   <tbody>
                     <%= for sp <- @species do %>
-                      <tr class="hover:bg-cyan-500/10">
+                      <tr
+                        class={[
+                          "hover:bg-cyan-500/10 cursor-pointer",
+                          @selected_hash == sp.hash && "bg-cyan-500/20 ring-1 ring-cyan-400"
+                        ]}
+                        phx-click="select_species"
+                        phx-value-hash={sp.hash}
+                      >
                         <td class="py-0.5 flex items-center gap-1.5">
                           <span
                             class="inline-block w-2 h-2 shrink-0"
                             style={"background:#{Lenies.SpeciesColor.hex(sp.hash)}"}
                           >
                           </span>
-                          <.link
-                            navigate={~p"/species/#{sp.hash}"}
-                            class="text-cyan-400 hover:text-cyan-200 hover:underline"
-                          >
+                          <span class="text-cyan-400">
                             {String.slice(sp.hash, 0..7)}
-                          </.link>
+                          </span>
                         </td>
                         <td class="text-right">{sp.population}</td>
                         <td class="text-right">{Float.round(sp.avg_generation, 2)}</td>
@@ -236,6 +269,15 @@ defmodule LeniesWeb.DashboardLive do
               </div>
             </div>
           </div>
+
+          <%= if @selected_hash do %>
+            <.live_component
+              module={LeniesWeb.SpeciesInspectorComponent}
+              id="species-inspector"
+              selected_hash={@selected_hash}
+              species_record={@selected_species_record}
+            />
+          <% end %>
         </div>
 
         <.live_component module={LeniesWeb.ControlsPanelComponent} id="controls" />
@@ -245,6 +287,20 @@ defmodule LeniesWeb.DashboardLive do
   end
 
   @impl true
+  def handle_event("select_species", %{"hash" => hash}, socket) do
+    new_hash =
+      if socket.assigns.selected_hash == hash do
+        nil
+      else
+        hash
+      end
+
+    {:noreply,
+     socket
+     |> assign(:selected_hash, new_hash)
+     |> assign(:selected_species_record, find_selected_record(new_hash, socket.assigns.species))}
+  end
+
   def handle_event("toggle_layer", %{"layer" => layer}, socket) do
     layer_atom = String.to_existing_atom(layer)
     new_visible = Map.update!(socket.assigns.layers_visible, layer_atom, &(!&1))
@@ -280,6 +336,9 @@ defmodule LeniesWeb.DashboardLive do
         |> assign(:history, Lenies.Telemetry.history(:last_n, 100))
         |> assign(:species, species)
         |> assign(:species_total, species_total)
+        |> assign(:selected_species_record,
+          find_selected_record(socket.assigns.selected_hash, species)
+        )
 
       payload = GridRenderer.encode_payload(socket.assigns.grid)
       {:noreply, push_event(socket, "render_frame", payload)}
