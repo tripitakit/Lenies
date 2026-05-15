@@ -21,7 +21,10 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
      socket
      |> assign(:codeome_lines, [])
      |> assign(:fetch_status, :ok)
-     |> assign(:cached_codeome_hash, nil)}
+     |> assign(:cached_codeome_hash, nil)
+     |> assign(:edit_mode, false)
+     |> assign(:buffer, [])
+     |> assign(:dirty, false)}
   end
 
   @impl true
@@ -37,12 +40,37 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
        |> assign(assigns)
        |> assign(:codeome_lines, lines)
        |> assign(:fetch_status, status)
-       |> assign(:cached_codeome_hash, hash)}
+       |> assign(:cached_codeome_hash, hash)
+       |> assign(:edit_mode, false)
+       |> assign(:buffer, [])
+       |> assign(:dirty, false)
+       |> notify_parent_dirty(false)}
     end
   end
 
   def update(assigns, socket) do
     {:ok, assign(socket, assigns)}
+  end
+
+  @impl true
+  def handle_event("enter_edit", _params, socket) do
+    buffer = Enum.map(socket.assigns.codeome_lines, & &1.opcode)
+
+    {:noreply,
+     socket
+     |> assign(:edit_mode, true)
+     |> assign(:buffer, buffer)
+     |> assign(:dirty, false)
+     |> notify_parent_dirty(false)}
+  end
+
+  def handle_event("cancel_edit", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:edit_mode, false)
+     |> assign(:buffer, [])
+     |> assign(:dirty, false)
+     |> notify_parent_dirty(false)}
   end
 
   @impl true
@@ -77,6 +105,32 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
         </button>
       </header>
 
+      <div class="flex items-center gap-2 text-[10px]">
+        <%= if @edit_mode do %>
+          <button
+            type="button"
+            phx-click="cancel_edit"
+            phx-target={@myself}
+            class="px-2 py-0.5 border border-slate-500 hover:bg-slate-700"
+          >
+            Cancel
+          </button>
+        <% else %>
+          <button
+            type="button"
+            phx-click="enter_edit"
+            phx-target={@myself}
+            class="px-2 py-0.5 border border-cyan-500/60 text-cyan-200 hover:bg-cyan-900/40"
+          >
+            Edit
+          </button>
+        <% end %>
+
+        <%= if @dirty do %>
+          <span class="text-amber-300 text-[10px]">●dirty</span>
+        <% end %>
+      </div>
+
       <div class="grid grid-cols-3 gap-2 text-[11px]">
         <div class="border border-cyan-500/30 px-2 py-1">
           <div class="opacity-60">pop.</div>
@@ -106,15 +160,28 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
 
       <div class="flex-1 min-h-0 overflow-auto">
         <div class="codeome-blocks">
-          <%= for line <- @codeome_lines do %>
-            <div class={"codeome-block op op-" <> Atom.to_string(Disassembler.opcode_class(line.opcode))}>
-              <span class="codeome-block-idx">
-                {String.pad_leading(Integer.to_string(line.index), 3, "0")}
-              </span>
-              <span class="codeome-block-name">
-                {Atom.to_string(line.opcode) |> String.upcase()}
-              </span>
-            </div>
+          <%= if @edit_mode do %>
+            <%= for {opcode, idx} <- Enum.with_index(@buffer) do %>
+              <div class={"codeome-block op op-" <> Atom.to_string(Disassembler.opcode_class(opcode))}>
+                <span class="codeome-block-idx">
+                  {String.pad_leading(Integer.to_string(idx), 3, "0")}
+                </span>
+                <span class="codeome-block-name">
+                  {Atom.to_string(opcode) |> String.upcase()}
+                </span>
+              </div>
+            <% end %>
+          <% else %>
+            <%= for line <- @codeome_lines do %>
+              <div class={"codeome-block op op-" <> Atom.to_string(Disassembler.opcode_class(line.opcode))}>
+                <span class="codeome-block-idx">
+                  {String.pad_leading(Integer.to_string(line.index), 3, "0")}
+                </span>
+                <span class="codeome-block-name">
+                  {Atom.to_string(line.opcode) |> String.upcase()}
+                </span>
+              </div>
+            <% end %>
           <% end %>
         </div>
       </div>
@@ -160,5 +227,14 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
     catch
       :exit, _ -> nil
     end
+  end
+
+  # Notify the parent LiveView about dirty-state changes so it can decorate
+  # interactive elements (e.g. species table rows) with a confirm prompt.
+  # The parent is wired up in Task 7; until then this is a no-op for the
+  # parent (the DashboardLive simply ignores unknown :inspector_dirty info).
+  defp notify_parent_dirty(socket, dirty) do
+    send(self(), {:inspector_dirty, dirty})
+    socket
   end
 end

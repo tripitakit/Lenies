@@ -150,4 +150,25 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       assert html =~ ~s(class="codeome-block-name")
     end
   end
+
+  describe "edit mode toggle" do
+    test "Edit button visible in read mode" do
+      html = render_component(SpeciesInspectorComponent, base_assigns())
+      assert html =~ ~s(phx-click="enter_edit")
+      refute html =~ ~s(phx-click="cancel_edit")
+    end
+
+    test "the toolbar in read mode has the Edit button but not Cancel" do
+      html = render_component(SpeciesInspectorComponent, base_assigns())
+      assert html =~ "Edit"
+      refute html =~ ~s(>Cancel<)
+    end
+
+    test "renders without crashing when buffer is empty and no codeome is cached" do
+      # The component must tolerate the initial mount state where no buffer
+      # has been populated yet (read mode default).
+      html = render_component(SpeciesInspectorComponent, base_assigns())
+      refute html =~ "Cancel"
+    end
+  end
 end
