@@ -4,17 +4,34 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
   import Phoenix.LiveViewTest
 
   alias LeniesWeb.SpeciesInspectorComponent
-  alias Lenies.World.Tables
 
   setup do
-    Tables.create_all()
-
     case Process.whereis(Lenies.Registry) do
       nil -> {:ok, _} = Registry.start_link(keys: :unique, name: Lenies.Registry)
       _ -> :ok
     end
 
-    on_exit(fn -> Tables.delete_all() end)
+    case Process.whereis(Lenies.World) do
+      nil -> {:ok, _} = Lenies.World.start_link(tick_interval_ms: 0)
+      _ -> :ok
+    end
+
+    on_exit(fn ->
+      case Process.whereis(Lenies.World) do
+        pid when is_pid(pid) ->
+          try do
+            GenServer.stop(pid)
+          catch
+            :exit, _ -> :ok
+          end
+
+        _ ->
+          :ok
+      end
+
+      Lenies.World.Tables.delete_all()
+    end)
+
     :ok
   end
 
