@@ -100,4 +100,40 @@ defmodule Lenies.WorldTest do
     [{_, after_cell}] = :ets.lookup(:cells, {5, 5})
     assert after_cell.carcass == 0
   end
+
+  describe "eat clears carcass_hue when carcass goes to 0" do
+    setup do
+      {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+      :ok
+    end
+
+    test "eating the last carcass unit clears carcass_hue" do
+      Application.put_env(:lenies, :eat_amount, 50)
+
+      on_exit(fn -> Application.put_env(:lenies, :eat_amount, 50) end)
+
+      # Plant a cell with carcass = 5 (less than eat_amount) and a hue marker
+      :ets.insert(:cells, {{1, 1}, %Lenies.World.Cell{carcass: 5, carcass_hue: 137}})
+
+      {:ok, {:ate, _}} = World.action({:eat, {1, 1}})
+
+      [{_, cell}] = :ets.lookup(:cells, {1, 1})
+      assert cell.carcass == 0
+      assert cell.carcass_hue == 0
+    end
+
+    test "eating but leaving some carcass preserves carcass_hue" do
+      Application.put_env(:lenies, :eat_amount, 3)
+
+      on_exit(fn -> Application.put_env(:lenies, :eat_amount, 50) end)
+
+      :ets.insert(:cells, {{2, 2}, %Lenies.World.Cell{carcass: 20, carcass_hue: 99}})
+
+      {:ok, {:ate, _}} = World.action({:eat, {2, 2}})
+
+      [{_, cell}] = :ets.lookup(:cells, {2, 2})
+      assert cell.carcass > 0
+      assert cell.carcass_hue == 99
+    end
+  end
 end

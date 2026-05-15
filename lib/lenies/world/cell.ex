@@ -5,8 +5,8 @@ defmodule Lenies.World.Cell do
   - `lenie_id`: id del Lenie residente, o `nil` se vuota.
   - `resource`: biomassa accumulata dalla radiazione (clamp a `cell_resource_cap`).
   - `carcass`: energia da carcasse (decay-tasso `carcass_decay`/tick).
-  - `carcass_hue`: hue byte (1..255) della specie del Lenie morto in cella,
-    oppure 0 se nessuna carcassa colorata. Azzerato quando `carcass` torna a 0.
+  - `carcass_hue`: hue byte 0..255 (0 = no species color; 1..255 = hue byte
+    of the dead Lenie). Azzerato quando `carcass` torna a 0.
   """
 
   alias Lenies.Config

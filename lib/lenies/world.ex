@@ -640,10 +640,14 @@ defmodule Lenies.World do
 
     total_energy = carcass_energy + resource_energy
 
+    new_carcass = cell.carcass - carcass_taken
+    new_carcass_hue = if new_carcass == 0, do: 0, else: cell.carcass_hue
+
     new_cell = %{
       cell
-      | carcass: cell.carcass - carcass_taken,
-        resource: cell.resource - resource_taken
+      | carcass: new_carcass,
+        resource: cell.resource - resource_taken,
+        carcass_hue: new_carcass_hue
     }
 
     {total_energy, new_cell}
