@@ -46,18 +46,26 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
     )
   end
 
-  # Helper to build an assigns map that includes the component's internal
-  # state. Used because Phoenix.LiveViewTest.render_component/2 does not
-  # call mount/update; it renders directly from assigns.
-  defp build_socket(base, opts) do
-    Map.merge(base, Map.new(opts))
-    |> Map.put_new(:codeome_lines, [])
-    |> Map.put_new(:fetch_status, :ok)
-    |> Map.put_new(:cached_codeome_hash, base[:selected_hash])
-    |> Map.put_new(:edit_mode, false)
-    |> Map.put_new(:buffer, [])
-    |> Map.put_new(:dirty, false)
-    |> Map.put_new(:picker_open, nil)
+  # Render the component with a seeded assigns map directly via the
+  # component's render/1 function, bypassing render_component/2 (which
+  # would invoke mount/1 and update/2 and reset the edit-mode state).
+  # Used by edit-mode tests that need to inject pre-edit state without
+  # going through enter_edit.
+  defp render_seeded(base, opts) do
+    assigns =
+      Map.merge(base, Map.new(opts))
+      |> Map.put_new(:codeome_lines, [])
+      |> Map.put_new(:fetch_status, :ok)
+      |> Map.put_new(:cached_codeome_hash, base[:selected_hash])
+      |> Map.put_new(:edit_mode, false)
+      |> Map.put_new(:buffer, [])
+      |> Map.put_new(:dirty, false)
+      |> Map.put_new(:picker_open, nil)
+      # render/1 also needs the LiveComponent target marker
+      |> Map.put_new(:myself, %Phoenix.LiveComponent.CID{cid: 0})
+
+    SpeciesInspectorComponent.render(assigns)
+    |> Phoenix.LiveViewTest.rendered_to_string()
   end
 
   describe "header" do
@@ -213,16 +221,14 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
 
   describe "edit operations" do
     test "in edit mode, each block has delete and replace buttons" do
-      socket = build_socket(base_assigns(), edit_mode: true, buffer: [:push0, :push1, :store])
-      html = Phoenix.LiveViewTest.render_component(SpeciesInspectorComponent, socket)
+      html = render_seeded(base_assigns(), edit_mode: true, buffer: [:push0, :push1, :store])
 
       assert html =~ ~s(phx-click="edit_delete")
       assert html =~ ~s(phx-click="open_picker")
     end
 
     test "in edit mode, insert affordances exist between blocks" do
-      socket = build_socket(base_assigns(), edit_mode: true, buffer: [:push0, :push1, :store])
-      html = Phoenix.LiveViewTest.render_component(SpeciesInspectorComponent, socket)
+      html = render_seeded(base_assigns(), edit_mode: true, buffer: [:push0, :push1, :store])
       assert html =~ "codeome-insert-slot"
     end
 
@@ -234,20 +240,18 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
     end
 
     test "the picker is hidden by default in edit mode" do
-      socket = build_socket(base_assigns(), edit_mode: true, buffer: [:push0, :push1, :store])
-      html = Phoenix.LiveViewTest.render_component(SpeciesInspectorComponent, socket)
+      html = render_seeded(base_assigns(), edit_mode: true, buffer: [:push0, :push1, :store])
       refute html =~ "codeome-picker"
     end
 
     test "the picker is rendered when picker_open is set" do
-      socket =
-        build_socket(base_assigns(),
+      html =
+        render_seeded(base_assigns(),
           edit_mode: true,
           buffer: [:push0, :push1, :store],
           picker_open: %{index: 1, mode: :insert}
         )
 
-      html = Phoenix.LiveViewTest.render_component(SpeciesInspectorComponent, socket)
       assert html =~ "codeome-picker"
       assert html =~ "stack"
       assert html =~ ~s(phx-click="picker_choose")

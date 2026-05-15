@@ -31,11 +31,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
   @impl true
   def update(%{selected_hash: hash} = assigns, socket)
       when is_binary(hash) and hash != "" do
-    already_cached =
-      hash == socket.assigns.cached_codeome_hash or
-        Map.get(assigns, :cached_codeome_hash) == hash
-
-    if already_cached do
+    if hash == socket.assigns.cached_codeome_hash do
       {:ok, assign(socket, assigns)}
     else
       {status, lines} = fetch_codeome(hash)
