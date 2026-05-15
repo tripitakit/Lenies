@@ -204,6 +204,30 @@ defmodule LeniesWeb.DashboardLiveTest do
       html2 = render(view)
       refute html2 =~ ~s(data-inspector-dirty="true")
     end
+
+    test "closing the inspector (deselect to nil) resets :inspector_dirty", %{conn: conn} do
+      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-Z", lineage: {nil, 0}}})
+
+      {:ok, view, _} = live(conn, "/")
+
+      # Simulate component setting dirty state.
+      send(view.pid, {:inspector_dirty, true})
+      html1 = render(view)
+      assert html1 =~ ~s(data-inspector-dirty="true")
+
+      # Open the inspector for HASH-Z (clicking the row).
+      view
+      |> element("tr[phx-click='select_species'][phx-value-hash='HASH-Z']")
+      |> render_click()
+
+      # Now click the SAME row again to close (toggle off → nil).
+      html2 =
+        view
+        |> element("tr[phx-click='select_species'][phx-value-hash='HASH-Z']")
+        |> render_click()
+
+      refute html2 =~ ~s(data-inspector-dirty="true")
+    end
   end
 
   describe "species inspector panel" do

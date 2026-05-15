@@ -303,10 +303,17 @@ defmodule LeniesWeb.DashboardLive do
         hash
       end
 
-    {:noreply,
-     socket
-     |> assign(:selected_hash, new_hash)
-     |> assign(:selected_species_record, find_selected_record(new_hash, socket.assigns.species))}
+    socket =
+      socket
+      |> assign(:selected_hash, new_hash)
+      |> assign(:selected_species_record, find_selected_record(new_hash, socket.assigns.species))
+
+    socket =
+      if is_nil(new_hash),
+        do: assign(socket, :inspector_dirty, false),
+        else: socket
+
+    {:noreply, socket}
   end
 
   def handle_event("toggle_layer", %{"layer" => layer}, socket) do
