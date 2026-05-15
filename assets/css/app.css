@@ -449,4 +449,26 @@
   background: rgba(34, 211, 238, 0.15);
 }
 
+.lenies-dashboard .codeome-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  opacity: 0.4;
+  cursor: grab;
+  user-select: none;
+}
+
+.lenies-dashboard .codeome-drag-handle:hover {
+  opacity: 1;
+  color: #22d3ee;
+}
+
+.lenies-dashboard .codeome-block-ghost {
+  opacity: 0.35;
+  background: rgba(34, 211, 238, 0.2) !important;
+}
+
 /* This file is for your main application CSS */

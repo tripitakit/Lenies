@@ -129,6 +129,11 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
     {:noreply, assign(socket, :show_spawn_form, false)}
   end
 
+  def handle_event("edit_reorder", %{"from" => from, "to" => to}, socket) do
+    new_buffer = LeniesWeb.CodeomeBuffer.move(socket.assigns.buffer, from, to)
+    apply_buffer_change(socket, new_buffer)
+  end
+
   def handle_event("submit_spawn", %{"count" => count_str, "energy" => energy_str}, socket) do
     count = parse_clamped(count_str, 1, 50, 1)
     energy = parse_clamped(energy_str, 1, 1_000_000, 10_000)
@@ -344,7 +349,11 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
       <% end %>
 
       <div class="flex-1 min-h-0 overflow-auto">
-        <div class="codeome-blocks">
+        <div
+          class="codeome-blocks"
+          id={"codeome-blocks-#{@selected_hash}"}
+          phx-hook={@edit_mode && "CodeomeSortable"}
+        >
           <%= if @edit_mode do %>
             <%= for {opcode, idx} <- Enum.with_index(@buffer) do %>
               <div class="codeome-insert-slot">
@@ -360,7 +369,11 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
                 </button>
               </div>
 
-              <div class={"codeome-block codeome-block-editable op op-" <> Atom.to_string(Disassembler.opcode_class(opcode))}>
+              <div
+                class={"codeome-block codeome-block-editable op op-" <> Atom.to_string(Disassembler.opcode_class(opcode))}
+                data-idx={idx}
+              >
+                <span class="codeome-drag-handle" title="Drag to reorder">≡</span>
                 <span class="codeome-block-idx">
                   {String.pad_leading(Integer.to_string(idx), 3, "0")}
                 </span>

@@ -358,6 +358,39 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
     end
   end
 
+  describe "edit_reorder handler" do
+    test "moves a buffer item via CodeomeBuffer.move/3" do
+      buffer = [:a, :b, :c, :d]
+
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          flash: %{},
+          myself: %Phoenix.LiveComponent.CID{cid: 1},
+          buffer: buffer,
+          codeome_lines: [
+            %{index: 0, opcode: :a, is_current: false},
+            %{index: 1, opcode: :b, is_current: false},
+            %{index: 2, opcode: :c, is_current: false},
+            %{index: 3, opcode: :d, is_current: false}
+          ],
+          dirty: false,
+          validation: {:ok, %{len: 4, non_nops: 4}}
+        }
+      }
+
+      {:noreply, new_socket} =
+        SpeciesInspectorComponent.handle_event(
+          "edit_reorder",
+          %{"from" => 0, "to" => 2},
+          socket
+        )
+
+      assert new_socket.assigns.buffer == [:b, :c, :a, :d]
+      assert new_socket.assigns.dirty == true
+    end
+  end
+
   describe "submit_spawn integration" do
     alias Lenies.World.Tables
 

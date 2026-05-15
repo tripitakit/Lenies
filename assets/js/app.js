@@ -26,8 +26,9 @@ import {hooks as colocatedHooks} from "phoenix-colocated/lenies"
 import topbar from "../vendor/topbar"
 import GridCanvas from "./hooks/grid_canvas"
 import ActionFeedback from "./hooks/action_feedback"
+import CodeomeSortable from "./hooks/codeome_sortable"
 
-const Hooks = {GridCanvas, ActionFeedback, ...colocatedHooks}
+const Hooks = {GridCanvas, ActionFeedback, CodeomeSortable, ...colocatedHooks}
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
