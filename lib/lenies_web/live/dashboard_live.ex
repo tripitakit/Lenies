@@ -44,13 +44,6 @@ defmodule LeniesWeb.DashboardLive do
     {Enum.take(all, n), length(all)}
   end
 
-  @species_palette ~w(
-    #22d3ee #a78bfa #34d399 #fb7185 #fbbf24
-    #60a5fa #e879f9 #a3e635 #fb923c #38bdf8
-  )
-
-  defp species_color(idx), do: Enum.at(@species_palette, rem(idx, length(@species_palette)))
-
   @impl true
   def render(assigns) do
     ~H"""
@@ -160,7 +153,6 @@ defmodule LeniesWeb.DashboardLive do
                   </div>
                 </div>
               </div>
-              <% tracked = Enum.with_index(@species) %>
               <% n_points = max(1, length(@history)) %>
               <% species_pops =
                 for entry <- @history,
@@ -177,10 +169,10 @@ defmodule LeniesWeb.DashboardLive do
               >
                 <line x1="0" y1="100" x2="300" y2="100" stroke="#334155" stroke-width="0.5" />
                 <line x1="0" y1="0" x2="300" y2="0" stroke="#334155" stroke-width="0.5" />
-                <%= for {sp, idx} <- tracked do %>
+                <%= for sp <- @species do %>
                   <polyline
                     fill="none"
-                    stroke={species_color(idx)}
+                    stroke={Lenies.SpeciesColor.hex(sp.hash)}
                     stroke-width="1"
                     opacity="0.85"
                     points={
@@ -220,12 +212,12 @@ defmodule LeniesWeb.DashboardLive do
                     </tr>
                   </thead>
                   <tbody>
-                    <%= for {sp, idx} <- Enum.with_index(@species) do %>
+                    <%= for sp <- @species do %>
                       <tr class="hover:bg-cyan-500/10">
                         <td class="py-0.5 flex items-center gap-1.5">
                           <span
                             class="inline-block w-2 h-2 shrink-0"
-                            style={"background:#{species_color(idx)}"}
+                            style={"background:#{Lenies.SpeciesColor.hex(sp.hash)}"}
                           >
                           </span>
                           <.link
