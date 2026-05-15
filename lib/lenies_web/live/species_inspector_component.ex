@@ -111,7 +111,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
               <span class="opacity-50 tabular-nums w-8 shrink-0">
                 {String.pad_leading(Integer.to_string(line.index), 3, " ")}
               </span>
-              <span class={"op-" <> Atom.to_string(Disassembler.opcode_class(line.opcode))}>
+              <span class={"op op-" <> Atom.to_string(Disassembler.opcode_class(line.opcode))}>
                 {Atom.to_string(line.opcode)}
               </span>
             </div>
@@ -132,7 +132,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
   # Pull a representative Lenie process for the species and disassemble its
   # codeome. Returns {:ok, lines} | {:no_sample, []} | {:error, []}.
   defp fetch_codeome(hash) do
-    case safe_for_hash(hash) do
+    case Lenies.Species.for_hash(hash) do
       [] ->
         {:no_sample, []}
 
@@ -151,14 +151,6 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
           _ ->
             {:no_sample, []}
         end
-    end
-  end
-
-  defp safe_for_hash(hash) do
-    if :ets.info(:lenies) != :undefined do
-      Lenies.Species.for_hash(hash)
-    else
-      []
     end
   end
 
