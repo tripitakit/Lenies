@@ -61,6 +61,7 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       |> Map.put_new(:buffer, [])
       |> Map.put_new(:dirty, false)
       |> Map.put_new(:picker_open, nil)
+      |> Map.put_new(:validation, {:ok, %{len: 0, non_nops: 0}})
       # render/1 also needs the LiveComponent target marker
       |> Map.put_new(:myself, %Phoenix.LiveComponent.CID{cid: 0})
 
@@ -255,6 +256,55 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       assert html =~ "codeome-picker"
       assert html =~ "stack"
       assert html =~ ~s(phx-click="picker_choose")
+    end
+  end
+
+  describe "live validation" do
+    setup do
+      original_bounds = Application.get_env(:lenies, :codeome_length_bounds)
+      original_min_non_nops = Application.get_env(:lenies, :min_viable_codeome_opcodes)
+
+      Application.put_env(:lenies, :codeome_length_bounds, {5, 500})
+      Application.put_env(:lenies, :min_viable_codeome_opcodes, 3)
+
+      on_exit(fn ->
+        if original_bounds do
+          Application.put_env(:lenies, :codeome_length_bounds, original_bounds)
+        else
+          Application.delete_env(:lenies, :codeome_length_bounds)
+        end
+
+        if original_min_non_nops do
+          Application.put_env(:lenies, :min_viable_codeome_opcodes, original_min_non_nops)
+        else
+          Application.delete_env(:lenies, :min_viable_codeome_opcodes)
+        end
+      end)
+
+      :ok
+    end
+
+    test "ok validation status in edit mode for a long-enough buffer" do
+      html =
+        render_seeded(base_assigns(),
+          edit_mode: true,
+          buffer: [:push0, :push0, :push0, :push0, :push0, :store],
+          validation: {:ok, %{len: 6, non_nops: 6}}
+        )
+
+      assert html =~ "valid"
+      assert html =~ "6 ops"
+    end
+
+    test "error validation status when too short" do
+      html =
+        render_seeded(base_assigns(),
+          edit_mode: true,
+          buffer: [:push0],
+          validation: {:error, [{:too_short, [min: 5, got: 1]}]}
+        )
+
+      assert html =~ "too short"
     end
   end
 end

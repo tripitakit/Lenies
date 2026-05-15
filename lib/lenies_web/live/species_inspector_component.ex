@@ -25,7 +25,8 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
      |> assign(:edit_mode, false)
      |> assign(:buffer, [])
      |> assign(:dirty, false)
-     |> assign(:picker_open, nil)}
+     |> assign(:picker_open, nil)
+     |> assign(:validation, {:ok, %{len: 0, non_nops: 0}})}
   end
 
   @impl true
@@ -46,6 +47,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
        |> assign(:buffer, [])
        |> assign(:dirty, false)
        |> assign(:picker_open, nil)
+       |> assign(:validation, {:ok, %{len: 0, non_nops: 0}})
        |> notify_parent_dirty(false)}
     end
   end
@@ -62,7 +64,8 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
      socket
      |> assign(:edit_mode, true)
      |> assign(:buffer, buffer)
-     |> assign(:dirty, false)}
+     |> assign(:dirty, false)
+     |> assign(:validation, LeniesWeb.CodeomeBuffer.validate(buffer))}
   end
 
   def handle_event("cancel_edit", _params, socket) do
@@ -72,6 +75,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
      |> assign(:buffer, [])
      |> assign(:dirty, false)
      |> assign(:picker_open, nil)
+     |> assign(:validation, {:ok, %{len: 0, non_nops: 0}})
      |> notify_parent_dirty(false)}
   end
 
@@ -171,6 +175,23 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
           <span class="text-amber-300 text-[10px]">●dirty</span>
         <% end %>
       </div>
+
+      <%= if @edit_mode do %>
+        <div class="text-[10px]">
+          <%= case @validation do %>
+            <% {:ok, info} -> %>
+              <span class="text-emerald-300">✓ valid</span>
+              <span class="opacity-60">
+                ({info.len} ops, {info.non_nops} non-nop)
+              </span>
+            <% {:error, errors} -> %>
+              <span class="text-amber-300">⚠</span>
+              <span class="opacity-80">
+                {Enum.map_join(errors, ", ", &format_validation_error/1)}
+              </span>
+          <% end %>
+        </div>
+      <% end %>
 
       <div class="grid grid-cols-3 gap-2 text-[11px]">
         <div class="border border-cyan-500/30 px-2 py-1">
@@ -355,6 +376,15 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
     end
   end
 
+  defp format_validation_error({:too_short, opts}),
+    do: "too short (#{opts[:got]} ops, min #{opts[:min]})"
+
+  defp format_validation_error({:too_long, opts}),
+    do: "too long (#{opts[:got]} ops, max #{opts[:max]})"
+
+  defp format_validation_error({:insufficient_non_nops, opts}),
+    do: "too few non-nops (#{opts[:got]}, min #{opts[:min]})"
+
   # Notify the parent LiveView about dirty-state changes so it can decorate
   # interactive elements (e.g. species table rows) with a confirm prompt.
   # The parent is wired up in Task 7; until then this is a no-op for the
@@ -373,6 +403,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
      socket
      |> assign(:buffer, new_buffer)
      |> assign(:dirty, dirty)
+     |> assign(:validation, LeniesWeb.CodeomeBuffer.validate(new_buffer))
      |> notify_parent_dirty(dirty)}
   end
 
