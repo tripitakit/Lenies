@@ -37,6 +37,7 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:species_total, species_total)
       |> assign(:selected_hash, nil)
       |> assign(:selected_species_record, nil)
+      |> assign(:inspector_dirty, false)
 
     {:ok, socket}
   end
@@ -76,7 +77,10 @@ defmodule LeniesWeb.DashboardLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="lenies-dashboard h-screen w-screen overflow-hidden flex flex-col p-3 gap-3">
+    <div
+      class="lenies-dashboard h-screen w-screen overflow-hidden flex flex-col p-3 gap-3"
+      data-inspector-dirty={if @inspector_dirty, do: "true", else: nil}
+    >
       <header class="flex items-center justify-between px-2 shrink-0">
         <h1 class="text-lg font-bold tracking-widest">⬡ LENIES · SANDBOX</h1>
         <div class="flex items-center gap-4 text-xs">
@@ -247,6 +251,10 @@ defmodule LeniesWeb.DashboardLive do
                           "hover:bg-cyan-500/10 cursor-pointer",
                           @selected_hash == sp.hash && "bg-cyan-500/20 ring-1 ring-cyan-400"
                         ]}
+                        id={"species-row-#{sp.hash}"}
+                        phx-hook="ConfirmAction"
+                        data-confirm="Discard codeome edits?"
+                        data-confirm-when="[data-inspector-dirty='true']"
                         phx-click="select_species"
                         phx-value-hash={sp.hash}
                       >
@@ -350,6 +358,10 @@ defmodule LeniesWeb.DashboardLive do
   def handle_info({:sterilized, _ts}, socket) do
     payload = GridRenderer.encode_payload(socket.assigns.grid)
     {:noreply, push_event(socket, "render_frame", payload)}
+  end
+
+  def handle_info({:inspector_dirty, dirty}, socket) do
+    {:noreply, assign(socket, :inspector_dirty, dirty)}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}

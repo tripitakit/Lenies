@@ -179,6 +179,10 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
           ↗
         </.link>
         <button
+          id={"inspector-close-#{@selected_hash}"}
+          phx-hook="ConfirmAction"
+          data-confirm="Discard codeome edits?"
+          data-confirm-when="[data-inspector-dirty='true']"
           phx-click="select_species"
           phx-value-hash={@selected_hash}
           class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
@@ -190,7 +194,11 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
       <div class="flex items-center gap-2 text-[10px]">
         <%= if @edit_mode do %>
           <button
+            id={"inspector-cancel-#{@selected_hash}"}
             type="button"
+            phx-hook="ConfirmAction"
+            data-confirm="Discard codeome edits?"
+            data-confirm-when="[data-inspector-dirty='true']"
             phx-click="cancel_edit"
             phx-target={@myself}
             class="px-2 py-0.5 border border-slate-500 hover:bg-slate-700"

@@ -192,6 +192,20 @@ defmodule LeniesWeb.DashboardLiveTest do
     File.rm_rf!(base)
   end
 
+  describe "inspector dirty notification" do
+    test "dashboard receives :inspector_dirty info messages and reflects them in the DOM", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/")
+
+      send(view.pid, {:inspector_dirty, true})
+      html = render(view)
+      assert html =~ ~s(data-inspector-dirty="true")
+
+      send(view.pid, {:inspector_dirty, false})
+      html2 = render(view)
+      refute html2 =~ ~s(data-inspector-dirty="true")
+    end
+  end
+
   describe "species inspector panel" do
     test "panel hidden by default", %{conn: conn} do
       {:ok, _view, html} = live(conn, "/")
