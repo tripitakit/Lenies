@@ -31,4 +31,33 @@ defmodule Lenies.World.CellTest do
     cell = Cell.decay_carcass(cell, 0.99)
     assert cell.carcass == 0
   end
+
+  describe "carcass_hue field" do
+    test "defaults to 0" do
+      assert %Cell{}.carcass_hue == 0
+    end
+  end
+
+  describe "decay_carcass/2" do
+    test "leaves carcass_hue alone while carcass > 0 after decay" do
+      cell = %Cell{carcass: 100, carcass_hue: 42}
+      decayed = Cell.decay_carcass(cell, 0.10)
+      assert decayed.carcass == 90
+      assert decayed.carcass_hue == 42
+    end
+
+    test "clears carcass_hue when carcass reaches 0" do
+      cell = %Cell{carcass: 3, carcass_hue: 42}
+      decayed = Cell.decay_carcass(cell, 1.0)
+      assert decayed.carcass == 0
+      assert decayed.carcass_hue == 0
+    end
+
+    test "clears carcass_hue when carcass was already 0" do
+      cell = %Cell{carcass: 0, carcass_hue: 42}
+      decayed = Cell.decay_carcass(cell, 0.10)
+      assert decayed.carcass == 0
+      assert decayed.carcass_hue == 0
+    end
+  end
 end
