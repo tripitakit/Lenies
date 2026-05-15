@@ -139,11 +139,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
         dirs = [:n, :s, :e, :w]
 
         Enum.each(1..count, fn _ ->
-          try do
-            Lenies.World.spawn_lenie(codeome, energy: energy * 1.0, dir: Enum.random(dirs))
-          catch
-            :exit, _ -> :ok
-          end
+          Lenies.World.spawn_lenie(codeome, energy: energy * 1.0, dir: Enum.random(dirs))
         end)
 
         {:noreply, assign(socket, :show_spawn_form, false)}
