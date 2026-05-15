@@ -113,10 +113,20 @@ defmodule Lenies.WorldReplicationTest do
   describe "divide" do
     setup do
       # Ensure copy errors are off
+      original_min_viable = Application.get_env(:lenies, :min_viable_codeome_opcodes)
+
       Application.put_env(:lenies, :copy_substitution_rate, 0.0)
       Application.put_env(:lenies, :copy_insert_rate, 0.0)
       Application.put_env(:lenies, :copy_delete_rate, 0.0)
       Application.put_env(:lenies, :min_viable_codeome_opcodes, 3)
+
+      on_exit(fn ->
+        if original_min_viable do
+          Application.put_env(:lenies, :min_viable_codeome_opcodes, original_min_viable)
+        else
+          Application.delete_env(:lenies, :min_viable_codeome_opcodes)
+        end
+      end)
 
       # Parent already has an allocated slot — populate it with a real Codeome
       {:ok, {:allocated, slot_id, _}} = World.action({:allocate, 5, {10, 10}, :e, "P1"})
