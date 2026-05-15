@@ -62,8 +62,8 @@ defmodule LeniesWeb.CodeomeBuffer do
           {:ok, %{len: non_neg_integer(), non_nops: non_neg_integer()}}
           | {:error, [validation_error()]}
   def validate(buffer) do
-    {min_len, max_len} = Application.get_env(:lenies, :codeome_length_bounds, {5, 500})
-    min_non_nops = Application.get_env(:lenies, :min_viable_codeome_opcodes, 10)
+    {min_len, max_len} = Lenies.Config.codeome_length_bounds()
+    min_non_nops = Lenies.Config.min_viable_codeome_opcodes()
     len = length(buffer)
     non_nops = Enum.count(buffer, &(&1 not in [:nop_0, :nop_1]))
 
