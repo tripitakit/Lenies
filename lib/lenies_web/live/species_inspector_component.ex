@@ -60,8 +60,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
      socket
      |> assign(:edit_mode, true)
      |> assign(:buffer, buffer)
-     |> assign(:dirty, false)
-     |> notify_parent_dirty(false)}
+     |> assign(:dirty, false)}
   end
 
   def handle_event("cancel_edit", _params, socket) do

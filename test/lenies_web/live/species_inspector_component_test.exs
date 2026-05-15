@@ -170,5 +170,30 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       html = render_component(SpeciesInspectorComponent, base_assigns())
       refute html =~ "Cancel"
     end
+
+    test "enter_edit populates the buffer with the current codeome opcodes" do
+      codeome_lines = [
+        %{index: 0, opcode: :nop_1, is_current: false},
+        %{index: 1, opcode: :push0, is_current: false}
+      ]
+
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          flash: %{},
+          codeome_lines: codeome_lines,
+          edit_mode: false,
+          buffer: [],
+          dirty: false
+        }
+      }
+
+      {:noreply, new_socket} =
+        SpeciesInspectorComponent.handle_event("enter_edit", %{}, socket)
+
+      assert new_socket.assigns.edit_mode == true
+      assert new_socket.assigns.buffer == [:nop_1, :push0]
+      assert new_socket.assigns.dirty == false
+    end
   end
 end
