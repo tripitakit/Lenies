@@ -62,6 +62,7 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       |> Map.put_new(:dirty, false)
       |> Map.put_new(:picker_open, nil)
       |> Map.put_new(:validation, {:ok, %{len: 0, non_nops: 0}})
+      |> Map.put_new(:show_spawn_form, false)
       # render/1 also needs the LiveComponent target marker
       |> Map.put_new(:myself, %Phoenix.LiveComponent.CID{cid: 0})
 
@@ -305,6 +306,138 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
         )
 
       assert html =~ "too short"
+    end
+  end
+
+  describe "spawn flow" do
+    test "Spawn button visible only in edit mode" do
+      html_read = render_component(SpeciesInspectorComponent, base_assigns())
+      refute html_read =~ ~s(>Spawn<)
+
+      html_edit =
+        render_seeded(base_assigns(),
+          edit_mode: true,
+          buffer: [:push0, :push0, :push0, :push0, :push0, :store],
+          validation: {:ok, %{len: 6, non_nops: 6}}
+        )
+
+      assert html_edit =~ ~s(>Spawn<)
+    end
+
+    test "Spawn button is disabled when validation fails" do
+      html =
+        render_seeded(base_assigns(),
+          edit_mode: true,
+          buffer: [:push0],
+          validation: {:error, [{:too_short, [min: 5, got: 1]}]}
+        )
+
+      assert html =~ ~r/<button[^>]*disabled[^>]*>\s*Spawn\s*</
+    end
+
+    test "Spawn form hidden by default and opens when show_spawn_form is true" do
+      html_closed =
+        render_seeded(base_assigns(),
+          edit_mode: true,
+          buffer: [:push0, :push0, :push0, :push0, :push0, :store],
+          validation: {:ok, %{len: 6, non_nops: 6}}
+        )
+
+      refute html_closed =~ ~s(name="count")
+
+      html_open =
+        render_seeded(base_assigns(),
+          edit_mode: true,
+          buffer: [:push0, :push0, :push0, :push0, :push0, :store],
+          validation: {:ok, %{len: 6, non_nops: 6}},
+          show_spawn_form: true
+        )
+
+      assert html_open =~ ~s(name="count")
+      assert html_open =~ ~s(name="energy")
+    end
+  end
+
+  describe "submit_spawn integration" do
+    alias Lenies.World.Tables
+
+    setup do
+      # Tables may already exist if the outer setup created Lenies.World first.
+      try do
+        Tables.create_all()
+      rescue
+        ArgumentError -> :ok
+      end
+
+      case Process.whereis(Lenies.Registry) do
+        nil -> {:ok, _} = Registry.start_link(keys: :unique, name: Lenies.Registry)
+        _ -> :ok
+      end
+
+      case Process.whereis(Lenies.World) do
+        nil -> {:ok, _} = Lenies.World.start_link(tick_interval_ms: 0)
+        _ -> :ok
+      end
+
+      on_exit(fn ->
+        case Process.whereis(Lenies.World) do
+          pid when is_pid(pid) ->
+            try do
+              GenServer.stop(pid)
+            catch
+              :exit, _ -> :ok
+            end
+
+          _ ->
+            :ok
+        end
+
+        Tables.delete_all()
+      end)
+
+      :ok
+    end
+
+    test "submit_spawn calls Lenies.World.spawn_lenie/2 N times" do
+      buffer = [
+        :nop_1,
+        :get_size,
+        :push0,
+        :store,
+        :push0,
+        :load,
+        :allocate,
+        :push0,
+        :push1,
+        :store,
+        :nop_1,
+        :push0,
+        :load
+      ]
+
+      pop_before = :ets.info(:lenies, :size) || 0
+
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          flash: %{},
+          myself: %Phoenix.LiveComponent.CID{cid: 1},
+          buffer: buffer,
+          validation: {:ok, %{len: length(buffer), non_nops: 10}},
+          show_spawn_form: true,
+          selected_hash: "test-hash"
+        }
+      }
+
+      {:noreply, _} =
+        SpeciesInspectorComponent.handle_event(
+          "submit_spawn",
+          %{"count" => "3", "energy" => "10000"},
+          socket
+        )
+
+      pop_after = :ets.info(:lenies, :size) || 0
+      assert pop_after >= pop_before + 3
     end
   end
 end

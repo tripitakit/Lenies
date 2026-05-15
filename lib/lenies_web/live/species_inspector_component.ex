@@ -26,7 +26,8 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
      |> assign(:buffer, [])
      |> assign(:dirty, false)
      |> assign(:picker_open, nil)
-     |> assign(:validation, {:ok, %{len: 0, non_nops: 0}})}
+     |> assign(:validation, {:ok, %{len: 0, non_nops: 0}})
+     |> assign(:show_spawn_form, false)}
   end
 
   @impl true
@@ -48,6 +49,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
        |> assign(:dirty, false)
        |> assign(:picker_open, nil)
        |> assign(:validation, {:ok, %{len: 0, non_nops: 0}})
+       |> assign(:show_spawn_form, false)
        |> notify_parent_dirty(false)}
     end
   end
@@ -76,6 +78,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
      |> assign(:dirty, false)
      |> assign(:picker_open, nil)
      |> assign(:validation, {:ok, %{len: 0, non_nops: 0}})
+     |> assign(:show_spawn_form, false)
      |> notify_parent_dirty(false)}
   end
 
@@ -114,6 +117,39 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
         |> apply_buffer_change(new_buffer)
 
       _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("open_spawn_form", _params, socket) do
+    {:noreply, assign(socket, :show_spawn_form, true)}
+  end
+
+  def handle_event("cancel_spawn_form", _params, socket) do
+    {:noreply, assign(socket, :show_spawn_form, false)}
+  end
+
+  def handle_event("submit_spawn", %{"count" => count_str, "energy" => energy_str}, socket) do
+    count = parse_clamped(count_str, 1, 50, 1)
+    energy = parse_clamped(energy_str, 1, 1_000_000, 10_000)
+
+    case socket.assigns.validation do
+      {:ok, _} ->
+        codeome = LeniesWeb.CodeomeBuffer.to_codeome(socket.assigns.buffer)
+        dirs = [:n, :s, :e, :w]
+
+        Enum.each(1..count, fn _ ->
+          try do
+            Lenies.World.spawn_lenie(codeome, energy: energy * 1.0, dir: Enum.random(dirs))
+          catch
+            :exit, _ -> :ok
+          end
+        end)
+
+        {:noreply, assign(socket, :show_spawn_form, false)}
+
+      {:error, _} ->
+        # Invalid buffer — do nothing, leave the form open.
         {:noreply, socket}
     end
   end
@@ -174,6 +210,16 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
         <%= if @dirty do %>
           <span class="text-amber-300 text-[10px]">●dirty</span>
         <% end %>
+
+        <%= if @edit_mode do %>
+          <button
+            type="button"
+            phx-click="open_spawn_form"
+            phx-target={@myself}
+            disabled={!match?({:ok, _}, @validation)}
+            class="ml-auto px-2 py-0.5 border border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/40 disabled:opacity-40 disabled:cursor-not-allowed"
+          >Spawn</button>
+        <% end %>
       </div>
 
       <%= if @edit_mode do %>
@@ -191,6 +237,51 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
               </span>
           <% end %>
         </div>
+      <% end %>
+
+      <%= if @edit_mode and @show_spawn_form do %>
+        <form
+          phx-submit="submit_spawn"
+          phx-target={@myself}
+          class="flex flex-col gap-1.5 border border-emerald-500/30 p-2 text-[11px]"
+        >
+          <label class="flex items-center gap-2">
+            <span class="opacity-70 w-14">count</span>
+            <input
+              type="number"
+              name="count"
+              value="1"
+              min="1"
+              max="50"
+              class="w-16 text-xs"
+            />
+          </label>
+          <label class="flex items-center gap-2">
+            <span class="opacity-70 w-14">energy</span>
+            <input
+              type="number"
+              name="energy"
+              value="10000"
+              min="1"
+              max="1000000"
+              class="w-24 text-xs"
+            />
+          </label>
+          <div class="flex gap-1 justify-end">
+            <button
+              type="button"
+              phx-click="cancel_spawn_form"
+              phx-target={@myself}
+              class="px-2 py-0.5 border border-slate-500 hover:bg-slate-700"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="px-2 py-0.5 border border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/40"
+            >Spawn</button>
+          </div>
+        </form>
       <% end %>
 
       <div class="grid grid-cols-3 gap-2 text-[11px]">
@@ -373,6 +464,13 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
       Lenies.Registry.whereis(id)
     catch
       :exit, _ -> nil
+    end
+  end
+
+  defp parse_clamped(s, min, max, fallback) do
+    case Integer.parse(s) do
+      {n, _} -> n |> max(min) |> min(max)
+      :error -> fallback
     end
   end
 
