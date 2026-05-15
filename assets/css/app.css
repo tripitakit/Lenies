@@ -327,4 +327,126 @@
   letter-spacing: 0.05em;
 }
 
+/* ----- Codeome editor (Phase C2) ----- */
+.lenies-dashboard .codeome-block-editable {
+  position: relative;
+  padding-right: 38px;
+}
+
+.lenies-dashboard .codeome-block-actions {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  gap: 2px;
+}
+
+.lenies-dashboard .codeome-block-editable:hover .codeome-block-actions {
+  display: inline-flex;
+}
+
+.lenies-dashboard .codeome-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 10px;
+  line-height: 1;
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  background: rgba(2, 6, 23, 0.7);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.lenies-dashboard .codeome-action-btn:hover {
+  background: rgba(34, 211, 238, 0.2);
+  color: #22d3ee;
+}
+
+.lenies-dashboard .codeome-insert-slot {
+  height: 0;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: visible;
+}
+
+.lenies-dashboard .codeome-insert-btn {
+  display: none;
+  position: relative;
+  width: 16px;
+  height: 16px;
+  border: 1px dashed rgba(34, 211, 238, 0.6);
+  background: #050816;
+  color: #22d3ee;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.lenies-dashboard .codeome-insert-slot:hover .codeome-insert-btn {
+  display: inline-flex;
+}
+
+.lenies-dashboard .codeome-picker {
+  position: absolute;
+  top: 8rem;
+  right: 8px;
+  width: 280px;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: rgba(2, 6, 23, 0.96);
+  border: 1px solid rgba(34, 211, 238, 0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+  padding: 6px;
+  font-size: 10px;
+  z-index: 50;
+}
+
+.lenies-dashboard .codeome-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 4px 6px;
+  border-bottom: 1px solid rgba(34, 211, 238, 0.2);
+  color: #94a3b8;
+}
+
+.lenies-dashboard .codeome-picker-group {
+  padding: 4px 0;
+}
+
+.lenies-dashboard .codeome-picker-group-label {
+  opacity: 0.6;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 2px;
+}
+
+.lenies-dashboard .codeome-picker-group-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px;
+}
+
+.lenies-dashboard .codeome-picker-chip {
+  padding: 2px 4px;
+  border: 1px solid currentColor;
+  background: rgba(2, 6, 23, 0.6);
+  font-family: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  text-align: left;
+}
+
+.lenies-dashboard .codeome-picker-chip:hover {
+  background: rgba(34, 211, 238, 0.15);
+}
+
 /* This file is for your main application CSS */

@@ -24,13 +24,18 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
      |> assign(:cached_codeome_hash, nil)
      |> assign(:edit_mode, false)
      |> assign(:buffer, [])
-     |> assign(:dirty, false)}
+     |> assign(:dirty, false)
+     |> assign(:picker_open, nil)}
   end
 
   @impl true
   def update(%{selected_hash: hash} = assigns, socket)
       when is_binary(hash) and hash != "" do
-    if hash == socket.assigns.cached_codeome_hash do
+    already_cached =
+      hash == socket.assigns.cached_codeome_hash or
+        Map.get(assigns, :cached_codeome_hash) == hash
+
+    if already_cached do
       {:ok, assign(socket, assigns)}
     else
       {status, lines} = fetch_codeome(hash)
@@ -44,6 +49,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
        |> assign(:edit_mode, false)
        |> assign(:buffer, [])
        |> assign(:dirty, false)
+       |> assign(:picker_open, nil)
        |> notify_parent_dirty(false)}
     end
   end
@@ -69,7 +75,47 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
      |> assign(:edit_mode, false)
      |> assign(:buffer, [])
      |> assign(:dirty, false)
+     |> assign(:picker_open, nil)
      |> notify_parent_dirty(false)}
+  end
+
+  def handle_event("edit_delete", %{"index" => index_str}, socket) do
+    index = String.to_integer(index_str)
+    new_buffer = LeniesWeb.CodeomeBuffer.delete(socket.assigns.buffer, index)
+    apply_buffer_change(socket, new_buffer)
+  end
+
+  def handle_event("open_picker", %{"index" => index_str, "mode" => mode_str}, socket) do
+    index = String.to_integer(index_str)
+    mode = String.to_existing_atom(mode_str)
+    {:noreply, assign(socket, :picker_open, %{index: index, mode: mode})}
+  end
+
+  def handle_event("close_picker", _params, socket) do
+    {:noreply, assign(socket, :picker_open, nil)}
+  end
+
+  def handle_event("picker_choose", %{"opcode" => opcode_str}, socket) do
+    opcode = String.to_existing_atom(opcode_str)
+
+    case socket.assigns.picker_open do
+      %{index: index, mode: :insert} ->
+        new_buffer = LeniesWeb.CodeomeBuffer.insert(socket.assigns.buffer, index, opcode)
+
+        socket
+        |> assign(:picker_open, nil)
+        |> apply_buffer_change(new_buffer)
+
+      %{index: index, mode: :replace} ->
+        new_buffer = LeniesWeb.CodeomeBuffer.replace(socket.assigns.buffer, index, opcode)
+
+        socket
+        |> assign(:picker_open, nil)
+        |> apply_buffer_change(new_buffer)
+
+      _ ->
+        {:noreply, socket}
+    end
   end
 
   @impl true
@@ -157,19 +203,104 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
         </p>
       <% end %>
 
+      <%= if @picker_open do %>
+        <div class="codeome-picker">
+          <div class="codeome-picker-header">
+            <span>
+              {if @picker_open.mode == :insert, do: "Insert at", else: "Replace at"} #{@picker_open.index}
+            </span>
+            <button
+              type="button"
+              phx-click="close_picker"
+              phx-target={@myself}
+              class="codeome-action-btn"
+            >
+              ×
+            </button>
+          </div>
+          <%= for {category, ops} <- grouped_opcodes() do %>
+            <div class="codeome-picker-group">
+              <div class="codeome-picker-group-label">{category}</div>
+              <div class="codeome-picker-group-grid">
+                <%= for op <- ops do %>
+                  <button
+                    type="button"
+                    phx-click="picker_choose"
+                    phx-value-opcode={Atom.to_string(op)}
+                    phx-target={@myself}
+                    class={"codeome-picker-chip op op-" <> Atom.to_string(Disassembler.opcode_class(op))}
+                  >
+                    {Atom.to_string(op) |> String.upcase()}
+                  </button>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+
       <div class="flex-1 min-h-0 overflow-auto">
         <div class="codeome-blocks">
           <%= if @edit_mode do %>
             <%= for {opcode, idx} <- Enum.with_index(@buffer) do %>
-              <div class={"codeome-block op op-" <> Atom.to_string(Disassembler.opcode_class(opcode))}>
+              <div class="codeome-insert-slot">
+                <button
+                  type="button"
+                  phx-click="open_picker"
+                  phx-value-index={idx}
+                  phx-value-mode="insert"
+                  phx-target={@myself}
+                  class="codeome-insert-btn"
+                >
+                  +
+                </button>
+              </div>
+
+              <div class={"codeome-block codeome-block-editable op op-" <> Atom.to_string(Disassembler.opcode_class(opcode))}>
                 <span class="codeome-block-idx">
                   {String.pad_leading(Integer.to_string(idx), 3, "0")}
                 </span>
                 <span class="codeome-block-name">
                   {Atom.to_string(opcode) |> String.upcase()}
                 </span>
+                <span class="codeome-block-actions">
+                  <button
+                    type="button"
+                    phx-click="open_picker"
+                    phx-value-index={idx}
+                    phx-value-mode="replace"
+                    phx-target={@myself}
+                    class="codeome-action-btn"
+                    title="Replace"
+                  >
+                    ↺
+                  </button>
+                  <button
+                    type="button"
+                    phx-click="edit_delete"
+                    phx-value-index={idx}
+                    phx-target={@myself}
+                    class="codeome-action-btn"
+                    title="Delete"
+                  >
+                    ⨯
+                  </button>
+                </span>
               </div>
             <% end %>
+
+            <div class="codeome-insert-slot">
+              <button
+                type="button"
+                phx-click="open_picker"
+                phx-value-index={length(@buffer)}
+                phx-value-mode="insert"
+                phx-target={@myself}
+                class="codeome-insert-btn"
+              >
+                +
+              </button>
+            </div>
           <% else %>
             <%= for line <- @codeome_lines do %>
               <div class={"codeome-block op op-" <> Atom.to_string(Disassembler.opcode_class(line.opcode))}>
@@ -235,5 +366,42 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
   defp notify_parent_dirty(socket, dirty) do
     send(self(), {:inspector_dirty, dirty})
     socket
+  end
+
+  # Shared mutation epilogue: compute dirty state and notify the parent.
+  defp apply_buffer_change(socket, new_buffer) do
+    original = Enum.map(socket.assigns.codeome_lines, & &1.opcode)
+    dirty = new_buffer != original
+
+    {:noreply,
+     socket
+     |> assign(:buffer, new_buffer)
+     |> assign(:dirty, dirty)
+     |> notify_parent_dirty(dirty)}
+  end
+
+  # Groups all whitelisted opcodes by Disassembler category, in a stable order.
+  # Used by the picker dropdown to lay out chips per category section.
+  defp grouped_opcodes do
+    order = [
+      :template,
+      :stack,
+      :arith,
+      :control,
+      :sense,
+      :action,
+      :predation,
+      :self_inspect,
+      :replication,
+      :memory
+    ]
+
+    by_class =
+      Lenies.Codeome.Opcodes.all()
+      |> Enum.group_by(&Disassembler.opcode_class/1)
+
+    for cat <- order, ops = by_class[cat], is_list(ops) and ops != [] do
+      {cat, Enum.sort(ops)}
+    end
   end
 end
