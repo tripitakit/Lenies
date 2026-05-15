@@ -27,7 +27,7 @@ defmodule Lenies.WorldCarcassEatTest do
   test "lenie_died accumulates carcass instead of replacing" do
     {:ok, _pid} = World.start_link(tick_interval_ms: 0)
 
-    World.lenie_died("dead1", {3, 3}, 20.0)
+    World.lenie_died("dead1", {3, 3}, 20.0, "test-hash")
     # wait for the async cast to complete
     GenServer.call(Lenies.World, :tick_now)
 
@@ -35,7 +35,7 @@ defmodule Lenies.WorldCarcassEatTest do
     # 20 * 0.5 = 10
     assert cell1.carcass == 10
 
-    World.lenie_died("dead2", {3, 3}, 30.0)
+    World.lenie_died("dead2", {3, 3}, 30.0, "test-hash")
     GenServer.call(Lenies.World, :tick_now)
 
     [{_, cell2}] = :ets.lookup(:cells, {3, 3})

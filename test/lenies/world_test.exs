@@ -101,6 +101,52 @@ defmodule Lenies.WorldTest do
     assert after_cell.carcass == 0
   end
 
+  describe "lenie_died/4 — carcass_hue" do
+    setup do
+      case Process.whereis(Lenies.World) do
+        nil -> {:ok, _} = Lenies.World.start_link(tick_interval_ms: 0)
+        _ -> :ok
+      end
+
+      on_exit(fn ->
+        case Process.whereis(Lenies.World) do
+          pid when is_pid(pid) ->
+            try do
+              GenServer.stop(pid)
+            catch
+              :exit, _ -> :ok
+            end
+
+          _ ->
+            :ok
+        end
+
+        Lenies.World.Tables.delete_all()
+      end)
+
+      :ok
+    end
+
+    test "death stores SpeciesColor.hue_byte(hash) into the cell's carcass_hue" do
+      hash = "test-hash-abc"
+      expected_hue = Lenies.SpeciesColor.hue_byte(hash)
+
+      # Plant a Lenie at (3, 4)
+      :ets.insert(:cells, {{3, 4}, %Lenies.World.Cell{lenie_id: "L1"}})
+      :ets.insert(:lenies, {"L1", %{id: "L1"}})
+
+      Lenies.World.lenie_died("L1", {3, 4}, 200.0, hash)
+
+      # Cast is async; sync via a synchronous call to the same GenServer
+      _ = Lenies.World.snapshot_stats()
+
+      [{_, cell}] = :ets.lookup(:cells, {3, 4})
+      assert cell.lenie_id == nil
+      assert cell.carcass > 0
+      assert cell.carcass_hue == expected_hue
+    end
+  end
+
   describe "eat clears carcass_hue when carcass goes to 0" do
     setup do
       {:ok, _pid} = World.start_link(tick_interval_ms: 0)

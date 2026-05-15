@@ -132,8 +132,8 @@ defmodule Lenies.Lenie do
 
   @impl true
   def terminate(_reason, state) do
-    # Notifica al World la morte: libera cella, eventuale carcassa
-    World.lenie_died(state.id, state.interp.pos, state.interp.energy)
+    hash = Lenies.Codeome.hash(state.codeome)
+    World.lenie_died(state.id, state.interp.pos, state.interp.energy, hash)
     :ok
   end
 

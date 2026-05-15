@@ -50,8 +50,10 @@ defmodule Lenies.World do
   def paused?, do: GenServer.call(@name, :paused?)
 
   @doc "Notifica al World che un Lenie è morto (libera cella, eventuale carcassa)."
-  def lenie_died(id, pos, energy_at_death),
-    do: GenServer.cast(@name, {:lenie_died, id, pos, energy_at_death})
+  def lenie_died(id, pos, energy_at_death, codeome_hash)
+      when is_binary(codeome_hash) do
+    GenServer.cast(@name, {:lenie_died, id, pos, energy_at_death, codeome_hash})
+  end
 
   @doc """
   Spawn a new Lenie with `codeome` on a random free cell.
@@ -185,11 +187,16 @@ defmodule Lenies.World do
   end
 
   @impl true
-  def handle_cast({:lenie_died, id, {x, y}, energy_at_death}, state) do
+  def handle_cast({:lenie_died, id, {x, y}, energy_at_death, codeome_hash}, state) do
     case :ets.lookup(:cells, {x, y}) do
       [{key, cell}] ->
         carcass_value = max(0, trunc(energy_at_death * 0.5))
-        :ets.insert(:cells, {key, %{cell | lenie_id: nil, carcass: cell.carcass + carcass_value}})
+        hue = Lenies.SpeciesColor.hue_byte(codeome_hash)
+
+        :ets.insert(:cells, {
+          key,
+          %{cell | lenie_id: nil, carcass: cell.carcass + carcass_value, carcass_hue: hue}
+        })
 
       _ ->
         :ok
