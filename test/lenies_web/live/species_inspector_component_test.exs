@@ -114,11 +114,40 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
 
       # MinimalReplicator starts with the LOOP_HEAD anchor (four :nop_1)
       assert html =~ "op-template"
-      assert html =~ "nop_1"
+      assert html =~ ~r/nop_1/i
       # And it contains :get_size (self-inspect category)
       assert html =~ "op-self_inspect"
-      assert html =~ "get_size"
+      assert html =~ ~r/get_size/i
       refute html =~ "Nessun Lenie vivo"
+    end
+
+    test "renders codeome lines as block tiles with the codeome-blocks container" do
+      codeome = Lenies.Codeomes.MinimalReplicator.codeome()
+      hash = Lenies.Codeome.hash(codeome)
+
+      {:ok, _pid} =
+        Lenies.Lenie.start_link(
+          id: "TEST-BLOCK-L1",
+          codeome: codeome,
+          energy: 100.0,
+          pos: {0, 0},
+          dir: :n,
+          lineage: {nil, 0}
+        )
+
+      :ets.insert(:lenies, {"TEST-BLOCK-L1", %{id: "TEST-BLOCK-L1", codeome_hash: hash}})
+
+      html =
+        render_component(SpeciesInspectorComponent, %{
+          id: "block-inspector",
+          selected_hash: hash,
+          species_record: %{hash: hash, population: 1, avg_generation: 0.0}
+        })
+
+      assert html =~ ~s(class="codeome-blocks")
+      assert html =~ "codeome-block op op-template"
+      assert html =~ ~s(class="codeome-block-idx")
+      assert html =~ ~s(class="codeome-block-name")
     end
   end
 end

@@ -290,4 +290,41 @@
 .lenies-dashboard .op-memory       { color: #a3e635; }
 .lenies-dashboard .op-unknown      { color: #94a3b8; }
 
+/* ----- Lenies dashboard: codeome block view ----- */
+.lenies-dashboard .codeome-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.lenies-dashboard .codeome-block {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1px 6px;
+  font-family: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  line-height: 1.3;
+  border-left: 3px solid currentColor;
+  background: rgba(15, 23, 42, 0.4);
+  transition: background 80ms ease;
+}
+
+.lenies-dashboard .codeome-block:hover {
+  background: rgba(34, 211, 238, 0.08);
+}
+
+.lenies-dashboard .codeome-block-idx {
+  opacity: 0.4;
+  width: 24px;
+  flex-shrink: 0;
+  text-align: right;
+  color: #94a3b8;
+}
+
+.lenies-dashboard .codeome-block-name {
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
 /* This file is for your main application CSS */

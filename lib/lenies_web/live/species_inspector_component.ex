@@ -105,14 +105,14 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
       <% end %>
 
       <div class="flex-1 min-h-0 overflow-auto">
-        <div class="text-[10px] leading-tight font-mono">
+        <div class="codeome-blocks">
           <%= for line <- @codeome_lines do %>
-            <div class="flex gap-2">
-              <span class="opacity-50 tabular-nums w-8 shrink-0">
-                {String.pad_leading(Integer.to_string(line.index), 3, " ")}
+            <div class={"codeome-block op op-" <> Atom.to_string(Disassembler.opcode_class(line.opcode))}>
+              <span class="codeome-block-idx">
+                {String.pad_leading(Integer.to_string(line.index), 3, "0")}
               </span>
-              <span class={"op op-" <> Atom.to_string(Disassembler.opcode_class(line.opcode))}>
-                {Atom.to_string(line.opcode)}
+              <span class="codeome-block-name">
+                {Atom.to_string(line.opcode) |> String.upcase()}
               </span>
             </div>
           <% end %>
