@@ -277,4 +277,17 @@
 .lenies-dashboard .canvas-frame::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
 .lenies-dashboard .canvas-frame::after  { bottom: -1px; right: -1px; border-left: none; border-top: none; }
 
+/* ----- Lenies dashboard: codeome opcode category colors ----- */
+.lenies-dashboard .op-template     { color: #64748b; }
+.lenies-dashboard .op-stack        { color: #fbbf24; }
+.lenies-dashboard .op-arith        { color: #f97316; }
+.lenies-dashboard .op-control      { color: #a78bfa; }
+.lenies-dashboard .op-sense        { color: #22d3ee; }
+.lenies-dashboard .op-action       { color: #34d399; }
+.lenies-dashboard .op-predation    { color: #f43f5e; }
+.lenies-dashboard .op-self_inspect { color: #38bdf8; }
+.lenies-dashboard .op-replication  { color: #e879f9; }
+.lenies-dashboard .op-memory       { color: #a3e635; }
+.lenies-dashboard .op-unknown      { color: #94a3b8; }
+
 /* This file is for your main application CSS */
