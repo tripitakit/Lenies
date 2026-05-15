@@ -15,12 +15,12 @@ const CodeomeSortable = {
     this.attach();
   },
 
-  updated() {
-    // Re-attach if the underlying list element was replaced.
-    if (!this.sortable || !this.el.isConnected) {
-      this.attach();
-    }
-  },
+  // LiveView morphdom updates the children of the .codeome-blocks element
+  // in place when the buffer changes. SortableJS adapts to the new DOM on
+  // the next drag event by re-reading the element list, so we deliberately
+  // do nothing here. Tearing down and reattaching on every update would
+  // break an in-progress drag.
+  updated() {},
 
   destroyed() {
     if (this.sortable) {
@@ -48,6 +48,10 @@ const CodeomeSortable = {
           typeof evt.newDraggableIndex === "number" &&
           evt.oldDraggableIndex !== evt.newDraggableIndex
         ) {
+          // pushEventTo accepts a DOM element and walks up to the nearest
+          // [data-phx-component] ancestor — here the <aside> root of
+          // SpeciesInspectorComponent — so the event is routed to that
+          // component's handle_event("edit_reorder", ...) clause.
           this.pushEventTo(this.el, "edit_reorder", {
             from: evt.oldDraggableIndex,
             to: evt.newDraggableIndex,
