@@ -1,15 +1,62 @@
-// GridCanvas hook: renders 3 layers (lenies, resource, carcass) on a 2D canvas.
-// Receives base64-encoded binary layers via phx event "render_frame".
+// GridCanvas hook: renders 4 layers (lenies, resource, carcass, carcass_hue)
+// onto the dashboard's 2D canvas.
 //
-// Layer encoding (1 byte per cell, row-major):
-//   - lenies: 1 if cell occupied, else 0
-//   - resource: 0..100
-//   - carcass: 0..50
+// Wire format (per Lenies.SpeciesColor / LeniesWeb.GridRenderer):
+//   - lenies      : 1 byte/cell. 0 = empty, 1..255 = species hue byte
+//   - resource    : 1 byte/cell, 0..100 (clamped)
+//   - carcass     : 1 byte/cell, 0..50 (clamped intensity)
+//   - carcass_hue : 1 byte/cell. 0 = no species color, 1..255 = species hue byte
 //
-// Color composition:
-//   - resource → green channel
-//   - carcass → red channel
-//   - lenies → high-alpha blue overlay
+// Hue byte → degrees: deg = (byte - 1) / 255 * 360. Must match
+// Lenies.SpeciesColor.byte_to_hex/1 (S=0.70, L=0.55).
+//
+// Pixel composition priority per cell:
+//   1. occupied (lenies > 0)  + show_lenies   → HSL species fill, alpha 255
+//   2. carcass > 0           + show_carcass   →
+//        if carcass_hue > 0 → HSL species fill, alpha = carcass * 4
+//        else                → red (255, 60, 60), alpha = carcass * 4
+//   3. resource > 0          + show_resource  → green channel = resource * 2
+//   4. default                                → empty (alpha 192)
+
+const SATURATION = 0.70;
+const LIGHTNESS = 0.55;
+
+function hueDegFromByte(b) {
+  return ((b - 1) / 255) * 360;
+}
+
+// HSL → RGB, returns {r, g, b} as 0..255 ints. Same formula as
+// Lenies.SpeciesColor.hsl_to_rgb/3 in Elixir.
+function hslToRgb(h, s, l) {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const hPrime = h / 60;
+  const x = c * (1 - Math.abs((hPrime % 2) - 1));
+
+  let r1 = 0, g1 = 0, b1 = 0;
+  if (hPrime < 1) { r1 = c; g1 = x; b1 = 0; }
+  else if (hPrime < 2) { r1 = x; g1 = c; b1 = 0; }
+  else if (hPrime < 3) { r1 = 0; g1 = c; b1 = x; }
+  else if (hPrime < 4) { r1 = 0; g1 = x; b1 = c; }
+  else if (hPrime < 5) { r1 = x; g1 = 0; b1 = c; }
+  else { r1 = c; g1 = 0; b1 = x; }
+
+  const m = l - c / 2;
+  return {
+    r: Math.round((r1 + m) * 255),
+    g: Math.round((g1 + m) * 255),
+    b: Math.round((b1 + m) * 255),
+  };
+}
+
+// Precompute a 256-entry RGB lookup so the per-pixel loop is just a table read.
+const HUE_LUT = (() => {
+  const lut = new Array(256);
+  lut[0] = null; // reserved: "no species"
+  for (let b = 1; b < 256; b++) {
+    lut[b] = hslToRgb(hueDegFromByte(b), SATURATION, LIGHTNESS);
+  }
+  return lut;
+})();
 
 const GridCanvas = {
   mounted() {
@@ -18,7 +65,6 @@ const GridCanvas = {
     this.gridW = parseInt(this.canvas.dataset.gridWidth, 10);
     this.gridH = parseInt(this.canvas.dataset.gridHeight, 10);
 
-    // Off-screen buffer at native grid resolution; scaled to canvas size on draw
     this.bufferCanvas = document.createElement("canvas");
     this.bufferCanvas.width = this.gridW;
     this.bufferCanvas.height = this.gridH;
@@ -28,7 +74,6 @@ const GridCanvas = {
       this.renderFrame(payload);
     });
 
-    // Initial clear
     this.ctx.fillStyle = "#000";
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -36,50 +81,58 @@ const GridCanvas = {
       const rect = this.canvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
-
       const cellX = Math.floor((x / this.canvas.width) * this.gridW);
       const cellY = Math.floor((y / this.canvas.height) * this.gridH);
-
       this.pushEvent("cell_clicked", { x: cellX, y: cellY });
     });
   },
 
-  updated() {
-    // Re-read layer visibility from data attributes (handled in renderFrame on next event)
-  },
+  updated() {},
 
   decodeBase64(b64) {
     const binStr = atob(b64);
     const len = binStr.length;
     const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binStr.charCodeAt(i);
-    }
+    for (let i = 0; i < len; i++) bytes[i] = binStr.charCodeAt(i);
     return bytes;
   },
 
-  renderFrame({ lenies, resource, carcass, width, height }) {
+  renderFrame({ lenies, resource, carcass, carcass_hue, width, height }) {
     const lBytes = this.decodeBase64(lenies);
     const rBytes = this.decodeBase64(resource);
     const cBytes = this.decodeBase64(carcass);
+    const hBytes = this.decodeBase64(carcass_hue);
 
     const showLenies = this.canvas.hasAttribute("data-show-lenies");
     const showResource = this.canvas.hasAttribute("data-show-resource");
     const showCarcass = this.canvas.hasAttribute("data-show-carcass");
 
     const imageData = this.bufferCtx.createImageData(width, height);
-    const px = imageData.data; // RGBA, length = w*h*4
+    const px = imageData.data; // RGBA
 
     for (let i = 0; i < width * height; i++) {
-      const lenie = lBytes[i];
+      const speciesByte = lBytes[i];
       const res = rBytes[i];
       const carc = cBytes[i];
+      const carcHueByte = hBytes[i];
 
-      // Scale: resource 0..100 → 0..200 in green; carcass 0..50 → 0..200 in red
-      const g = showResource ? Math.min(255, res * 2) : 0;
-      const r = showCarcass ? Math.min(255, carc * 4) : 0;
-      const b = showLenies && lenie > 0 ? 255 : 0;
-      const a = showLenies && lenie > 0 ? 255 : 192;
+      let r = 0, g = 0, b = 0, a = 192;
+
+      if (showLenies && speciesByte > 0) {
+        const rgb = HUE_LUT[speciesByte];
+        r = rgb.r; g = rgb.g; b = rgb.b;
+        a = 255;
+      } else if (showCarcass && carc > 0) {
+        if (carcHueByte > 0) {
+          const rgb = HUE_LUT[carcHueByte];
+          r = rgb.r; g = rgb.g; b = rgb.b;
+        } else {
+          r = 255; g = 60; b = 60;
+        }
+        a = Math.min(255, carc * 4);
+      } else if (showResource && res > 0) {
+        g = Math.min(255, res * 2);
+      }
 
       const off = i * 4;
       px[off] = r;
