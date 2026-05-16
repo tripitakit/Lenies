@@ -253,9 +253,6 @@ defmodule LeniesWeb.DashboardLive do
                           @selected_hash == sp.hash && "bg-cyan-500/20 ring-1 ring-cyan-400"
                         ]}
                         id={"species-row-#{sp.hash}"}
-                        phx-hook="ConfirmAction"
-                        data-confirm="Discard codeome edits?"
-                        data-confirm-when="[data-inspector-dirty='true']"
                         phx-click="select_species"
                         phx-value-hash={sp.hash}
                       >

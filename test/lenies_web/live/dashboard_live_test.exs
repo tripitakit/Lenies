@@ -346,6 +346,24 @@ defmodule LeniesWeb.DashboardLiveTest do
       # carry the dirty flag the ConfirmAction JS hook keys off of.
       refute html =~ ~s(data-inspector-dirty="true")
     end
+
+    # Regression: clicking a species row used to attach a ConfirmAction JS hook
+    # that fired window.confirm("Discard codeome edits?"). It was redundant
+    # (rows are only easily clickable in view mode, which has no edits) and
+    # could surface even when the dirty flag was stale in the browser.
+    test "species rows have no ConfirmAction hook (the alert was redundant)", %{conn: conn} do
+      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-NA", lineage: {nil, 0}}})
+
+      {:ok, _view, html} = live(conn, "/")
+
+      row_match =
+        Regex.run(~r/<tr[^>]*phx-value-hash="HASH-NA"[^>]*>/, html)
+
+      assert row_match, "expected to find species row for HASH-NA"
+      [row_tag] = row_match
+      refute row_tag =~ "ConfirmAction"
+      refute row_tag =~ "Discard codeome edits"
+    end
   end
 
   describe "controls panel — new seed entry point" do
