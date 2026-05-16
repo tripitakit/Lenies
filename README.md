@@ -1,18 +1,39 @@
 # Lenies
 
-To start your Phoenix server:
+Digital evolution sandbox built on Elixir and Phoenix LiveView. Organisms ("Lenies") live as BEAM processes that execute a bytecode "Codeome" — genome and program in one — inside a 256×256 grid world with finite, renewable resources.
 
-* Run `mix setup` to install and setup dependencies
-* Start Phoenix endpoint with `mix phx.server` or inside IEx with `iex -S mix phx.server`
+The LiveView dashboard renders the world in real time and lets you:
 
-Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
+- Spawn species from a catalog of built-in seeds or your own custom designs.
+- Inspect any species: population, lineage, energy, disassembled Codeome.
+- Edit a Codeome with a Scratch-style block palette (drag opcodes from the palette onto the program listing).
+- Watch radiation, resource accumulation, predation, decay, and replication unfold.
 
-Ready to run in production? Please [check our deployment guides](https://hexdocs.pm/phoenix/deployment.html).
+## Requirements
 
-## Learn more
+- Elixir `~> 1.15`
+- Erlang/OTP 26+
+- Node.js (asset pipeline)
 
-* Official website: https://www.phoenixframework.org/
-* Guides: https://hexdocs.pm/phoenix/overview.html
-* Docs: https://hexdocs.pm/phoenix
-* Forum: https://elixirforum.com/c/phoenix-forum
-* Source: https://github.com/phoenixframework/phoenix
+## Run
+
+```bash
+mix setup
+mix phx.server
+```
+
+Open <http://localhost:4000>.
+
+## Test
+
+```bash
+mix test
+```
+
+## Documentation
+
+Design specs and implementation plans live under `docs/superpowers/`.
+
+## License
+
+GPL-3.0 — see [LICENSE](LICENSE).
