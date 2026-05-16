@@ -350,14 +350,6 @@ defmodule LeniesWeb.DashboardLive do
     end
   end
 
-  @impl true
-  def handle_info(:open_world_detail, socket) do
-    {:noreply,
-     socket
-     |> assign(:world_detail_open?, true)
-     |> assign(:world_detail_highlight_hash, nil)}
-  end
-
   def handle_event("close_world_detail", _params, socket) do
     {:noreply,
      socket
@@ -371,6 +363,14 @@ defmodule LeniesWeb.DashboardLive do
       if socket.assigns.world_detail_highlight_hash == hash, do: nil, else: hash
 
     {:noreply, assign(socket, :world_detail_highlight_hash, new_hash)}
+  end
+
+  @impl true
+  def handle_info(:open_world_detail, socket) do
+    {:noreply,
+     socket
+     |> assign(:world_detail_open?, true)
+     |> assign(:world_detail_highlight_hash, nil)}
   end
 
   def handle_info({:tick, n}, socket) do
