@@ -27,10 +27,28 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
      |> assign(:dirty, false)
      |> assign(:picker_open, nil)
      |> assign(:validation, {:ok, %{len: 0, non_nops: 0}})
-     |> assign(:show_spawn_form, false)}
+     |> assign(:show_spawn_form, false)
+     |> assign(:editor_mode, nil)}
   end
 
   @impl true
+  def update(%{editor_mode: :new_seed} = assigns, socket) do
+    cleared =
+      socket
+      |> assign(assigns)
+      |> assign(:codeome_lines, [])
+      |> assign(:fetch_status, :ok)
+      |> assign(:cached_codeome_hash, nil)
+      |> assign(:edit_mode, true)
+      |> assign(:buffer, [])
+      |> assign(:dirty, false)
+      |> assign(:picker_open, nil)
+      |> assign(:validation, LeniesWeb.CodeomeBuffer.validate([]))
+      |> assign(:show_spawn_form, false)
+
+    {:ok, cleared}
+  end
+
   def update(%{selected_hash: hash} = assigns, socket)
       when is_binary(hash) and hash != "" do
     if hash == socket.assigns.cached_codeome_hash do
@@ -71,15 +89,22 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
   end
 
   def handle_event("cancel_edit", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:edit_mode, false)
-     |> assign(:buffer, [])
-     |> assign(:dirty, false)
-     |> assign(:picker_open, nil)
-     |> assign(:validation, {:ok, %{len: 0, non_nops: 0}})
-     |> assign(:show_spawn_form, false)
-     |> notify_parent_dirty(false)}
+    socket =
+      socket
+      |> assign(:edit_mode, false)
+      |> assign(:buffer, [])
+      |> assign(:dirty, false)
+      |> assign(:picker_open, nil)
+      |> assign(:validation, {:ok, %{len: 0, non_nops: 0}})
+      |> assign(:show_spawn_form, false)
+      |> notify_parent_dirty(false)
+
+    if socket.assigns[:editor_mode] == :new_seed do
+      send(self(), {:editor_mode, nil})
+      {:noreply, assign(socket, :editor_mode, nil)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("edit_delete", %{"index" => index_str}, socket) do
@@ -162,8 +187,20 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
       id="species-inspector"
       class="panel w-[320px] shrink-0 flex flex-col gap-2 p-3 min-h-0"
     >
-      <%= if @selected_hash do %>
-        <header class="flex items-center gap-2">
+      <header class="flex items-center gap-2">
+        <%= if @editor_mode == :new_seed do %>
+          <span class="inline-block w-3 h-3 shrink-0 bg-slate-500"></span>
+          <h2 class="text-xs flex-1 truncate">New Seed</h2>
+          <button
+            type="button"
+            phx-click="cancel_edit"
+            phx-target={@myself}
+            class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
+            title="Close editor"
+          >
+            ×
+          </button>
+        <% else %>
           <span
             class="inline-block w-3 h-3 shrink-0"
             style={"background:#{SpeciesColor.hex(@selected_hash)}"}
@@ -190,19 +227,13 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
           >
             ×
           </button>
-        </header>
-      <% else %>
-        <header class="flex items-center gap-2">
-          <h2 class="text-xs flex-1">
-            New Seed
-          </h2>
-        </header>
-      <% end %>
+        <% end %>
+      </header>
 
       <div class="flex items-center gap-2 text-[10px]">
         <%= if @edit_mode do %>
           <button
-            id={"inspector-cancel-#{@selected_hash}"}
+            id={"inspector-cancel-#{@selected_hash || "new_seed"}"}
             type="button"
             phx-hook="ConfirmAction"
             data-confirm="Discard codeome edits?"
@@ -210,10 +241,9 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
             phx-click="cancel_edit"
             phx-target={@myself}
             class="px-2 py-0.5 border border-slate-500 hover:bg-slate-700"
-          >
-            Cancel
-          </button>
-        <% else %>
+          >Cancel</button>
+        <% end %>
+        <%= if @editor_mode != :new_seed and not @edit_mode do %>
           <button
             type="button"
             phx-click="enter_edit"
@@ -301,26 +331,28 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
         </form>
       <% end %>
 
-      <div class="grid grid-cols-3 gap-2 text-[11px]">
-        <div class="border border-cyan-500/30 px-2 py-1">
-          <div class="opacity-60">pop.</div>
-          <div class="text-cyan-300 font-bold tabular-nums text-base">
-            {population(@species_record)}
+      <%= if @editor_mode != :new_seed do %>
+        <div class="grid grid-cols-3 gap-2 text-[11px]">
+          <div class="border border-cyan-500/30 px-2 py-1">
+            <div class="opacity-60">pop.</div>
+            <div class="text-cyan-300 font-bold tabular-nums text-base">
+              {population(@species_record)}
+            </div>
+          </div>
+          <div class="border border-violet-500/30 px-2 py-1">
+            <div class="opacity-60">gen.</div>
+            <div class="text-violet-300 font-bold tabular-nums text-base">
+              {avg_gen(@species_record)}
+            </div>
+          </div>
+          <div class="border border-emerald-500/30 px-2 py-1">
+            <div class="opacity-60">ops</div>
+            <div class="text-emerald-300 font-bold tabular-nums text-base">
+              {length(@codeome_lines)}
+            </div>
           </div>
         </div>
-        <div class="border border-violet-500/30 px-2 py-1">
-          <div class="opacity-60">gen.</div>
-          <div class="text-violet-300 font-bold tabular-nums text-base">
-            {avg_gen(@species_record)}
-          </div>
-        </div>
-        <div class="border border-emerald-500/30 px-2 py-1">
-          <div class="opacity-60">ops</div>
-          <div class="text-emerald-300 font-bold tabular-nums text-base">
-            {length(@codeome_lines)}
-          </div>
-        </div>
-      </div>
+      <% end %>
 
       <%= if @fetch_status == :no_sample do %>
         <p class="text-[10px] opacity-60">
@@ -367,7 +399,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
       <div class="flex-1 min-h-0 overflow-auto">
         <div
           class="codeome-blocks"
-          id={"codeome-blocks-#{@selected_hash}"}
+          id={"codeome-blocks-#{@selected_hash || "new_seed"}"}
           phx-hook={@edit_mode && "CodeomeSortable"}
         >
           <%= if @edit_mode do %>

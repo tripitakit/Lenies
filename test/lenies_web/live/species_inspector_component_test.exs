@@ -52,17 +52,20 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
   # Used by edit-mode tests that need to inject pre-edit state without
   # going through enter_edit.
   defp render_seeded(base, opts) do
+    merged = Map.merge(base, Map.new(opts))
+
     assigns =
-      Map.merge(base, Map.new(opts))
+      merged
       |> Map.put_new(:codeome_lines, [])
       |> Map.put_new(:fetch_status, :ok)
-      |> Map.put_new(:cached_codeome_hash, base[:selected_hash])
+      |> Map.put_new(:cached_codeome_hash, merged[:selected_hash])
       |> Map.put_new(:edit_mode, false)
       |> Map.put_new(:buffer, [])
       |> Map.put_new(:dirty, false)
       |> Map.put_new(:picker_open, nil)
       |> Map.put_new(:validation, {:ok, %{len: 0, non_nops: 0}})
       |> Map.put_new(:show_spawn_form, false)
+      |> Map.put_new(:editor_mode, nil)
       # render/1 also needs the LiveComponent target marker
       |> Map.put_new(:myself, %Phoenix.LiveComponent.CID{cid: 0})
 
@@ -388,6 +391,47 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
 
       assert new_socket.assigns.buffer == [:b, :c, :a, :d]
       assert new_socket.assigns.dirty == true
+    end
+  end
+
+  describe "editor_mode :new_seed" do
+    test "renders 'New Seed' header instead of a hash" do
+      html =
+        render_seeded(%{id: "test-inspector", selected_hash: nil, species_record: nil},
+          editor_mode: :new_seed,
+          edit_mode: true,
+          buffer: [],
+          validation: {:error, [{:too_short, [min: 5, got: 0]}]}
+        )
+
+      assert html =~ "New Seed"
+      refute html =~ ~s(href="/species/)
+    end
+
+    test "omits the stats grid in :new_seed mode" do
+      html =
+        render_seeded(%{id: "test-inspector", selected_hash: nil, species_record: nil},
+          editor_mode: :new_seed,
+          edit_mode: true,
+          buffer: [],
+          validation: {:error, [{:too_short, [min: 5, got: 0]}]}
+        )
+
+      refute html =~ ~r/>\s*pop\.\s*</
+      refute html =~ ~r/>\s*gen\.\s*</
+    end
+
+    test "does NOT show the Edit button (edit mode is auto-on)" do
+      html =
+        render_seeded(%{id: "test-inspector", selected_hash: nil, species_record: nil},
+          editor_mode: :new_seed,
+          edit_mode: true,
+          buffer: [],
+          validation: {:error, [{:too_short, [min: 5, got: 0]}]}
+        )
+
+      refute html =~ ~s(>Edit<)
+      assert html =~ ~s(>Cancel<)
     end
   end
 
