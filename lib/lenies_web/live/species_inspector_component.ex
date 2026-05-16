@@ -513,7 +513,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
           <% end %>
           <div
             class="codeome-blocks"
-            id={"codeome-blocks-#{@selected_hash || "new_seed"}"}
+            id={"codeome-blocks-#{blocks_phase(assigns)}"}
             phx-hook={@edit_mode && "CodeomeSortable"}
           >
             <%= if @edit_mode do %>
@@ -601,6 +601,18 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
       :exit, _ -> nil
     end
   end
+
+  # Force a fresh DOM identity for .codeome-blocks across editor phases so
+  # Phoenix LiveView's morphdom treats each phase as a new element. Without
+  # this, the element keeps the same id across (view → edit-existing →
+  # cancel → new-seed) transitions; LV then patches attributes in place
+  # but the JS-side hook lifecycle (mounted/destroyed) does not always
+  # fire on `phx-hook` attribute toggle alone, leaving the CodeomeSortable
+  # instance unattached until a full page reload.
+  defp blocks_phase(%{editor_mode: :new_seed}), do: "new"
+  defp blocks_phase(%{edit_mode: true, selected_hash: hash}) when is_binary(hash), do: "edit-#{hash}"
+  defp blocks_phase(%{selected_hash: hash}) when is_binary(hash), do: "view-#{hash}"
+  defp blocks_phase(_), do: "empty"
 
   defp parse_clamped(s, min, max, fallback) do
     case Integer.parse(s) do
