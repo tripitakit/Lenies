@@ -24,7 +24,7 @@ defmodule LeniesWeb.DashboardLive do
     end
 
     grid = Lenies.Config.grid_size()
-    {species, species_total} = top_species(10)
+    {species, all_species, species_total} = aggregate_with_top(10)
 
     socket =
       socket
@@ -35,6 +35,7 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:history, [])
       |> assign(:species, species)
       |> assign(:species_total, species_total)
+      |> assign(:all_species, all_species)
       |> assign(:selected_hash, nil)
       |> assign(:selected_species_record, nil)
       |> assign(:inspector_dirty, false)
@@ -45,9 +46,12 @@ defmodule LeniesWeb.DashboardLive do
     {:ok, socket}
   end
 
-  defp top_species(n) do
+  # Returns {top_n, all_species, total_count} from a single Species.aggregate()
+  # pass. The dashboard table uses `top_n`; the World Detail modal needs the
+  # full `all_species` list (sorted by population descending, already).
+  defp aggregate_with_top(n) do
     all = Lenies.Species.aggregate()
-    {Enum.take(all, n), length(all)}
+    {Enum.take(all, n), all, length(all)}
   end
 
   defp find_selected_record(nil, _species), do: nil
@@ -291,7 +295,7 @@ defmodule LeniesWeb.DashboardLive do
             <.live_component
               module={LeniesWeb.WorldDetailComponent}
               id="world-detail"
-              species={@species}
+              species={@all_species}
               highlight_hash={@world_detail_highlight_hash}
               grid={@grid}
             />
@@ -380,17 +384,18 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:throttle_counter, new_counter)
 
     if rem(new_counter, throttle) == 0 do
-      {species, species_total} = top_species(10)
+      {species, all_species, species_total} = aggregate_with_top(10)
 
       socket =
         socket
         |> assign(:history, Lenies.Telemetry.history(:last_n, 100))
         |> assign(:species, species)
         |> assign(:species_total, species_total)
+        |> assign(:all_species, all_species)
         |> assign(:selected_species_record,
           find_selected_record(socket.assigns.selected_hash, species)
         )
-        |> maybe_clear_world_detail_highlight(species)
+        |> maybe_clear_world_detail_highlight(all_species)
 
       payload = GridRenderer.encode_payload(socket.assigns.grid)
       {:noreply, push_event(socket, "render_frame", payload)}

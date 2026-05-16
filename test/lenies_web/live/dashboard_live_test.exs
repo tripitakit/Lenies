@@ -510,6 +510,35 @@ defmodule LeniesWeb.DashboardLiveTest do
     after
       Application.delete_env(:lenies, :dashboard_throttle_ticks)
     end
+
+    test "modal species list shows ALL active species (not just dashboard top-10)", %{conn: conn} do
+      # 15 distinct species → more than the dashboard's top-10 cap. The
+      # modal must list every one of them. Hash short-ids in the component
+      # are the first 8 characters of the hash, so we keep those 8 chars
+      # unique per species.
+      hashes =
+        for i <- 1..15 do
+          # SPnnX...  — first 8 chars uniquely encode i (zero-padded)
+          "SP" <> String.pad_leading(Integer.to_string(i), 2, "0") <> "XXXX-FILLER"
+        end
+
+      for {hash, i} <- Enum.with_index(hashes, 1) do
+        for j <- 1..i do
+          id = "L-#{i}-#{j}"
+          :ets.insert(:lenies, {id, %{id: id, codeome_hash: hash, lineage: {nil, 0}}})
+        end
+      end
+
+      {:ok, view, _} = live(conn, "/")
+      send(view.pid, :open_world_detail)
+      html = render(view)
+
+      # All 15 short-ids appear in the modal markup.
+      for hash <- hashes do
+        short = String.slice(hash, 0..7)
+        assert html =~ short, "expected modal to list species #{short} but it was missing"
+      end
+    end
   end
 
   describe "controls panel — custom seed catalog" do
