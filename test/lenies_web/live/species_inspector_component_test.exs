@@ -65,6 +65,7 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       |> Map.put_new(:picker_open, nil)
       |> Map.put_new(:validation, {:ok, %{len: 0, non_nops: 0}})
       |> Map.put_new(:show_spawn_form, false)
+      |> Map.put_new(:show_save_form, false)
       |> Map.put_new(:editor_mode, nil)
       # render/1 also needs the LiveComponent target marker
       |> Map.put_new(:myself, %Phoenix.LiveComponent.CID{cid: 0})
@@ -432,6 +433,120 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
 
       refute html =~ ~s(>Edit<)
       assert html =~ ~s(>Cancel<)
+    end
+  end
+
+  describe "save flow" do
+    setup do
+      tmp_path =
+        Path.join(System.tmp_dir!(), "lenies_save_test_#{System.unique_integer([:positive])}.json")
+
+      Application.put_env(:lenies, :__test_user_seeds_file__, tmp_path)
+
+      if Process.whereis(Lenies.Seeds.CustomStore) do
+        Agent.stop(Lenies.Seeds.CustomStore)
+      end
+
+      {:ok, _} = Lenies.Seeds.CustomStore.start_link([])
+
+      on_exit(fn ->
+        File.rm(tmp_path)
+        Application.delete_env(:lenies, :__test_user_seeds_file__)
+      end)
+
+      :ok
+    end
+
+    test "Save button visible only in :new_seed edit mode" do
+      html_normal =
+        render_seeded(base_assigns(),
+          edit_mode: true,
+          buffer: [:push0, :push0, :push0, :push0, :push0, :store],
+          validation: {:ok, %{len: 6, non_nops: 6}}
+        )
+
+      refute html_normal =~ ~s(>Save<)
+
+      html_new =
+        render_seeded(%{id: "test-inspector", selected_hash: nil, species_record: nil},
+          editor_mode: :new_seed,
+          edit_mode: true,
+          buffer: [:push0, :push0, :push0, :push0, :push0, :store],
+          validation: {:ok, %{len: 6, non_nops: 6}}
+        )
+
+      assert html_new =~ ~s(>Save<)
+    end
+
+    test "Save form hidden by default and opens on show_save_form: true" do
+      html_closed =
+        render_seeded(%{id: "test-inspector", selected_hash: nil, species_record: nil},
+          editor_mode: :new_seed,
+          edit_mode: true,
+          buffer: [:push0, :push0, :push0, :push0, :push0, :store],
+          validation: {:ok, %{len: 6, non_nops: 6}}
+        )
+
+      refute html_closed =~ ~s(name="seed_name")
+
+      html_open =
+        render_seeded(%{id: "test-inspector", selected_hash: nil, species_record: nil},
+          editor_mode: :new_seed,
+          edit_mode: true,
+          buffer: [:push0, :push0, :push0, :push0, :push0, :store],
+          validation: {:ok, %{len: 6, non_nops: 6}},
+          show_save_form: true
+        )
+
+      assert html_open =~ ~s(name="seed_name")
+      assert html_open =~ ~s(name="color_hex")
+      assert html_open =~ ~s(name="energy_default")
+    end
+
+    test "submit_save_seed creates a custom seed" do
+      buffer = [
+        :nop_1,
+        :get_size,
+        :push0,
+        :store,
+        :push0,
+        :load,
+        :allocate,
+        :push0,
+        :push1,
+        :store,
+        :nop_1
+      ]
+
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          flash: %{},
+          myself: %Phoenix.LiveComponent.CID{cid: 1},
+          buffer: buffer,
+          validation: {:ok, %{len: length(buffer), non_nops: 9}},
+          editor_mode: :new_seed,
+          show_save_form: true,
+          selected_hash: nil
+        }
+      }
+
+      {:noreply, _} =
+        LeniesWeb.SpeciesInspectorComponent.handle_event(
+          "submit_save_seed",
+          %{
+            "seed_name" => "My Test Seed",
+            "color_hex" => "#abcdef",
+            "energy_default" => "5000"
+          },
+          socket
+        )
+
+      saved = Lenies.Seeds.CustomStore.get("my-test-seed")
+      assert saved.name == "My Test Seed"
+      assert saved.color_hex == "#abcdef"
+      assert saved.energy_default == 5000.0
+      assert saved.opcodes == buffer
     end
   end
 

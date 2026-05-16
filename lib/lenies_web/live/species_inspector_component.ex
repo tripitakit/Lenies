@@ -28,6 +28,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
      |> assign(:picker_open, nil)
      |> assign(:validation, {:ok, %{len: 0, non_nops: 0}})
      |> assign(:show_spawn_form, false)
+     |> assign(:show_save_form, false)
      |> assign(:editor_mode, nil)}
   end
 
@@ -45,6 +46,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
       |> assign(:picker_open, nil)
       |> assign(:validation, LeniesWeb.CodeomeBuffer.validate([]))
       |> assign(:show_spawn_form, false)
+      |> assign(:show_save_form, false)
 
     {:ok, cleared}
   end
@@ -180,6 +182,55 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
     end
   end
 
+  def handle_event("open_save_form", _params, socket) do
+    {:noreply, assign(socket, :show_save_form, true)}
+  end
+
+  def handle_event("cancel_save_form", _params, socket) do
+    {:noreply, assign(socket, :show_save_form, false)}
+  end
+
+  def handle_event(
+        "submit_save_seed",
+        %{
+          "seed_name" => name,
+          "color_hex" => color,
+          "energy_default" => energy_str
+        },
+        socket
+      ) do
+    case socket.assigns.validation do
+      {:ok, _} ->
+        seed = %{
+          id: slug(name),
+          name: name,
+          color_hex: color,
+          energy_default: parse_clamped(energy_str, 1, 1_000_000, 10_000) * 1.0,
+          opcodes: socket.assigns.buffer
+        }
+
+        case Lenies.Seeds.CustomStore.save(seed) do
+          :ok ->
+            send(self(), {:editor_mode, nil})
+
+            {:noreply,
+             socket
+             |> assign(:editor_mode, nil)
+             |> assign(:show_save_form, false)
+             |> assign(:edit_mode, false)
+             |> assign(:buffer, [])
+             |> assign(:dirty, false)
+             |> notify_parent_dirty(false)}
+
+          {:error, _reason} ->
+            {:noreply, socket}
+        end
+
+      {:error, _} ->
+        {:noreply, socket}
+    end
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -267,6 +318,15 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
             class="ml-auto px-2 py-0.5 border border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/40 disabled:opacity-40 disabled:cursor-not-allowed"
           >Spawn</button>
         <% end %>
+        <%= if @editor_mode == :new_seed and @edit_mode do %>
+          <button
+            type="button"
+            phx-click="open_save_form"
+            phx-target={@myself}
+            disabled={!match?({:ok, _}, @validation)}
+            class="px-2 py-0.5 border border-violet-500/60 text-violet-200 hover:bg-violet-900/40 disabled:opacity-40 disabled:cursor-not-allowed"
+          >Save</button>
+        <% end %>
       </div>
 
       <%= if @edit_mode do %>
@@ -327,6 +387,63 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
               type="submit"
               class="px-2 py-0.5 border border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/40"
             >Spawn</button>
+          </div>
+        </form>
+      <% end %>
+
+      <%= if @edit_mode and @show_save_form do %>
+        <form
+          phx-submit="submit_save_seed"
+          phx-target={@myself}
+          class="flex flex-col gap-1.5 border border-violet-500/30 p-2 text-[11px]"
+        >
+          <label class="flex items-center gap-2">
+            <span class="opacity-70 w-14">name</span>
+            <input
+              type="text"
+              name="seed_name"
+              required
+              minlength="1"
+              maxlength="40"
+              placeholder="my replicator v1"
+              class="flex-1 text-xs"
+            />
+          </label>
+          <label class="flex items-center gap-2">
+            <span class="opacity-70 w-14">color</span>
+            <input
+              type="color"
+              name="color_hex"
+              value={suggested_color(@buffer)}
+              class="w-12 h-6 cursor-pointer border border-violet-500/30"
+            />
+          </label>
+          <label class="flex items-center gap-2">
+            <span class="opacity-70 w-14">energy</span>
+            <input
+              type="number"
+              name="energy_default"
+              value="10000"
+              min="1"
+              max="1000000"
+              class="w-24 text-xs"
+            />
+          </label>
+          <div class="flex gap-1 justify-end">
+            <button
+              type="button"
+              phx-click="cancel_save_form"
+              phx-target={@myself}
+              class="px-2 py-0.5 border border-slate-500 hover:bg-slate-700"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="px-2 py-0.5 border border-violet-500/60 text-violet-200 hover:bg-violet-900/40"
+            >
+              Save
+            </button>
           </div>
         </form>
       <% end %>
@@ -529,6 +646,22 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
       {n, _} -> n |> max(min) |> min(max)
       :error -> fallback
     end
+  end
+
+  defp slug(name) when is_binary(name) do
+    name
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9]+/, "-")
+    |> String.trim("-")
+  end
+
+  defp suggested_color([]), do: "#888888"
+
+  defp suggested_color(buffer) when is_list(buffer) do
+    buffer
+    |> Lenies.Codeome.from_list()
+    |> Lenies.Codeome.hash()
+    |> Lenies.SpeciesColor.hex()
   end
 
   defp format_validation_error({:too_short, opts}),
