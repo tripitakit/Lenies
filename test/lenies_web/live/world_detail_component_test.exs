@@ -32,6 +32,18 @@ defmodule LeniesWeb.WorldDetailComponentTest do
     assert html =~ ~s(phx-hook="WorldDetailCanvas")
   end
 
+  test "data-highlight-hue is 0 when no species is selected" do
+    html = render_component(WorldDetailComponent, base_assigns(%{highlight_hash: nil}))
+    assert html =~ ~s(data-highlight-hue="0")
+  end
+
+  test "data-highlight-hue is the hue byte of the selected species" do
+    hash = "HASH-WD-HL"
+    expected_hue = Lenies.SpeciesColor.hue_byte(hash)
+    html = render_component(WorldDetailComponent, base_assigns(%{highlight_hash: hash}))
+    assert html =~ ~s(data-highlight-hue="#{expected_hue}")
+  end
+
   test "species list rows are sorted by population descending" do
     species = [
       %{hash: "AAAA1111", population: 5, avg_generation: 1.0},

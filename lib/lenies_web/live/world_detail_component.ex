@@ -37,6 +37,12 @@ defmodule LeniesWeb.WorldDetailComponent do
 
       <div class="world-detail-body grid gap-4 min-h-0 flex-1">
         <section class="world-detail-canvas-pane">
+          <%!-- phx-update="ignore" only skips morphdom patching of the canvas's
+                CHILDREN (its bitmap is drawn by JS, not by LiveView). The
+                element's own attributes are still morphed normally, so a change
+                to @highlight_hash on the server updates data-highlight-hue on
+                the next render and the hook's updated() reapplies the dim
+                filter immediately. --%>
           <canvas
             id="world-detail-canvas"
             phx-hook="WorldDetailCanvas"
