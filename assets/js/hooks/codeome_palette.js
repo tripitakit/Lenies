@@ -23,6 +23,15 @@ const CodeomePalette = {
           draggable: ".palette-chip",
           sort: false,
           animation: 120,
+          // forceFallback: use SortableJS's DOM-based drag instead of native
+          // HTML5 drag. Native drag inside CSS grid containers (and across
+          // grid-laid-out modal columns) is unreliable on Chromium and
+          // breaks pickup of the source chip. The DOM-based fallback
+          // positions a clone via fixed coordinates and works regardless of
+          // parent layout. Touch devices also benefit.
+          forceFallback: true,
+          fallbackOnBody: true,
+          fallbackTolerance: 4,
         }),
       );
     });
