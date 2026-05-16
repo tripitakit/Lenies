@@ -17,6 +17,11 @@
 // If you have dependencies that try to import CSS, esbuild will generate a separate `app.css` file.
 // To load it, simply add a second `<link>` to your `root.html.heex` file.
 
+// Bundle version banner — if you do NOT see this log in DevTools console
+// the browser is serving a cached version of app.js (hard-refresh or
+// disable cache in DevTools Network tab to force reload).
+console.log("[Lenies] app.js loaded — build 2026-05-16-debug-3");
+
 // Include phoenix_html to handle method=PUT/DELETE in forms and buttons.
 import "phoenix_html"
 // Establish Phoenix Socket and LiveView configuration.
