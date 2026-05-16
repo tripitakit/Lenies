@@ -34,8 +34,9 @@ import ActionFeedback from "./hooks/action_feedback"
 import CodeomeSortable from "./hooks/codeome_sortable"
 import ConfirmAction from "./hooks/confirm_action"
 import CodeomePalette from "./hooks/codeome_palette"
+import WorldDetailCanvas from "./hooks/world_detail_canvas"
 
-const Hooks = {GridCanvas, ActionFeedback, CodeomeSortable, ConfirmAction, CodeomePalette, ...colocatedHooks}
+const Hooks = {GridCanvas, ActionFeedback, CodeomeSortable, ConfirmAction, CodeomePalette, WorldDetailCanvas, ...colocatedHooks}
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
