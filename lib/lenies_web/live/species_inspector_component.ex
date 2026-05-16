@@ -162,35 +162,44 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
       id="species-inspector"
       class="panel w-[320px] shrink-0 flex flex-col gap-2 p-3 min-h-0"
     >
-      <header class="flex items-center gap-2">
-        <span
-          class="inline-block w-3 h-3 shrink-0"
-          style={"background:#{SpeciesColor.hex(@selected_hash)}"}
-        >
-        </span>
-        <h2 class="text-xs flex-1 truncate">
-          {String.slice(@selected_hash, 0..15)}…
-        </h2>
-        <.link
-          navigate={~p"/species/#{@selected_hash}"}
-          class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
-          title="Open full species page"
-        >
-          ↗
-        </.link>
-        <button
-          id={"inspector-close-#{@selected_hash}"}
-          phx-hook="ConfirmAction"
-          data-confirm="Discard codeome edits?"
-          data-confirm-when="[data-inspector-dirty='true']"
-          phx-click="select_species"
-          phx-value-hash={@selected_hash}
-          class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
-        >
-          ×
-        </button>
-      </header>
+      <%= if @selected_hash do %>
+        <header class="flex items-center gap-2">
+          <span
+            class="inline-block w-3 h-3 shrink-0"
+            style={"background:#{SpeciesColor.hex(@selected_hash)}"}
+          >
+          </span>
+          <h2 class="text-xs flex-1 truncate">
+            {String.slice(@selected_hash, 0..15)}…
+          </h2>
+          <.link
+            navigate={~p"/species/#{@selected_hash}"}
+            class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
+            title="Open full species page"
+          >
+            ↗
+          </.link>
+          <button
+            id={"inspector-close-#{@selected_hash}"}
+            phx-hook="ConfirmAction"
+            data-confirm="Discard codeome edits?"
+            data-confirm-when="[data-inspector-dirty='true']"
+            phx-click="select_species"
+            phx-value-hash={@selected_hash}
+            class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
+          >
+            ×
+          </button>
+        </header>
+      <% else %>
+        <header class="flex items-center gap-2">
+          <h2 class="text-xs flex-1">
+            New Seed
+          </h2>
+        </header>
+      <% end %>
 
+      <%= if @selected_hash do %>
       <div class="flex items-center gap-2 text-[10px]">
         <%= if @edit_mode do %>
           <button
@@ -440,6 +449,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
           <% end %>
         </div>
       </div>
+      <% end %>
     </aside>
     """
   end

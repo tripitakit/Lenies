@@ -287,4 +287,27 @@ defmodule LeniesWeb.DashboardLiveTest do
       assert html =~ "HASH-B"
     end
   end
+
+  describe "editor_mode :new_seed flow" do
+    test "open_codeome_editor info opens the inspector with empty selection", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/")
+
+      refute render(view) =~ ~s(id="species-inspector")
+
+      send(view.pid, :open_codeome_editor)
+
+      html = render(view)
+      assert html =~ ~s(id="species-inspector")
+    end
+
+    test "editor_mode info nil closes the inspector when no species is selected", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/")
+
+      send(view.pid, :open_codeome_editor)
+      assert render(view) =~ ~s(id="species-inspector")
+
+      send(view.pid, {:editor_mode, nil})
+      refute render(view) =~ ~s(id="species-inspector")
+    end
+  end
 end
