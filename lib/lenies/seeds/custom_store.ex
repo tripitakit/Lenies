@@ -77,6 +77,15 @@ defmodule Lenies.Seeds.CustomStore do
 
   # ----- validation -----
 
+  defp validate_name(%{name: name, id: id})
+       when is_binary(name) and is_binary(id) do
+    cond do
+      String.trim(name) == "" -> {:error, :invalid_name}
+      id == "" -> {:error, :invalid_name}
+      true -> :ok
+    end
+  end
+
   defp validate_name(%{name: name}) when is_binary(name) do
     if String.trim(name) == "", do: {:error, :invalid_name}, else: :ok
   end

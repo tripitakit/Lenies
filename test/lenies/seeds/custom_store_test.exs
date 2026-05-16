@@ -119,6 +119,11 @@ defmodule Lenies.Seeds.CustomStoreTest do
       assert {:error, :invalid_name} = CustomStore.save(valid_seed(%{name: "   "}))
     end
 
+    test "rejects a name that slugs to an empty id" do
+      seed = valid_seed(%{id: "", name: "!!!"})
+      assert {:error, :invalid_name} = CustomStore.save(seed)
+    end
+
     test "rejects a malformed color_hex" do
       assert {:error, :invalid_color} = CustomStore.save(valid_seed(%{color_hex: "red"}))
     end

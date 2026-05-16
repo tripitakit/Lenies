@@ -99,6 +99,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
       |> assign(:picker_open, nil)
       |> assign(:validation, {:ok, %{len: 0, non_nops: 0}})
       |> assign(:show_spawn_form, false)
+      |> assign(:show_save_form, false)
       |> notify_parent_dirty(false)
 
     if socket.assigns[:editor_mode] == :new_seed do
@@ -149,7 +150,10 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
   end
 
   def handle_event("open_spawn_form", _params, socket) do
-    {:noreply, assign(socket, :show_spawn_form, true)}
+    {:noreply,
+     socket
+     |> assign(:show_spawn_form, true)
+     |> assign(:show_save_form, false)}
   end
 
   def handle_event("cancel_spawn_form", _params, socket) do
@@ -183,7 +187,10 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
   end
 
   def handle_event("open_save_form", _params, socket) do
-    {:noreply, assign(socket, :show_save_form, true)}
+    {:noreply,
+     socket
+     |> assign(:show_save_form, true)
+     |> assign(:show_spawn_form, false)}
   end
 
   def handle_event("cancel_save_form", _params, socket) do
