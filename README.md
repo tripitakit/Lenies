@@ -12,10 +12,13 @@ hash), and is selected on energy balance.
 The dashboard lets you watch the grid live, inspect species, edit existing
 seeds or compose new ones from scratch with a drag-and-drop block editor.
 
+> 📘 **Want to write your own codeomes?** See the [Lenies Programming Manual](docs/manual/README.md).
+
 ---
 
 ## Table of contents
 
+0. [Programming manual](docs/manual/README.md) — write your own codeomes from scratch
 1. [Quick start](#quick-start)
 2. [The world model](#the-world-model)
 3. [The Lenie organism](#the-lenie-organism)
