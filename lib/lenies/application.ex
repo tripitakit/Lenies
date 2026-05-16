@@ -22,6 +22,7 @@ defmodule Lenies.Application do
       {DNSCluster, query: Application.get_env(:lenies, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Lenies.PubSub},
       Lenies.Registry,
+      Lenies.Seeds.CustomStore,
       Lenies.LenieSupervisor,
       LeniesWeb.Endpoint
     ]
