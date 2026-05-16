@@ -40,6 +40,11 @@ const CodeomeSortable = {
       preventOnFilter: false,
       draggable: ".codeome-block-editable",
       group: { name: "codeome", pull: true, put: true },
+      // Increase the pixel radius around an empty container's edge that
+      // still counts as "inside" for drop detection. The default of 5px
+      // is too tight when the empty .codeome-blocks has a tall flex
+      // surface but no children to anchor the insert point.
+      emptyInsertThreshold: 20,
       onEnd: (evt) => {
         // SortableJS gives oldDraggableIndex/newDraggableIndex counting only
         // elements matching the `draggable` selector — these correspond
@@ -63,19 +68,23 @@ const CodeomeSortable = {
       },
       onAdd: (evt) => {
         const opcode = evt.item?.dataset?.opcode;
+        // SortableJS's `newDraggableIndex` counts only items matching the
+        // target's `draggable` selector (`.codeome-block-editable`). The
+        // dropped clone is a `.palette-chip`, so newDraggableIndex is
+        // unreliable for cross-list adds (often undefined / NaN). Count
+        // editable siblings that precede the dropped element instead —
+        // that is exactly the buffer index where the opcode should land.
+        let index = 0;
+        let sibling = evt.item.previousElementSibling;
+        while (sibling) {
+          if (sibling.classList.contains("codeome-block-editable")) index++;
+          sibling = sibling.previousElementSibling;
+        }
+        // Diagnostic logging — drag&drop has been intermittent across
+        // browsers; keep this until the dev confirms the flow end-to-end.
+        // Open DevTools → Console to see drop coordinates / opcode / index.
+        console.log("[CodeomeSortable] onAdd", { opcode, index, item: evt.item });
         if (opcode) {
-          // SortableJS's `newDraggableIndex` counts only items matching the
-          // target's `draggable` selector (`.codeome-block-editable`). The
-          // dropped clone is a `.palette-chip`, so newDraggableIndex is
-          // unreliable for cross-list adds (often undefined / NaN). Count
-          // editable siblings that precede the dropped element instead —
-          // that is exactly the buffer index where the opcode should land.
-          let index = 0;
-          let sibling = evt.item.previousElementSibling;
-          while (sibling) {
-            if (sibling.classList.contains("codeome-block-editable")) index++;
-            sibling = sibling.previousElementSibling;
-          }
           this.pushEventTo(this.el, "edit_insert", { index, opcode });
         }
         evt.item.remove();

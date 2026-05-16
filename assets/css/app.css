@@ -601,3 +601,26 @@
   /* keep scrollbar only for the listing */
   overflow: auto;
 }
+
+/* In the editor modal the listing pane stacks (title + blocks). The
+   blocks container must fill the remaining vertical space so an empty
+   buffer still has a non-zero drop surface for SortableJS — without
+   this the container collapses to ~0px and the cursor never hovers
+   over it on drop. */
+.lenies-dashboard .codeome-editor-modal .codeome-listing-pane .codeome-blocks {
+  flex: 1 1 auto;
+  min-height: 80px;
+}
+
+/* Visual cue + reliable hit area when the codeome is empty in edit mode. */
+.lenies-dashboard .codeome-editor-modal .codeome-listing-pane .codeome-blocks:empty,
+.lenies-dashboard .codeome-editor-modal .codeome-listing-pane .codeome-blocks:has(> .codeome-insert-slot:only-child) {
+  border: 1px dashed rgba(34, 211, 238, 0.25);
+}
+
+/* The thin insert-slot gaps between blocks were height: 0 — invisible and
+   awkward to target on drag&drop. Give them a small but real height so
+   SortableJS hit-detection has a stable target between blocks. */
+.lenies-dashboard .codeome-editor-modal .codeome-insert-slot {
+  min-height: 6px;
+}
