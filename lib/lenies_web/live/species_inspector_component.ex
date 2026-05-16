@@ -199,7 +199,6 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
         </header>
       <% end %>
 
-      <%= if @selected_hash do %>
       <div class="flex items-center gap-2 text-[10px]">
         <%= if @edit_mode do %>
           <button
@@ -449,7 +448,6 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
           <% end %>
         </div>
       </div>
-      <% end %>
     </aside>
     """
   end
