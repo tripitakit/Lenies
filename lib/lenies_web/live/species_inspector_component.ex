@@ -165,10 +165,20 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
     apply_buffer_change(socket, new_buffer)
   end
 
-  def handle_event("edit_insert", %{"index" => index, "opcode" => opcode_str}, socket) do
-    opcode = String.to_existing_atom(opcode_str)
-    new_buffer = LeniesWeb.CodeomeBuffer.insert(socket.assigns.buffer, index, opcode)
-    apply_buffer_change(socket, new_buffer)
+  def handle_event("edit_insert", %{"index" => index, "opcode" => opcode_str}, socket)
+      when is_integer(index) and is_binary(opcode_str) do
+    try do
+      opcode = String.to_existing_atom(opcode_str)
+
+      if Lenies.Codeome.Opcodes.known?(opcode) do
+        new_buffer = LeniesWeb.CodeomeBuffer.insert(socket.assigns.buffer, index, opcode)
+        apply_buffer_change(socket, new_buffer)
+      else
+        {:noreply, socket}
+      end
+    rescue
+      ArgumentError -> {:noreply, socket}
+    end
   end
 
   def handle_event("submit_spawn", %{"count" => count_str, "energy" => energy_str}, socket) do

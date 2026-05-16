@@ -395,6 +395,87 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
     end
   end
 
+  describe "edit_insert handler" do
+    defp insert_socket(buffer, codeome_lines \\ []) do
+      %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          flash: %{},
+          myself: %Phoenix.LiveComponent.CID{cid: 1},
+          buffer: buffer,
+          codeome_lines: codeome_lines,
+          dirty: false,
+          validation: {:ok, %{len: length(buffer), non_nops: length(buffer)}}
+        }
+      }
+    end
+
+    test "insert at index 0 prepends the opcode" do
+      socket = insert_socket([:push0, :store])
+
+      {:noreply, new_socket} =
+        SpeciesInspectorComponent.handle_event(
+          "edit_insert",
+          %{"index" => 0, "opcode" => "divide"},
+          socket
+        )
+
+      assert new_socket.assigns.buffer == [:divide, :push0, :store]
+    end
+
+    test "insert at end of buffer appends the opcode" do
+      socket = insert_socket([:push0])
+
+      {:noreply, new_socket} =
+        SpeciesInspectorComponent.handle_event(
+          "edit_insert",
+          %{"index" => 1, "opcode" => "store"},
+          socket
+        )
+
+      assert new_socket.assigns.buffer == [:push0, :store]
+    end
+
+    test "insert sets the dirty flag" do
+      socket = insert_socket([:push0, :store])
+
+      {:noreply, new_socket} =
+        SpeciesInspectorComponent.handle_event(
+          "edit_insert",
+          %{"index" => 0, "opcode" => "divide"},
+          socket
+        )
+
+      assert new_socket.assigns.dirty == true
+    end
+
+    test "unknown opcode string is silently ignored without crash" do
+      socket = insert_socket([:push0, :store])
+
+      {:noreply, new_socket} =
+        SpeciesInspectorComponent.handle_event(
+          "edit_insert",
+          %{"index" => 0, "opcode" => "bogus_opcode_xyz_does_not_exist"},
+          socket
+        )
+
+      assert new_socket.assigns.buffer == [:push0, :store]
+    end
+
+    test "non-opcode known atom (true) is silently ignored" do
+      socket = insert_socket([:push0, :store])
+
+      {:noreply, new_socket} =
+        SpeciesInspectorComponent.handle_event(
+          "edit_insert",
+          %{"index" => 0, "opcode" => "true"},
+          socket
+        )
+
+      assert new_socket.assigns.buffer == [:push0, :store]
+    end
+  end
+
   describe "editor_mode :new_seed" do
     test "renders 'New Seed' header instead of a hash" do
       html =
