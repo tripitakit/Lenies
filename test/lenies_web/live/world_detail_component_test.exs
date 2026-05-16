@@ -68,4 +68,10 @@ defmodule LeniesWeb.WorldDetailComponentTest do
 
     assert html =~ ~s(world-detail-species-row selected)
   end
+
+  test "the aside has a phx-window-keydown handler for Escape" do
+    html = render_component(WorldDetailComponent, base_assigns())
+    assert html =~ ~s(phx-window-keydown="close_world_detail")
+    assert html =~ ~s(phx-key="Escape")
+  end
 end
