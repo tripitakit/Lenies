@@ -486,6 +486,30 @@ defmodule LeniesWeb.DashboardLiveTest do
     after
       Application.delete_env(:lenies, :dashboard_throttle_ticks)
     end
+
+    test "highlight is cleared when the selected species drops out of the species list", %{conn: conn} do
+      Application.put_env(:lenies, :dashboard_throttle_ticks, 1)
+
+      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-WD-GONE", lineage: {nil, 0}}})
+
+      {:ok, view, _} = live(conn, "/")
+      send(view.pid, :open_world_detail)
+
+      view
+      |> element("button[phx-click='highlight_species_in_world'][phx-value-hash='HASH-WD-GONE']")
+      |> render_click()
+
+      hue = Lenies.SpeciesColor.hue_byte("HASH-WD-GONE")
+      assert render(view) =~ ~s(data-highlight-hue="#{hue}")
+
+      # The Lenie disappears (extinct).
+      :ets.delete(:lenies, "L1")
+      send(view.pid, {:tick, 1})
+
+      assert render(view) =~ ~s(data-highlight-hue="0")
+    after
+      Application.delete_env(:lenies, :dashboard_throttle_ticks)
+    end
   end
 
   describe "controls panel — custom seed catalog" do

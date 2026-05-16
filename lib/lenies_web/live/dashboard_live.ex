@@ -390,6 +390,7 @@ defmodule LeniesWeb.DashboardLive do
         |> assign(:selected_species_record,
           find_selected_record(socket.assigns.selected_hash, species)
         )
+        |> maybe_clear_world_detail_highlight(species)
 
       payload = GridRenderer.encode_payload(socket.assigns.grid)
       {:noreply, push_event(socket, "render_frame", payload)}
@@ -416,4 +417,18 @@ defmodule LeniesWeb.DashboardLive do
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
+
+  defp maybe_clear_world_detail_highlight(socket, species) do
+    case socket.assigns.world_detail_highlight_hash do
+      nil ->
+        socket
+
+      hash ->
+        if Enum.any?(species, &(&1.hash == hash)) do
+          socket
+        else
+          assign(socket, :world_detail_highlight_hash, nil)
+        end
+    end
+  end
 end
