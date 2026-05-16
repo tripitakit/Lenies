@@ -365,6 +365,10 @@ defmodule LeniesWeb.DashboardLive do
     {:noreply, assign(socket, :world_detail_highlight_hash, new_hash)}
   end
 
+  def handle_event("highlight_species_in_world", _params, socket) do
+    {:noreply, socket}
+  end
+
   @impl true
   def handle_info(:open_world_detail, socket) do
     {:noreply,
