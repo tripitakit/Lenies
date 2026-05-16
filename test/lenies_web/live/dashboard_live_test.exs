@@ -383,6 +383,32 @@ defmodule LeniesWeb.DashboardLiveTest do
     end
   end
 
+  describe "world detail modal — open/close" do
+    test "world_detail_open? starts false", %{conn: conn} do
+      {:ok, _view, html} = live(conn, "/")
+      refute html =~ ~s(id="world-detail")
+    end
+
+    test ":open_world_detail info message sets the flag", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/")
+      send(view.pid, :open_world_detail)
+      html = render(view)
+      assert html =~ ~s(id="world-detail")
+    end
+
+    test "close_world_detail event clears the flag and the highlight", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/")
+      send(view.pid, :open_world_detail)
+      assert render(view) =~ ~s(id="world-detail")
+
+      # Set a highlight via the highlight event so we can verify clear.
+      render_hook(view, "highlight_species_in_world", %{"hash" => "DOES-NOT-EXIST"})
+
+      view |> element("button#world-detail-close") |> render_click()
+      refute render(view) =~ ~s(id="world-detail")
+    end
+  end
+
   describe "controls panel — custom seed catalog" do
     setup do
       tmp_path =

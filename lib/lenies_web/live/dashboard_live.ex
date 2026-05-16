@@ -39,6 +39,8 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:selected_species_record, nil)
       |> assign(:inspector_dirty, false)
       |> assign(:editor_mode, nil)
+      |> assign(:world_detail_open?, false)
+      |> assign(:world_detail_highlight_hash, nil)
 
     {:ok, socket}
   end
@@ -285,6 +287,22 @@ defmodule LeniesWeb.DashboardLive do
               editor_mode={@editor_mode}
             />
           <% end %>
+          <%= if @world_detail_open? do %>
+            <aside id="world-detail" class="panel codeome-editor-modal world-detail-modal flex flex-col gap-2 p-4">
+              <header class="flex items-center gap-2">
+                <h2 class="text-xs flex-1">World detail</h2>
+                <button
+                  id="world-detail-close"
+                  type="button"
+                  phx-click="close_world_detail"
+                  class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
+                  title="Close"
+                >
+                  ×
+                </button>
+              </header>
+            </aside>
+          <% end %>
         </div>
 
         <.live_component module={LeniesWeb.ControlsPanelComponent} id="controls" />
@@ -333,6 +351,28 @@ defmodule LeniesWeb.DashboardLive do
   end
 
   @impl true
+  def handle_info(:open_world_detail, socket) do
+    {:noreply,
+     socket
+     |> assign(:world_detail_open?, true)
+     |> assign(:world_detail_highlight_hash, nil)}
+  end
+
+  def handle_event("close_world_detail", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:world_detail_open?, false)
+     |> assign(:world_detail_highlight_hash, nil)}
+  end
+
+  def handle_event("highlight_species_in_world", %{"hash" => hash}, socket)
+      when is_binary(hash) do
+    new_hash =
+      if socket.assigns.world_detail_highlight_hash == hash, do: nil, else: hash
+
+    {:noreply, assign(socket, :world_detail_highlight_hash, new_hash)}
+  end
+
   def handle_info({:tick, n}, socket) do
     throttle = Application.get_env(:lenies, :dashboard_throttle_ticks, 5)
     new_counter = socket.assigns.throttle_counter + 1
