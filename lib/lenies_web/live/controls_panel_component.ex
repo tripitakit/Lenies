@@ -45,7 +45,9 @@ defmodule LeniesWeb.ControlsPanelComponent do
      socket
      |> assign(:sterilize_confirming, false)
      |> assign(:paused?, false)
-     |> assign(:snapshot_status, nil)}
+     |> assign(:snapshot_status, nil)
+     |> assign(:show_custom_manage, false)
+     |> assign(:custom_seeds, custom_seeds())}
   end
 
   @impl true
@@ -117,6 +119,26 @@ defmodule LeniesWeb.ControlsPanelComponent do
           </button>
         </div>
 
+        <div class="flex items-center gap-2 text-xs">
+          <button
+            type="button"
+            phx-click="open_codeome_editor"
+            phx-target={@myself}
+            class="px-2 py-0.5 border border-cyan-500/60 text-cyan-200 hover:bg-cyan-900/40"
+          >
+            + New Seed
+          </button>
+
+          <button
+            type="button"
+            phx-click="toggle_custom_manage"
+            phx-target={@myself}
+            class="px-2 py-0.5 border border-cyan-500/30 hover:bg-cyan-500/10"
+          >
+            Manage
+          </button>
+        </div>
+
         <form
           phx-submit="spawn_seed"
           phx-target={@myself}
@@ -128,6 +150,9 @@ defmodule LeniesWeb.ControlsPanelComponent do
             <select name="seed_id" class="flex-1 text-xs">
               <%= for s <- Lenies.Seeds.all() do %>
                 <option value={Atom.to_string(s.id)}>{s.name}</option>
+              <% end %>
+              <%= for s <- @custom_seeds do %>
+                <option value={"custom:#{s.id}"}>★ {s.name}</option>
               <% end %>
             </select>
           </label>
@@ -152,6 +177,30 @@ defmodule LeniesWeb.ControlsPanelComponent do
             </button>
           </label>
         </form>
+
+        <%= if @show_custom_manage do %>
+          <div class="text-[10px] border border-cyan-500/20 p-2 mt-1 flex flex-col gap-1">
+            <%= for s <- @custom_seeds do %>
+              <div class="flex items-center gap-2">
+                <span class="inline-block w-2 h-2" style={"background:#{s.color_hex}"}></span>
+                <span class="flex-1 truncate">{s.name}</span>
+                <button
+                  type="button"
+                  phx-click="delete_custom_seed"
+                  phx-value-id={s.id}
+                  phx-target={@myself}
+                  class="px-1 hover:text-rose-300"
+                  title="Delete"
+                >
+                  ⨯
+                </button>
+              </div>
+            <% end %>
+            <%= if @custom_seeds == [] do %>
+              <div class="opacity-50">No custom seeds yet.</div>
+            <% end %>
+          </div>
+        <% end %>
 
         <form
           phx-submit="snapshot_action"
@@ -259,6 +308,30 @@ defmodule LeniesWeb.ControlsPanelComponent do
     end
   end
 
+  def handle_event("spawn_seed", %{"seed_id" => "custom:" <> id, "count" => count_str}, socket) do
+    case Lenies.Seeds.CustomStore.get(id) do
+      %{} = seed ->
+        codeome = Lenies.Codeome.from_list(seed.opcodes)
+        hash = Lenies.Codeome.hash(codeome)
+        Lenies.SpeciesColor.set_override(hash, seed.color_hex)
+
+        count = String.to_integer(count_str) |> max(1) |> min(50)
+        dirs = [:n, :s, :e, :w]
+
+        for _ <- 1..count do
+          Lenies.World.spawn_lenie(codeome,
+            energy: seed.energy_default,
+            dir: Enum.random(dirs)
+          )
+        end
+
+      nil ->
+        :ok
+    end
+
+    {:noreply, socket}
+  end
+
   def handle_event("spawn_seed", %{"seed_id" => seed_id_str, "count" => count_str}, socket) do
     seed_id = String.to_existing_atom(seed_id_str)
     count = String.to_integer(count_str) |> max(1) |> min(50)
@@ -305,6 +378,31 @@ defmodule LeniesWeb.ControlsPanelComponent do
       end
 
     {:noreply, assign(socket, :snapshot_status, status)}
+  end
+
+  def handle_event("open_codeome_editor", _params, socket) do
+    send(self(), :open_codeome_editor)
+    {:noreply, socket}
+  end
+
+  def handle_event("toggle_custom_manage", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:show_custom_manage, !socket.assigns.show_custom_manage)
+     |> assign(:custom_seeds, custom_seeds())}
+  end
+
+  def handle_event("delete_custom_seed", %{"id" => id}, socket) do
+    :ok = Lenies.Seeds.CustomStore.delete(id)
+    {:noreply, assign(socket, :custom_seeds, custom_seeds())}
+  end
+
+  defp custom_seeds do
+    if Process.whereis(Lenies.Seeds.CustomStore) do
+      Lenies.Seeds.CustomStore.all()
+    else
+      []
+    end
   end
 
   defp tunable_params, do: @tunable_params
