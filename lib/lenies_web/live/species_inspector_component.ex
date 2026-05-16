@@ -261,9 +261,16 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
   @impl true
   def render(assigns) do
     ~H"""
+    <%= if @edit_mode do %>
+      <div class="codeome-editor-backdrop"></div>
+    <% end %>
     <aside
       id="species-inspector"
-      class="panel w-[320px] shrink-0 flex flex-col gap-2 p-3 min-h-0"
+      class={[
+        "panel flex flex-col gap-2 min-h-0",
+        @edit_mode && "codeome-editor-modal p-4",
+        !@edit_mode && "w-[320px] shrink-0 p-3"
+      ]}
     >
       <header class="flex items-center gap-2">
         <%= if @editor_mode == :new_seed do %>
@@ -540,19 +547,109 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
         </div>
       <% end %>
 
-      <div class="flex-1 min-h-0 overflow-auto">
-        <div
-          class="codeome-blocks"
-          id={"codeome-blocks-#{@selected_hash || "new_seed"}"}
-          phx-hook={@edit_mode && "CodeomeSortable"}
-        >
+      <div class={[
+        "flex-1 min-h-0",
+        @edit_mode && "codeome-editor-body grid gap-3 min-w-0",
+        !@edit_mode && "overflow-auto"
+      ]}>
+        <%= if @edit_mode do %>
+          <section class="codeome-palette-pane min-h-0">
+            <div class="codeome-palette-pane-title">Opcodes — drag to insert</div>
+            <div
+              class="codeome-palette"
+              id="palette-grid"
+              phx-hook="CodeomePalette"
+            >
+              <%= for {category, ops} <- grouped_opcodes() do %>
+                <div class="palette-category">
+                  <div class="palette-category-label">{category}</div>
+                  <div class="palette-category-chips">
+                    <%= for op <- ops do %>
+                      <div
+                        class={"palette-chip op op-" <> Atom.to_string(Disassembler.opcode_class(op))}
+                        data-opcode={Atom.to_string(op)}
+                      >
+                        {Atom.to_string(op) |> String.upcase()}
+                      </div>
+                    <% end %>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          </section>
+        <% end %>
+
+        <section class={[
+          "min-h-0 min-w-0",
+          @edit_mode && "codeome-listing-pane overflow-auto"
+        ]}>
           <%= if @edit_mode do %>
-            <%= for {opcode, idx} <- Enum.with_index(@buffer) do %>
+            <div class="codeome-listing-pane-title">
+              Codeome — {length(@buffer)} ops
+            </div>
+          <% end %>
+          <div
+            class="codeome-blocks"
+            id={"codeome-blocks-#{@selected_hash || "new_seed"}"}
+            phx-hook={@edit_mode && "CodeomeSortable"}
+          >
+            <%= if @edit_mode do %>
+              <%= for {opcode, idx} <- Enum.with_index(@buffer) do %>
+                <div class="codeome-insert-slot">
+                  <button
+                    type="button"
+                    phx-click="open_picker"
+                    phx-value-index={idx}
+                    phx-value-mode="insert"
+                    phx-target={@myself}
+                    class="codeome-insert-btn"
+                  >
+                    +
+                  </button>
+                </div>
+
+                <div
+                  class={"codeome-block codeome-block-editable op op-" <> Atom.to_string(Disassembler.opcode_class(opcode))}
+                  data-idx={idx}
+                >
+                  <span class="codeome-drag-handle" title="Drag to reorder">≡</span>
+                  <span class="codeome-block-idx">
+                    {String.pad_leading(Integer.to_string(idx), 3, "0")}
+                  </span>
+                  <span class="codeome-block-name">
+                    {Atom.to_string(opcode) |> String.upcase()}
+                  </span>
+                  <span class="codeome-block-actions">
+                    <button
+                      type="button"
+                      phx-click="open_picker"
+                      phx-value-index={idx}
+                      phx-value-mode="replace"
+                      phx-target={@myself}
+                      class="codeome-action-btn"
+                      title="Replace"
+                    >
+                      ↺
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="edit_delete"
+                      phx-value-index={idx}
+                      phx-target={@myself}
+                      class="codeome-action-btn"
+                      title="Delete"
+                    >
+                      ⨯
+                    </button>
+                  </span>
+                </div>
+              <% end %>
+
               <div class="codeome-insert-slot">
                 <button
                   type="button"
                   phx-click="open_picker"
-                  phx-value-index={idx}
+                  phx-value-index={length(@buffer)}
                   phx-value-mode="insert"
                   phx-target={@myself}
                   class="codeome-insert-btn"
@@ -560,94 +657,21 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
                   +
                 </button>
               </div>
-
-              <div
-                class={"codeome-block codeome-block-editable op op-" <> Atom.to_string(Disassembler.opcode_class(opcode))}
-                data-idx={idx}
-              >
-                <span class="codeome-drag-handle" title="Drag to reorder">≡</span>
-                <span class="codeome-block-idx">
-                  {String.pad_leading(Integer.to_string(idx), 3, "0")}
-                </span>
-                <span class="codeome-block-name">
-                  {Atom.to_string(opcode) |> String.upcase()}
-                </span>
-                <span class="codeome-block-actions">
-                  <button
-                    type="button"
-                    phx-click="open_picker"
-                    phx-value-index={idx}
-                    phx-value-mode="replace"
-                    phx-target={@myself}
-                    class="codeome-action-btn"
-                    title="Replace"
-                  >
-                    ↺
-                  </button>
-                  <button
-                    type="button"
-                    phx-click="edit_delete"
-                    phx-value-index={idx}
-                    phx-target={@myself}
-                    class="codeome-action-btn"
-                    title="Delete"
-                  >
-                    ⨯
-                  </button>
-                </span>
-              </div>
+            <% else %>
+              <%= for line <- @codeome_lines do %>
+                <div class={"codeome-block op op-" <> Atom.to_string(Disassembler.opcode_class(line.opcode))}>
+                  <span class="codeome-block-idx">
+                    {String.pad_leading(Integer.to_string(line.index), 3, "0")}
+                  </span>
+                  <span class="codeome-block-name">
+                    {Atom.to_string(line.opcode) |> String.upcase()}
+                  </span>
+                </div>
+              <% end %>
             <% end %>
-
-            <div class="codeome-insert-slot">
-              <button
-                type="button"
-                phx-click="open_picker"
-                phx-value-index={length(@buffer)}
-                phx-value-mode="insert"
-                phx-target={@myself}
-                class="codeome-insert-btn"
-              >
-                +
-              </button>
-            </div>
-          <% else %>
-            <%= for line <- @codeome_lines do %>
-              <div class={"codeome-block op op-" <> Atom.to_string(Disassembler.opcode_class(line.opcode))}>
-                <span class="codeome-block-idx">
-                  {String.pad_leading(Integer.to_string(line.index), 3, "0")}
-                </span>
-                <span class="codeome-block-name">
-                  {Atom.to_string(line.opcode) |> String.upcase()}
-                </span>
-              </div>
-            <% end %>
-          <% end %>
-        </div>
+          </div>
+        </section>
       </div>
-
-      <%= if @edit_mode do %>
-        <div
-          class="codeome-palette"
-          id="palette-grid"
-          phx-hook="CodeomePalette"
-        >
-          <%= for {category, ops} <- grouped_opcodes() do %>
-            <div class="palette-category">
-              <div class="palette-category-label">{category}</div>
-              <div class="palette-category-chips">
-                <%= for op <- ops do %>
-                  <div
-                    class={"palette-chip op op-" <> Atom.to_string(Disassembler.opcode_class(op))}
-                    data-opcode={Atom.to_string(op)}
-                  >
-                    {Atom.to_string(op) |> String.upcase()}
-                  </div>
-                <% end %>
-              </div>
-            </div>
-          <% end %>
-        </div>
-      <% end %>
     </aside>
     """
   end
