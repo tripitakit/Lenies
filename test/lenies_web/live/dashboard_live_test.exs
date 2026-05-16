@@ -396,6 +396,16 @@ defmodule LeniesWeb.DashboardLiveTest do
       assert html =~ ~s(id="world-detail")
     end
 
+    test "clicking the ⛶ World detail button opens the modal", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/")
+
+      view
+      |> element("button#world-detail-open")
+      |> render_click()
+
+      assert render(view) =~ ~s(id="world-detail")
+    end
+
     test "close_world_detail event clears the flag and the highlight", %{conn: conn} do
       {:ok, view, _} = live(conn, "/")
       send(view.pid, :open_world_detail)

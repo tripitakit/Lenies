@@ -137,6 +137,17 @@ defmodule LeniesWeb.ControlsPanelComponent do
           </button>
 
           <button
+            id="world-detail-open"
+            type="button"
+            phx-click="open_world_detail"
+            phx-target={@myself}
+            class="px-2 py-0.5 border border-cyan-500/60 text-cyan-200 hover:bg-cyan-900/40"
+            title="Open the zoomed world detail view"
+          >
+            ⛶ World detail
+          </button>
+
+          <button
             type="button"
             phx-click="toggle_custom_manage"
             phx-target={@myself}
@@ -389,6 +400,11 @@ defmodule LeniesWeb.ControlsPanelComponent do
 
   def handle_event("open_codeome_editor", _params, socket) do
     send(self(), :open_codeome_editor)
+    {:noreply, socket}
+  end
+
+  def handle_event("open_world_detail", _params, socket) do
+    send(self(), :open_world_detail)
     {:noreply, socket}
   end
 
