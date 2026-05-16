@@ -261,9 +261,6 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
   @impl true
   def render(assigns) do
     ~H"""
-    <%= if @edit_mode do %>
-      <div class="codeome-editor-backdrop"></div>
-    <% end %>
     <aside
       id="species-inspector"
       class={[

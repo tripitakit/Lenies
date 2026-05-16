@@ -519,21 +519,18 @@
 }
 
 /* ----- Codeome editor: fullscreen modal layout ----- */
-.lenies-dashboard .codeome-editor-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(2, 6, 23, 0.7);
-  backdrop-filter: blur(2px);
-  z-index: 49;
-}
-
+/* The backdrop is rendered via a huge box-shadow on the modal itself,
+   so we keep the LiveComponent's single-root requirement (Phoenix LiveView
+   1.1: "Stateful components must have a single static HTML tag at the root"). */
 .lenies-dashboard .codeome-editor-modal {
   position: fixed;
   inset: 1.5rem;
   width: auto;
   z-index: 50;
   background: rgba(15, 23, 42, 0.97);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.7),
+    0 0 0 100vmax rgba(2, 6, 23, 0.7);
   overflow: hidden;
 }
 

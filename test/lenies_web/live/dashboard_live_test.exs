@@ -309,6 +309,43 @@ defmodule LeniesWeb.DashboardLiveTest do
       send(view.pid, {:editor_mode, nil})
       refute render(view) =~ ~s(id="species-inspector")
     end
+
+    # Regression: the SpeciesInspectorComponent is stateful, so its template
+    # MUST have exactly one static HTML tag at the root. A previous version
+    # rendered a sibling backdrop <div> alongside the <aside> when in edit
+    # mode, causing every render to crash with
+    # "Stateful components must have a single static HTML tag at the root".
+    test "inspector renders in modal mode (no crash) when editor opens", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/")
+
+      view
+      |> element("button", "+ New Seed")
+      |> render_click()
+
+      html = render(view)
+      assert html =~ ~s(id="species-inspector")
+      assert html =~ "codeome-editor-modal"
+      # palette must be visible in modal layout
+      assert html =~ ~s(id="palette-grid")
+    end
+
+    test "clicking a species row renders the sidebar inspector (not the modal)", %{conn: conn} do
+      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-MM", lineage: {nil, 0}}})
+
+      {:ok, view, _} = live(conn, "/")
+
+      html =
+        view
+        |> element("tr[phx-click='select_species'][phx-value-hash='HASH-MM']")
+        |> render_click()
+
+      assert html =~ ~s(id="species-inspector")
+      refute html =~ "codeome-editor-modal"
+      assert html =~ "w-[320px]"
+      # No spurious "Discard edits?" should fire: the dashboard root must not
+      # carry the dirty flag the ConfirmAction JS hook keys off of.
+      refute html =~ ~s(data-inspector-dirty="true")
+    end
   end
 
   describe "controls panel — new seed entry point" do
