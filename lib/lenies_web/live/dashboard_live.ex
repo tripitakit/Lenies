@@ -288,20 +288,14 @@ defmodule LeniesWeb.DashboardLive do
             />
           <% end %>
           <%= if @world_detail_open? do %>
-            <aside id="world-detail" class="panel codeome-editor-modal world-detail-modal flex flex-col gap-2 p-4">
-              <header class="flex items-center gap-2">
-                <h2 class="text-xs flex-1">World detail</h2>
-                <button
-                  id="world-detail-close"
-                  type="button"
-                  phx-click="close_world_detail"
-                  class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
-                  title="Close"
-                >
-                  ×
-                </button>
-              </header>
-            </aside>
+            <.live_component
+              module={LeniesWeb.WorldDetailComponent}
+              id="world-detail"
+              species={@species}
+              species_total={@species_total}
+              highlight_hash={@world_detail_highlight_hash}
+              grid={@grid}
+            />
           <% end %>
         </div>
 
