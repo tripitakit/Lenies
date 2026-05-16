@@ -17,11 +17,19 @@ const CodeomeSortable = {
   },
 
   // LiveView morphdom updates the children of the .codeome-blocks element
-  // in place when the buffer changes. SortableJS adapts to the new DOM on
-  // the next drag event by re-reading the element list, so we deliberately
-  // do nothing here. Tearing down and reattaching on every update would
-  // break an in-progress drag.
-  updated() {},
+  // in place when the buffer changes. SortableJS normally adapts to the
+  // new DOM on the next drag event, but in two edge cases the Sortable
+  // instance gets out of sync and silently rejects drops:
+  //   1. Closing the editor (cancel/save) and reopening it on a different
+  //      flow can leave the previous Sortable still bound to the same DOM
+  //      element if Phoenix doesn't fire destroyed()/mounted().
+  //   2. enter_edit → buffer suddenly has N children where it had 0, and
+  //      SortableJS's cached child list goes stale.
+  // Re-attach defensively if we somehow lost the instance.
+  updated() {
+    console.log("[CodeomeSortable] updated", { id: this.el.id, hasSortable: !!this.sortable, children: this.el.children.length });
+    if (!this.sortable) this.attach();
+  },
 
   destroyed() {
     console.log("[CodeomeSortable] destroyed", { id: this.el.id });
@@ -45,6 +53,12 @@ const CodeomeSortable = {
       // is too tight when the empty .codeome-blocks has a tall flex
       // surface but no children to anchor the insert point.
       emptyInsertThreshold: 20,
+      // Explicitly accept every move into this sortable. SortableJS's
+      // default `onMove` returns `true`, but being explicit means cross-
+      // list adds from the palette (which carry a `.palette-chip` class,
+      // not matching this sortable's `draggable` selector) are guaranteed
+      // not to be silently rejected by any future option tweak.
+      onMove: () => true,
       onEnd: (evt) => {
         // SortableJS gives oldDraggableIndex/newDraggableIndex counting only
         // elements matching the `draggable` selector — these correspond

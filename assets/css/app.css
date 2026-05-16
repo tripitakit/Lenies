@@ -534,3 +534,17 @@
 .lenies-dashboard .codeome-editor-modal .codeome-listing-pane .codeome-blocks:empty {
   border: 1px dashed rgba(34, 211, 238, 0.25);
 }
+
+/* Insert-slot in modal mode: a visible thin gap between blocks. Without
+   a real height the slots are 0px tall and the cursor can't land on
+   them — SortableJS then has no hit area between adjacent blocks and
+   drops in the gap silently fail. */
+.lenies-dashboard .codeome-editor-modal .codeome-insert-slot {
+  min-height: 8px;
+  border-radius: 2px;
+  transition: background 80ms ease;
+}
+
+.lenies-dashboard .codeome-editor-modal .codeome-insert-slot:hover {
+  background: rgba(34, 211, 238, 0.08);
+}
