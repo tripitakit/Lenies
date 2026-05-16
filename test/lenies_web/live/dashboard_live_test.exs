@@ -417,6 +417,59 @@ defmodule LeniesWeb.DashboardLiveTest do
       view |> element("button#world-detail-close") |> render_click()
       refute render(view) =~ ~s(id="world-detail")
     end
+
+    test "clicking a species row sets the highlight on the canvas", %{conn: conn} do
+      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-WD-A", lineage: {nil, 0}}})
+
+      {:ok, view, _} = live(conn, "/")
+      send(view.pid, :open_world_detail)
+
+      html =
+        view
+        |> element("button[phx-click='highlight_species_in_world'][phx-value-hash='HASH-WD-A']")
+        |> render_click()
+
+      hue = Lenies.SpeciesColor.hue_byte("HASH-WD-A")
+      assert html =~ ~s(data-highlight-hue="#{hue}")
+    end
+
+    test "clicking the same species row twice clears the highlight", %{conn: conn} do
+      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-WD-B", lineage: {nil, 0}}})
+
+      {:ok, view, _} = live(conn, "/")
+      send(view.pid, :open_world_detail)
+
+      view
+      |> element("button[phx-click='highlight_species_in_world'][phx-value-hash='HASH-WD-B']")
+      |> render_click()
+
+      html =
+        view
+        |> element("button[phx-click='highlight_species_in_world'][phx-value-hash='HASH-WD-B']")
+        |> render_click()
+
+      assert html =~ ~s(data-highlight-hue="0")
+    end
+
+    test "clicking a different species row swaps the highlight", %{conn: conn} do
+      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-WD-X", lineage: {nil, 0}}})
+      :ets.insert(:lenies, {"L2", %{id: "L2", codeome_hash: "HASH-WD-Y", lineage: {nil, 0}}})
+
+      {:ok, view, _} = live(conn, "/")
+      send(view.pid, :open_world_detail)
+
+      view
+      |> element("button[phx-click='highlight_species_in_world'][phx-value-hash='HASH-WD-X']")
+      |> render_click()
+
+      html =
+        view
+        |> element("button[phx-click='highlight_species_in_world'][phx-value-hash='HASH-WD-Y']")
+        |> render_click()
+
+      hue_y = Lenies.SpeciesColor.hue_byte("HASH-WD-Y")
+      assert html =~ ~s(data-highlight-hue="#{hue_y}")
+    end
   end
 
   describe "controls panel — custom seed catalog" do
