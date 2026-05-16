@@ -250,15 +250,18 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       assert html =~ ~s(phx-click="edit_delete")
     end
 
-    test "in edit mode, insert slots exist between blocks for drag&drop hit area" do
+    test "in edit mode, every buffer opcode is rendered as a codeome-block-editable" do
       html = render_seeded(base_assigns(), edit_mode: true, buffer: [:push0, :push1, :store])
-      assert html =~ "codeome-insert-slot"
+      # Each opcode → a codeome-block-editable; SortableJS handles inter-block
+      # drop positions naturally from the cursor's Y inside a block, so we no
+      # longer render explicit codeome-insert-slot elements.
+      assert length(Regex.scan(~r/codeome-block-editable/, html)) == 3
+      refute html =~ "codeome-insert-slot"
     end
 
     test "in read mode, action buttons are absent" do
       html = render_component(SpeciesInspectorComponent, base_assigns())
       refute html =~ ~s(phx-click="edit_delete")
-      refute html =~ "codeome-insert-slot"
     end
 
     # The legacy "picker" popup (a sub-panel that appeared on the right when

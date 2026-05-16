@@ -518,8 +518,6 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
           >
             <%= if @edit_mode do %>
               <%= for {opcode, idx} <- Enum.with_index(@buffer) do %>
-                <div class="codeome-insert-slot"></div>
-
                 <div
                   class={"codeome-block codeome-block-editable op op-" <> Atom.to_string(Disassembler.opcode_class(opcode))}
                   data-idx={idx}
@@ -545,8 +543,6 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
                   </span>
                 </div>
               <% end %>
-
-              <div class="codeome-insert-slot"></div>
             <% else %>
               <%= for line <- @codeome_lines do %>
                 <div class={"codeome-block op op-" <> Atom.to_string(Disassembler.opcode_class(line.opcode))}>

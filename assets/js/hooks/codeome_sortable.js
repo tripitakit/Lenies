@@ -12,6 +12,7 @@ import Sortable from "../../vendor/sortable.js";
 
 const CodeomeSortable = {
   mounted() {
+    console.log("[CodeomeSortable] mounted", { id: this.el.id, children: this.el.children.length });
     this.attach();
   },
 
@@ -23,6 +24,7 @@ const CodeomeSortable = {
   updated() {},
 
   destroyed() {
+    console.log("[CodeomeSortable] destroyed", { id: this.el.id });
     if (this.sortable) {
       this.sortable.destroy();
       this.sortable = null;
@@ -36,8 +38,6 @@ const CodeomeSortable = {
       animation: 120,
       handle: ".codeome-drag-handle",
       ghostClass: "codeome-block-ghost",
-      filter: ".codeome-insert-slot",
-      preventOnFilter: false,
       draggable: ".codeome-block-editable",
       group: { name: "codeome", pull: true, put: true },
       // Increase the pixel radius around an empty container's edge that

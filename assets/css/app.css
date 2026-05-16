@@ -365,15 +365,6 @@
   color: #22d3ee;
 }
 
-.lenies-dashboard .codeome-insert-slot {
-  height: 0;
-  position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: visible;
-}
-
 .lenies-dashboard .codeome-drag-handle {
   display: inline-flex;
   align-items: center;
@@ -531,21 +522,15 @@
    blocks container must fill the remaining vertical space so an empty
    buffer still has a non-zero drop surface for SortableJS — without
    this the container collapses to ~0px and the cursor never hovers
-   over it on drop. */
+   over it on drop. A wider gap between blocks gives SortableJS clean
+   insertion-line space, and a dashed border on an empty container
+   gives the user a visual drop hint. */
 .lenies-dashboard .codeome-editor-modal .codeome-listing-pane .codeome-blocks {
   flex: 1 1 auto;
   min-height: 80px;
+  gap: 4px;
 }
 
-/* Visual cue + reliable hit area when the codeome is empty in edit mode. */
-.lenies-dashboard .codeome-editor-modal .codeome-listing-pane .codeome-blocks:empty,
-.lenies-dashboard .codeome-editor-modal .codeome-listing-pane .codeome-blocks:has(> .codeome-insert-slot:only-child) {
+.lenies-dashboard .codeome-editor-modal .codeome-listing-pane .codeome-blocks:empty {
   border: 1px dashed rgba(34, 211, 238, 0.25);
-}
-
-/* The thin insert-slot gaps between blocks were height: 0 — invisible and
-   awkward to target on drag&drop. Give them a small but real height so
-   SortableJS hit-detection has a stable target between blocks. */
-.lenies-dashboard .codeome-editor-modal .codeome-insert-slot {
-  min-height: 6px;
 }
