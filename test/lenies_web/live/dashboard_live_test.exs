@@ -470,6 +470,22 @@ defmodule LeniesWeb.DashboardLiveTest do
       hue_y = Lenies.SpeciesColor.hue_byte("HASH-WD-Y")
       assert html =~ ~s(data-highlight-hue="#{hue_y}")
     end
+
+    test "render_frame events are still pushed while the modal is open", %{conn: conn} do
+      # Disable throttle so every tick triggers a push_event.
+      Application.put_env(:lenies, :dashboard_throttle_ticks, 1)
+
+      {:ok, view, _} = live(conn, "/")
+      send(view.pid, :open_world_detail)
+
+      # Force a tick to make sure the dashboard re-pushes.
+      Lenies.World.tick_now()
+      send(view.pid, {:tick, 1})
+
+      assert_push_event view, "render_frame", %{lenies: _}
+    after
+      Application.delete_env(:lenies, :dashboard_throttle_ticks)
+    end
   end
 
   describe "controls panel — custom seed catalog" do
