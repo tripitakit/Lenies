@@ -51,6 +51,13 @@ defmodule LeniesWeb.ControlsPanelComponent do
   end
 
   @impl true
+  def update(%{refresh_custom_seeds: true} = assigns, socket) do
+    {:ok,
+     socket
+     |> assign(Map.delete(assigns, :refresh_custom_seeds))
+     |> assign(:custom_seeds, custom_seeds())}
+  end
+
   def update(assigns, socket) do
     {:ok, assign(socket, assigns)}
   end
@@ -325,11 +332,11 @@ defmodule LeniesWeb.ControlsPanelComponent do
           )
         end
 
-      nil ->
-        :ok
-    end
+        {:noreply, socket}
 
-    {:noreply, socket}
+      nil ->
+        {:noreply, assign(socket, :custom_seeds, custom_seeds())}
+    end
   end
 
   def handle_event("spawn_seed", %{"seed_id" => seed_id_str, "count" => count_str}, socket) do
@@ -393,8 +400,10 @@ defmodule LeniesWeb.ControlsPanelComponent do
   end
 
   def handle_event("delete_custom_seed", %{"id" => id}, socket) do
-    :ok = Lenies.Seeds.CustomStore.delete(id)
-    {:noreply, assign(socket, :custom_seeds, custom_seeds())}
+    case Lenies.Seeds.CustomStore.delete(id) do
+      :ok -> {:noreply, assign(socket, :custom_seeds, custom_seeds())}
+      {:error, _} -> {:noreply, socket}
+    end
   end
 
   defp custom_seeds do

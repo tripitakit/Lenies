@@ -219,6 +219,10 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
         case Lenies.Seeds.CustomStore.save(seed) do
           :ok ->
             send(self(), {:editor_mode, nil})
+            Phoenix.LiveView.send_update(LeniesWeb.ControlsPanelComponent,
+              id: "controls",
+              refresh_custom_seeds: true
+            )
 
             {:noreply,
              socket

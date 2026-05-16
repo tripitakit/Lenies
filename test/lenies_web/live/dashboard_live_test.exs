@@ -342,6 +342,7 @@ defmodule LeniesWeb.DashboardLiveTest do
       {:ok, _} = Lenies.Seeds.CustomStore.start_link([])
 
       on_exit(fn ->
+        if pid = Process.whereis(Lenies.Seeds.CustomStore), do: Agent.stop(pid)
         File.rm(tmp_path)
         Application.delete_env(:lenies, :__test_user_seeds_file__)
       end)
