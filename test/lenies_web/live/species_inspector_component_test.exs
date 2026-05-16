@@ -91,6 +91,25 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       assert html =~ ~s(phx-click="select_species")
       assert html =~ ~s(phx-value-hash="abc12345abc12345")
     end
+
+    # Regression: the close × button used to carry an unconditional
+    # phx-hook="ConfirmAction" + data-confirm-when="..." that relied on a
+    # client-side querySelector("[data-inspector-dirty='true']") to suppress
+    # the prompt. That selector got stuck on stale DOM AND was independently
+    # short-circuited by phoenix_html's window-level data-confirm listener,
+    # which fires window.confirm() UNCONDITIONALLY on any element with that
+    # attribute. The confirm is now gated server-side by @dirty: the
+    # attribute is emitted only when there are real edits to discard, so
+    # phoenix_html stays silent when there is nothing to lose.
+    test "close × has NO data-confirm attribute when @dirty is false" do
+      html = render_seeded(base_assigns(), dirty: false)
+      refute html =~ "Discard codeome edits?"
+    end
+
+    test "close × emits data-confirm when @dirty is true (edit mode)" do
+      html = render_seeded(base_assigns(), edit_mode: true, dirty: true)
+      assert html =~ ~s(data-confirm="Discard codeome edits?")
+    end
   end
 
   describe "stats" do

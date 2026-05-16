@@ -2,8 +2,13 @@
 // window.confirm() before the click propagates to Phoenix LiveView's
 // phx-click handler. If the user cancels, the event is stopped.
 //
+// IMPORTANT: do NOT use `data-confirm` as the attribute name — phoenix_html.js
+// installs a window-level click listener that walks the DOM and fires
+// window.confirm() UNCONDITIONALLY on any element carrying `data-confirm`,
+// bypassing our conditional logic. We use `data-confirm-message` instead.
+//
 // Two modes:
-//   - Unconditional: data-confirm="message" — confirm fires on every click.
+//   - Unconditional: data-confirm-message="message" — confirm fires on every click.
 //   - Conditional:   data-confirm-when="<selector>" — confirm fires only
 //     if document.querySelector(<selector>) matches (e.g.
 //     "[data-inspector-dirty='true']" — fire only when the inspector has
@@ -12,13 +17,13 @@
 // Usage:
 //   <button phx-click="cancel_edit"
 //           phx-hook="ConfirmAction"
-//           data-confirm="Discard codeome edits?"
+//           data-confirm-message="Discard codeome edits?"
 //           data-confirm-when="[data-inspector-dirty='true']">
 
 const ConfirmAction = {
   mounted() {
     this.handler = (e) => {
-      const message = this.el.dataset.confirm;
+      const message = this.el.dataset.confirmMessage;
       if (!message) return;
 
       const selector = this.el.dataset.confirmWhen;

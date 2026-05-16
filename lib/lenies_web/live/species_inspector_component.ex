@@ -274,7 +274,9 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
           <span class="inline-block w-3 h-3 shrink-0 bg-slate-500"></span>
           <h2 class="text-xs flex-1 truncate">New Seed</h2>
           <button
+            id="inspector-close-new-seed"
             type="button"
+            data-confirm={if @dirty, do: "Discard codeome edits?"}
             phx-click="cancel_edit"
             phx-target={@myself}
             class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
@@ -300,9 +302,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
           </.link>
           <button
             id={"inspector-close-#{@selected_hash}"}
-            phx-hook="ConfirmAction"
-            data-confirm="Discard codeome edits?"
-            data-confirm-when="[data-inspector-dirty='true']"
+            data-confirm={if @dirty, do: "Discard codeome edits?"}
             phx-click="select_species"
             phx-value-hash={@selected_hash}
             class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
@@ -317,9 +317,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
           <button
             id={"inspector-cancel-#{@selected_hash || "new_seed"}"}
             type="button"
-            phx-hook="ConfirmAction"
-            data-confirm="Discard codeome edits?"
-            data-confirm-when="[data-inspector-dirty='true']"
+            data-confirm={if @dirty, do: "Discard codeome edits?"}
             phx-click="cancel_edit"
             phx-target={@myself}
             class="px-2 py-0.5 border border-slate-500 hover:bg-slate-700"
