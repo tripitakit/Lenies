@@ -10,7 +10,6 @@ defmodule LeniesWeb.WorldDetailComponentTest do
       %{
         id: "world-detail",
         species: [],
-        species_total: 0,
         highlight_hash: nil,
         grid: {256, 256}
       },

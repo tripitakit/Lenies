@@ -292,7 +292,6 @@ defmodule LeniesWeb.DashboardLive do
               module={LeniesWeb.WorldDetailComponent}
               id="world-detail"
               species={@species}
-              species_total={@species_total}
               highlight_hash={@world_detail_highlight_hash}
               grid={@grid}
             />
