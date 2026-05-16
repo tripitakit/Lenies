@@ -62,7 +62,6 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       |> Map.put_new(:edit_mode, false)
       |> Map.put_new(:buffer, [])
       |> Map.put_new(:dirty, false)
-      |> Map.put_new(:picker_open, nil)
       |> Map.put_new(:validation, {:ok, %{len: 0, non_nops: 0}})
       |> Map.put_new(:show_spawn_form, false)
       |> Map.put_new(:show_save_form, false)
@@ -245,14 +244,13 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
   end
 
   describe "edit operations" do
-    test "in edit mode, each block has delete and replace buttons" do
+    test "in edit mode, each block has a delete button" do
       html = render_seeded(base_assigns(), edit_mode: true, buffer: [:push0, :push1, :store])
 
       assert html =~ ~s(phx-click="edit_delete")
-      assert html =~ ~s(phx-click="open_picker")
     end
 
-    test "in edit mode, insert affordances exist between blocks" do
+    test "in edit mode, insert slots exist between blocks for drag&drop hit area" do
       html = render_seeded(base_assigns(), edit_mode: true, buffer: [:push0, :push1, :store])
       assert html =~ "codeome-insert-slot"
     end
@@ -260,26 +258,19 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
     test "in read mode, action buttons are absent" do
       html = render_component(SpeciesInspectorComponent, base_assigns())
       refute html =~ ~s(phx-click="edit_delete")
-      refute html =~ ~s(phx-click="open_picker")
       refute html =~ "codeome-insert-slot"
     end
 
-    test "the picker is hidden by default in edit mode" do
+    # The legacy "picker" popup (a sub-panel that appeared on the right when
+    # the user clicked + / ↺ between blocks) has been removed. Insertion is
+    # now done by dragging chips from the left palette directly into the
+    # listing; the picker, its `open_picker`/`close_picker`/`picker_choose`
+    # events, and the +/↺ buttons no longer exist.
+    test "no legacy picker UI nor open_picker handlers are rendered" do
       html = render_seeded(base_assigns(), edit_mode: true, buffer: [:push0, :push1, :store])
       refute html =~ "codeome-picker"
-    end
-
-    test "the picker is rendered when picker_open is set" do
-      html =
-        render_seeded(base_assigns(),
-          edit_mode: true,
-          buffer: [:push0, :push1, :store],
-          picker_open: %{index: 1, mode: :insert}
-        )
-
-      assert html =~ "codeome-picker"
-      assert html =~ "stack"
-      assert html =~ ~s(phx-click="picker_choose")
+      refute html =~ ~s(phx-click="open_picker")
+      refute html =~ ~s(phx-click="picker_choose")
     end
   end
 
