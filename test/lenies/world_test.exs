@@ -157,7 +157,11 @@ defmodule Lenies.WorldTest do
       original_eat_amount = Application.get_env(:lenies, :eat_amount)
       Application.put_env(:lenies, :eat_amount, 50)
 
-      on_exit(fn -> Application.put_env(:lenies, :eat_amount, original_eat_amount) end)
+      on_exit(fn ->
+        if original_eat_amount,
+          do: Application.put_env(:lenies, :eat_amount, original_eat_amount),
+          else: Application.delete_env(:lenies, :eat_amount)
+      end)
 
       # Plant a cell with carcass = 5 (less than eat_amount) and a hue marker
       :ets.insert(:cells, {{1, 1}, %Lenies.World.Cell{carcass: 5, carcass_hue: 137}})
@@ -173,7 +177,11 @@ defmodule Lenies.WorldTest do
       original_eat_amount = Application.get_env(:lenies, :eat_amount)
       Application.put_env(:lenies, :eat_amount, 3)
 
-      on_exit(fn -> Application.put_env(:lenies, :eat_amount, original_eat_amount) end)
+      on_exit(fn ->
+        if original_eat_amount,
+          do: Application.put_env(:lenies, :eat_amount, original_eat_amount),
+          else: Application.delete_env(:lenies, :eat_amount)
+      end)
 
       :ets.insert(:cells, {{2, 2}, %Lenies.World.Cell{carcass: 20, carcass_hue: 99}})
 
