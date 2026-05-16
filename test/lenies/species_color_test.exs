@@ -52,4 +52,63 @@ defmodule Lenies.SpeciesColorTest do
       assert SpeciesColor.hex("seed") == SpeciesColor.hex("seed")
     end
   end
+
+  describe "color overrides" do
+    setup do
+      # The override table is created in Lenies.Application — make sure it
+      # exists for these tests even when the app isn't fully started.
+      case :ets.info(:species_color_overrides) do
+        :undefined ->
+          :ets.new(:species_color_overrides, [:set, :named_table, :public, read_concurrency: true])
+
+        _ ->
+          :ok
+      end
+
+      on_exit(fn ->
+        try do
+          :ets.delete_all_objects(:species_color_overrides)
+        rescue
+          ArgumentError -> :ok
+        end
+      end)
+
+      :ok
+    end
+
+    test "set_override/2 then override/1 returns the hex" do
+      SpeciesColor.set_override("hash-x", "#abcdef")
+      assert SpeciesColor.override("hash-x") == "#abcdef"
+    end
+
+    test "override/1 returns nil when no override is set" do
+      assert SpeciesColor.override("never-set") == nil
+    end
+
+    test "hex/1 returns the override when set" do
+      SpeciesColor.set_override("hash-y", "#112233")
+      assert SpeciesColor.hex("hash-y") == "#112233"
+    end
+
+    test "hex/1 falls back to hash-derived when no override" do
+      derived = SpeciesColor.hex("hash-z")
+      SpeciesColor.set_override("hash-z", "#ff0000")
+      assert SpeciesColor.hex("hash-z") == "#ff0000"
+      SpeciesColor.clear_override("hash-z")
+      assert SpeciesColor.hex("hash-z") == derived
+    end
+
+    test "set_override/2 replaces an existing override for the same hash" do
+      SpeciesColor.set_override("hash-w", "#aaaaaa")
+      SpeciesColor.set_override("hash-w", "#bbbbbb")
+      assert SpeciesColor.override("hash-w") == "#bbbbbb"
+    end
+
+    test "multiple hashes have independent overrides" do
+      SpeciesColor.set_override("hash-a", "#111111")
+      SpeciesColor.set_override("hash-b", "#222222")
+      assert SpeciesColor.override("hash-a") == "#111111"
+      assert SpeciesColor.override("hash-b") == "#222222"
+    end
+  end
 end

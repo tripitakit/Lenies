@@ -26,10 +26,51 @@ defmodule Lenies.SpeciesColor do
     :erlang.phash2(hash, 255) + 1
   end
 
-  @doc "CSS hex color (#RRGGBB) for a species hash."
+  @doc """
+  Register a hex color override for a species hash. Overrides survive sterilize
+  but not app restart. The ETS table is created in `Lenies.Application.start/2`.
+  """
+  @spec set_override(binary(), String.t()) :: :ok
+  def set_override(hash, hex) when is_binary(hash) and is_binary(hex) do
+    if :ets.info(:species_color_overrides) != :undefined do
+      :ets.insert(:species_color_overrides, {hash, hex})
+    end
+
+    :ok
+  end
+
+  @doc "Remove a hex color override for a species hash."
+  @spec clear_override(binary()) :: :ok
+  def clear_override(hash) when is_binary(hash) do
+    if :ets.info(:species_color_overrides) != :undefined do
+      :ets.delete(:species_color_overrides, hash)
+    end
+
+    :ok
+  end
+
+  @doc "Read the hex color override for a hash, or `nil` if none is set."
+  @spec override(binary()) :: nil | String.t()
+  def override(hash) when is_binary(hash) do
+    case :ets.info(:species_color_overrides) do
+      :undefined ->
+        nil
+
+      _ ->
+        case :ets.lookup(:species_color_overrides, hash) do
+          [{^hash, hex}] -> hex
+          [] -> nil
+        end
+    end
+  end
+
+  @doc "CSS hex color (#RRGGBB) for a species hash. Honors per-hash overrides."
   @spec hex(binary()) :: String.t()
   def hex(hash) when is_binary(hash) do
-    hash |> hue_byte() |> byte_to_hex()
+    case override(hash) do
+      nil -> hash |> hue_byte() |> byte_to_hex()
+      explicit when is_binary(explicit) -> explicit
+    end
   end
 
   @doc """

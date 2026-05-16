@@ -7,6 +7,16 @@ defmodule Lenies.Application do
 
   @impl true
   def start(_type, _args) do
+    # Session-scoped color overrides; survives sterilize but not restart.
+    if :ets.info(:species_color_overrides) == :undefined do
+      :ets.new(:species_color_overrides, [
+        :set,
+        :named_table,
+        :public,
+        read_concurrency: true
+      ])
+    end
+
     children = [
       LeniesWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:lenies, :dns_cluster_query) || :ignore},
