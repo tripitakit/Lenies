@@ -550,6 +550,28 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
     end
   end
 
+  describe "blocks palette" do
+    test "renders the palette in edit mode" do
+      html =
+        render_seeded(base_assigns(),
+          edit_mode: true,
+          buffer: [:push0, :push0, :push0, :push0, :push0, :store],
+          validation: {:ok, %{len: 6, non_nops: 6}}
+        )
+
+      assert html =~ ~s(id="palette-grid")
+      assert html =~ ~s(phx-hook="CodeomePalette")
+      assert html =~ ~s(data-opcode="push0")
+      assert html =~ ~s(data-opcode="divide")
+      assert html =~ ~s(data-opcode="sense_front")
+    end
+
+    test "does NOT render the palette in read mode" do
+      html = render_component(SpeciesInspectorComponent, base_assigns())
+      refute html =~ ~s(id="palette-grid")
+    end
+  end
+
   describe "submit_spawn integration" do
     alias Lenies.World.Tables
 

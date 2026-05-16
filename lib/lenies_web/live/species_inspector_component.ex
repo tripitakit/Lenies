@@ -165,6 +165,12 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
     apply_buffer_change(socket, new_buffer)
   end
 
+  def handle_event("edit_insert", %{"index" => index, "opcode" => opcode_str}, socket) do
+    opcode = String.to_existing_atom(opcode_str)
+    new_buffer = LeniesWeb.CodeomeBuffer.insert(socket.assigns.buffer, index, opcode)
+    apply_buffer_change(socket, new_buffer)
+  end
+
   def handle_event("submit_spawn", %{"count" => count_str, "energy" => energy_str}, socket) do
     count = parse_clamped(count_str, 1, 50, 1)
     energy = parse_clamped(energy_str, 1, 1_000_000, 10_000)
@@ -608,6 +614,30 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
           <% end %>
         </div>
       </div>
+
+      <%= if @edit_mode do %>
+        <div
+          class="codeome-palette"
+          id="palette-grid"
+          phx-hook="CodeomePalette"
+        >
+          <%= for {category, ops} <- grouped_opcodes() do %>
+            <div class="palette-category">
+              <div class="palette-category-label">{category}</div>
+              <div class="palette-category-chips">
+                <%= for op <- ops do %>
+                  <div
+                    class={"palette-chip op op-" <> Atom.to_string(Disassembler.opcode_class(op))}
+                    data-opcode={Atom.to_string(op)}
+                  >
+                    {Atom.to_string(op) |> String.upcase()}
+                  </div>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
     </aside>
     """
   end

@@ -39,11 +39,14 @@ const CodeomeSortable = {
       filter: ".codeome-insert-slot",
       preventOnFilter: false,
       draggable: ".codeome-block-editable",
+      group: { name: "codeome", pull: true, put: true },
       onEnd: (evt) => {
         // SortableJS gives oldDraggableIndex/newDraggableIndex counting only
         // elements matching the `draggable` selector — these correspond
         // exactly to buffer positions because insert slots are filtered out.
+        // Gate on from === to so cross-list adds (handled by onAdd) are skipped.
         if (
+          evt.from === evt.to &&
           typeof evt.oldDraggableIndex === "number" &&
           typeof evt.newDraggableIndex === "number" &&
           evt.oldDraggableIndex !== evt.newDraggableIndex
@@ -57,6 +60,16 @@ const CodeomeSortable = {
             to: evt.newDraggableIndex,
           });
         }
+      },
+      onAdd: (evt) => {
+        const opcode = evt.item?.dataset?.opcode;
+        if (opcode && typeof evt.newDraggableIndex === "number") {
+          this.pushEventTo(this.el, "edit_insert", {
+            index: evt.newDraggableIndex,
+            opcode: opcode,
+          });
+        }
+        evt.item.remove();
       },
     });
   },

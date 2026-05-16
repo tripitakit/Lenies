@@ -472,3 +472,50 @@
 }
 
 /* This file is for your main application CSS */
+
+.lenies-dashboard .codeome-palette {
+  flex-shrink: 0;
+  border-top: 1px solid rgba(34, 211, 238, 0.2);
+  padding-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 9px;
+}
+
+.lenies-dashboard .palette-category-label {
+  opacity: 0.55;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 9px;
+  margin-bottom: 1px;
+}
+
+.lenies-dashboard .palette-category-chips {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+}
+
+.lenies-dashboard .palette-chip {
+  padding: 1px 4px;
+  border: 1px solid currentColor;
+  background: rgba(2, 6, 23, 0.6);
+  font-family: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  cursor: grab;
+  text-align: center;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lenies-dashboard .palette-chip:hover {
+  background: rgba(34, 211, 238, 0.15);
+}
+
+.lenies-dashboard .palette-chip.sortable-chosen {
+  cursor: grabbing;
+}
