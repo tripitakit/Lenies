@@ -38,26 +38,41 @@ defmodule Lenies.Seeds.CustomStore do
     Agent.get(__MODULE__, fn seeds -> Enum.find(seeds, &(&1.id == id)) end)
   end
 
-  @spec save(seed()) :: :ok | {:error, :invalid_name | :invalid_color | :invalid_opcodes}
+  @spec save(seed()) :: :ok | {:error, :invalid_name | :invalid_color | :invalid_opcodes | :io_error}
   def save(%{} = seed) do
     with :ok <- validate_name(seed),
          :ok <- validate_color(seed),
          :ok <- validate_opcodes(seed) do
-      Agent.update(__MODULE__, fn seeds ->
-        new_seeds = [seed | Enum.reject(seeds, &(&1.id == seed.id))]
-        write_to_disk(new_seeds)
-        new_seeds
-      end)
+      new_seeds =
+        Agent.get_and_update(__MODULE__, fn seeds ->
+          ns = [seed | Enum.reject(seeds, &(&1.id == seed.id))]
+          {ns, ns}
+        end)
+
+      safe_write(new_seeds)
     end
   end
 
-  @spec delete(String.t()) :: :ok
+  @spec delete(String.t()) :: :ok | {:error, :io_error}
   def delete(id) when is_binary(id) do
-    Agent.update(__MODULE__, fn seeds ->
-      new_seeds = Enum.reject(seeds, &(&1.id == id))
-      write_to_disk(new_seeds)
-      new_seeds
-    end)
+    new_seeds =
+      Agent.get_and_update(__MODULE__, fn seeds ->
+        ns = Enum.reject(seeds, &(&1.id == id))
+        {ns, ns}
+      end)
+
+    safe_write(new_seeds)
+  end
+
+  # ----- write safety -----
+
+  defp safe_write(seeds) do
+    try do
+      write_to_disk(seeds)
+      :ok
+    rescue
+      _e in [File.Error] -> {:error, :io_error}
+    end
   end
 
   # ----- validation -----
@@ -131,7 +146,10 @@ defmodule Lenies.Seeds.CustomStore do
         opcodes: ops
       }
     rescue
-      ArgumentError -> nil
+      ArgumentError ->
+        require Logger
+        Logger.warning("Lenies.Seeds.CustomStore: dropping seed #{inspect(m["id"])} — unknown opcode(s)")
+        nil
     end
   end
 
