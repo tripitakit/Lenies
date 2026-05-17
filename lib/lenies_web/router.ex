@@ -20,6 +20,8 @@ defmodule LeniesWeb.Router do
     live "/", DashboardLive, :index
     live "/lenie/:id", LenieInspectorLive, :show
     live "/species/:hash", SpeciesLive, :show
+    live "/editor/new", EditorLive, :new
+    live "/editor/edit/:hash", EditorLive, :edit
   end
 
   # Other scopes may use custom stacks.
