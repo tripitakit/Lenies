@@ -1,16 +1,16 @@
 defmodule Lenies.Interpreter.State do
   @moduledoc """
-  Stato di esecuzione della VM di un Lenie.
+  Execution state of a Lenie's VM.
 
-  Campi:
-  - `ip`: instruction pointer nel Codeome (intero non negativo, wraps modulo size)
-  - `stack`: lista di interi, max 16 elementi (top = head)
-  - `slots`: 4 slot di memoria locale (`%{0..3 => integer}`)
-  - `dir`: orientamento corrente `:n | :e | :s | :w`
-  - `energy`: energia residua (float, sottratta dai costi opcode)
-  - `age`: incrementato di 1 a ogni batch di K istruzioni (tick metabolico)
-  - `pos`: posizione `{x, y}` sulla griglia
-  - `call_stack`: storia IP per `:call_t` / `:ret`
+  Fields:
+  - `ip`: instruction pointer into the Codeome (non-negative integer, wraps modulo size)
+  - `stack`: list of integers, max 16 elements (top = head)
+  - `slots`: 4 local memory slots (`%{0..3 => integer}`)
+  - `dir`: current orientation `:n | :e | :s | :w`
+  - `energy`: remaining energy (float, decremented by opcode costs)
+  - `age`: incremented by 1 on each batch of K instructions (metabolic tick)
+  - `pos`: position `{x, y}` on the grid
+  - `call_stack`: IP history for `:call_t` / `:ret`
   """
 
   @type t :: %__MODULE__{
@@ -56,7 +56,7 @@ defmodule Lenies.Interpreter.State do
 
     new_stack =
       if length(new_stack) > @stack_max do
-        # rimuovi il bottom (più vecchio)
+        # remove the bottom (oldest) element
         Enum.take(new_stack, @stack_max)
       else
         new_stack
@@ -66,9 +66,9 @@ defmodule Lenies.Interpreter.State do
   end
 
   @doc """
-  Pop top dello stack. Su stack vuoto ritorna `{0, state}` — questo è
-  voluto: il Codeome può evolvere a fare pop su stack vuoto, dobbiamo
-  essere tolleranti (non crashare).
+  Pops the top of the stack. On an empty stack returns `{0, state}` — this is
+  intentional: the Codeome may evolve to pop from an empty stack, so we must
+  be tolerant (no crash).
   """
   @spec pop(t()) :: {integer(), t()}
   def pop(%__MODULE__{stack: []} = s), do: {0, s}
@@ -103,7 +103,7 @@ defmodule Lenies.Interpreter.State do
   @spec apply_cost(t(), float()) :: t()
   def apply_cost(%__MODULE__{energy: e} = s, cost), do: %{s | energy: e - cost}
 
-  @doc "Avanza l'IP di `delta` posizioni, con wrap modulo `codeome_size`."
+  @doc "Advances the IP by `delta` positions, wrapping modulo `codeome_size`."
   @spec advance_ip(t(), non_neg_integer(), integer()) :: t()
   def advance_ip(%__MODULE__{ip: ip} = s, codeome_size, delta) do
     %{s | ip: Integer.mod(ip + delta, codeome_size)}

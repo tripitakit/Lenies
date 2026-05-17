@@ -1,12 +1,11 @@
 defmodule Lenies.Interpreter.Template do
   @moduledoc """
-  Template addressing alla Tierra: i salti leggono il template di `:nop_0`/`:nop_1`
-  che li segue, poi cercano nel Codeome il complemento (bit invertiti) entro un
-  raggio limitato. Vedi spec §4.2.
+  Tierra-style template addressing: jump instructions read the `:nop_0`/`:nop_1`
+  template that follows them, then search the Codeome for the complement (bits
+  flipped) within a limited radius. See spec §4.2.
 
-  Una mutazione su un :nop _può_ avere effetto selettivo (modifica quale
-  template fa match) ma _può_ anche essere genuinamente neutrale (junk DNA).
-  Vedi spec §5.3.
+  A mutation on a :nop _may_ have a selective effect (changes which template
+  matches) but _may_ also be genuinely neutral (junk DNA). See spec §5.3.
   """
 
   alias Lenies.Codeome
@@ -14,10 +13,10 @@ defmodule Lenies.Interpreter.Template do
   @type template :: [atom()]
 
   @doc """
-  Estrae il template che inizia in posizione `from` del Codeome.
+  Extracts the template starting at position `from` in the Codeome.
 
-  Restituisce `{template_list, length}`. Il template è la sequenza più lunga
-  di `:nop_0`/`:nop_1` da `from`, cappata a `max_len`.
+  Returns `{template_list, length}`. The template is the longest contiguous
+  sequence of `:nop_0`/`:nop_1` starting at `from`, capped at `max_len`.
   """
   @spec extract(Codeome.t(), non_neg_integer(), pos_integer()) :: {template(), non_neg_integer()}
   def extract(%Codeome{} = c, from, max_len) do
@@ -36,7 +35,7 @@ defmodule Lenies.Interpreter.Template do
     end
   end
 
-  @doc "Inverte i bit del template: `:nop_0 ↔ :nop_1`."
+  @doc "Flips the template bits: `:nop_0 ↔ :nop_1`."
   @spec complement(template()) :: template()
   def complement(template) do
     Enum.map(template, fn
@@ -46,11 +45,11 @@ defmodule Lenies.Interpreter.Template do
   end
 
   @doc """
-  Cerca il complemento di `template` nel Codeome a partire da `from`.
+  Searches for the complement of `template` in the Codeome starting from `from`.
 
-  Cerca prima in avanti fino a `radius`, poi all'indietro. Ritorna
-  `{:ok, position}` della prima occorrenza del complemento, o `:not_found`.
-  La posizione restituita è l'indice del primo nop del match.
+  Searches forward up to `radius` positions first, then backward. Returns
+  `{:ok, position}` for the first occurrence of the complement, or `:not_found`.
+  The returned position is the index of the first nop of the match.
   """
   @spec find_complement(Codeome.t(), template(), non_neg_integer(), pos_integer()) ::
           {:ok, non_neg_integer()} | :not_found

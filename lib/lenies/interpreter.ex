@@ -1,18 +1,18 @@
 defmodule Lenies.Interpreter do
   @moduledoc """
-  La VM stack-based che esegue il Codeome di un Lenie.
+  The stack-based VM that executes a Lenie's Codeome.
 
-  `step/2` esegue UN opcode (con costo energetico, avanzamento IP, eventuali
-  effetti sullo stato), ritornando:
-  - `{:cont, state}` — esecuzione continua
-  - `{:wait_world, action, state}` — serve un'azione mondo (Lenie deve fare
-    `GenServer.call(World, ...)`)
-  - `{:halt, reason, state}` — Lenie morto (es. `:starvation`)
+  `step/2` executes ONE opcode (with energy cost, IP advancement, and any
+  effects on state), returning:
+  - `{:cont, state}` — execution continues
+  - `{:wait_world, action, state}` — a world action is required (the Lenie must
+    call `GenServer.call(World, ...)`)
+  - `{:halt, reason, state}` — Lenie is dead (e.g. `:starvation`)
 
-  `run_k_instructions/3` esegue fino a K istruzioni o fino al primo
+  `run_k_instructions/3` runs up to K instructions or until the first
   `:wait_world`/`:halt`.
 
-  Vedi spec §4.
+  See spec §4.
   """
 
   alias Lenies.Codeome
@@ -25,8 +25,8 @@ defmodule Lenies.Interpreter do
           | {:halt, atom(), State.t()}
 
   @doc """
-  Esegue il prossimo opcode. Codeome vuoto → `{:halt, :empty_codeome, state}`.
-  Energia ≤ 0 dopo l'opcode → `{:halt, :starvation, state}`.
+  Executes the next opcode. Empty Codeome → `{:halt, :empty_codeome, state}`.
+  Energy ≤ 0 after the opcode → `{:halt, :starvation, state}`.
   """
   @spec step(State.t(), Codeome.t()) :: step_result()
   def step(state, codeome) do
@@ -40,7 +40,7 @@ defmodule Lenies.Interpreter do
     end
   end
 
-  @doc "Esegue fino a `k` istruzioni o fino al primo wait_world/halt."
+  @doc "Runs up to `k` instructions or until the first wait_world/halt."
   @spec run_k_instructions(State.t(), Codeome.t(), pos_integer()) :: step_result()
   def run_k_instructions(state, _codeome, 0), do: {:cont, state}
 
@@ -53,13 +53,13 @@ defmodule Lenies.Interpreter do
 
   # ----- dispatch -----
 
-  # Template/bit: nop_0 / nop_1 sono no-op a livello di interprete
-  # (i loro effetti sono in template addressing)
+  # Template/bit: nop_0 / nop_1 are no-ops at the interpreter level
+  # (their effects are in template addressing)
   defp dispatch(op, state, _c, size) when op in [:nop_0, :nop_1] do
     advance_and_charge(op, state, size, 1)
   end
 
-  # Stack / aritmetica
+  # Stack / arithmetic
   defp dispatch(:push0, state, _c, size),
     do: state |> State.push(0) |> advance_and_charge(:push0, size, 1)
 
@@ -98,7 +98,7 @@ defmodule Lenies.Interpreter do
     s2 |> State.push(res) |> advance_and_charge(:mod, size, 1)
   end
 
-  # Memoria locale
+  # Local memory
   defp dispatch(:store, state, _c, size) do
     {slot_idx, s1} = State.pop(state)
     {value, s2} = State.pop(s1)
@@ -111,7 +111,7 @@ defmodule Lenies.Interpreter do
     s1 |> State.push(value) |> advance_and_charge(:load, size, 1)
   end
 
-  # Orientamento
+  # Orientation
   defp dispatch(:turn_left, state, _c, size) do
     new_dir =
       case state.dir do
@@ -136,7 +136,7 @@ defmodule Lenies.Interpreter do
     %{state | dir: new_dir} |> advance_and_charge(:turn_right, size, 1)
   end
 
-  # Senso locale (non tocca il mondo)
+  # Local sensing (does not touch the world)
   defp dispatch(:sense_self, state, _c, size) do
     state |> State.push(1) |> advance_and_charge(:sense_self, size, 1)
   end
@@ -210,10 +210,10 @@ defmodule Lenies.Interpreter do
     end
   end
 
-  # Azioni mondo: l'interprete avanza IP e paga il costo, poi ritorna
-  # :wait_world. Il Lenie process si occupa di chiamare il World e
-  # applicare il risultato (es. push valore percepito sullo stack,
-  # aggiornare pos su :move riuscito).
+  # World actions: the interpreter advances the IP and pays the cost, then returns
+  # :wait_world. The Lenie process is responsible for calling the World and
+  # applying the result (e.g. pushing the sensed value onto the stack,
+  # updating pos on a successful :move).
 
   defp dispatch(:sense_front, state, _c, size) do
     cost = Costs.cost(:sense_front, 0)
@@ -260,7 +260,7 @@ defmodule Lenies.Interpreter do
     end
   end
 
-  # Replicazione: ritornano :wait_world. Il Lenie chiama il World e applica il risultato.
+  # Replication: returns :wait_world. The Lenie calls the World and applies the result.
 
   defp dispatch(:allocate, state, _c, size) do
     {req_size, s1} = State.pop(state)
@@ -310,7 +310,7 @@ defmodule Lenies.Interpreter do
     end
   end
 
-  # Predazione: ritornano :wait_world. Il Lenie chiama il World e applica il risultato.
+  # Predation: returns :wait_world. The Lenie calls the World and applies the result.
 
   defp dispatch(:attack, state, _c, size) do
     cost = Costs.cost(:attack, 0)
@@ -342,7 +342,7 @@ defmodule Lenies.Interpreter do
     end
   end
 
-  # opcode sconosciuti → trattati come :nop_0
+  # unknown opcodes → treated as :nop_0
   defp dispatch(_unknown, state, _c, size), do: advance_and_charge(:nop_0, state, size, 1)
 
   # ----- helpers -----
@@ -353,7 +353,7 @@ defmodule Lenies.Interpreter do
     s2 |> State.push(fun.(a, b)) |> advance_and_charge(op, size, 1)
   end
 
-  # Versione con state come primo argomento (per pipeline)
+  # Version with state as the first argument (for pipelines)
   defp advance_and_charge(state, op, size, advance_by) when is_atom(op) do
     advance_and_charge(op, state, size, advance_by)
   end
