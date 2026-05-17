@@ -370,7 +370,7 @@ defmodule LeniesWeb.EditorLive do
           </div>
         </section>
 
-        <section class="codeome-listing-pane min-h-0 overflow-auto">
+        <section class="codeome-listing-pane min-h-0">
           <div class="codeome-listing-pane-title">Codeome — {length(@buffer)} ops</div>
           <div
             class="codeome-blocks"

@@ -477,8 +477,9 @@
 }
 
 .lenies-dashboard .codeome-listing-pane {
-  /* keep scrollbar only for the listing */
-  overflow: auto;
+  /* The pane itself doesn't scroll — its inner .codeome-blocks does,
+     so the title stays visible while the codeome scrolls. */
+  overflow: hidden;
 }
 
 /* ----- World Detail modal ----- */
@@ -607,8 +608,9 @@
 }
 
 /* In the editor page the palette uses a wider/denser layout than the
-   inline sidebar variant. The palette fills its pane, all categories
-   visible, with scroll if needed. */
+   inline sidebar variant. The palette fills its pane and is sized so
+   all categories fit without scrolling — the center pane intentionally
+   has no scrollbar. */
 .lenies-dashboard .codeome-editor-page .codeome-palette {
   flex: 1 1 auto;
   min-height: 0;
@@ -617,7 +619,7 @@
   grid-auto-rows: min-content;
   gap: 8px 10px;
   font-size: 10px;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .lenies-dashboard .codeome-editor-page .palette-category {
@@ -656,6 +658,7 @@
   flex: 1 1 auto;
   min-height: 80px;
   gap: 4px;
+  overflow-y: auto;
 }
 
 .lenies-dashboard .codeome-editor-page .codeome-listing-pane .codeome-blocks:empty {
