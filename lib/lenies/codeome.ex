@@ -1,14 +1,15 @@
 defmodule Lenies.Codeome do
   @moduledoc """
-  Il Codeome di un Lenie: sequenza di opcode che è sia genoma sia programma.
+  A Lenie's Codeome: an opcode sequence that is both genome and program.
 
-  Internamente rappresentato come tupla Elixir per lookup O(1) (`elem/2`).
-  Tutte le funzioni rispettano l'aritmetica circolare di `at/2` — il Codeome
-  è effettivamente un anello, per supportare il template addressing (vedi
-  spec §4.2 e §5.1) che cerca il complemento del template nei due versi.
+  Internally represented as an Elixir tuple for O(1) lookup (`elem/2`).
+  All functions respect the circular arithmetic of `at/2` — the Codeome
+  is effectively a ring, to support template addressing (see spec §4.2
+  and §5.1) which searches for the complement of a template in both
+  directions.
 
-  Vedi `Lenies.Interpreter` per l'esecuzione e `Lenies.Codeome.Opcodes`
-  per la whitelist degli opcode validi.
+  See `Lenies.Interpreter` for execution and `Lenies.Codeome.Opcodes`
+  for the opcode whitelist.
   """
 
   @type opcode :: atom()
@@ -25,8 +26,8 @@ defmodule Lenies.Codeome do
   def size(%__MODULE__{opcodes: ops}), do: tuple_size(ops)
 
   @doc """
-  Ritorna l'opcode in posizione `i`, con wrap modulo `size`. Supporta
-  indici negativi (es. `-1` → ultimo opcode).
+  Returns the opcode at position `i`, with wrap modulo `size`. Supports
+  negative indices (e.g. `-1` → last opcode).
   """
   @spec at(t(), integer()) :: opcode()
   def at(%__MODULE__{opcodes: ops}, i) do
@@ -38,8 +39,8 @@ defmodule Lenies.Codeome do
   def to_list(%__MODULE__{opcodes: ops}), do: Tuple.to_list(ops)
 
   @doc """
-  Hash strutturale del Codeome (xxhash a 64 bit). Stesso input → stesso hash.
-  Usato come `codeome_hash` per il clustering di specie.
+  Structural hash of the Codeome (64-bit xxhash). Same input → same hash.
+  Used as `codeome_hash` for species clustering.
   """
   @spec hash(t()) :: binary()
   def hash(%__MODULE__{opcodes: ops}) do

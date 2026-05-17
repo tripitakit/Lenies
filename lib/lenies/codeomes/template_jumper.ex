@@ -1,13 +1,13 @@
 defmodule Lenies.Codeomes.TemplateJumper do
   @moduledoc """
-  Codeome di test che esercita il template addressing.
+  Test Codeome that exercises template addressing.
 
-  Verifica indipendentemente le due branche del jump:
-  - SE il jump succede, `slot[0]` viene settato a `1` (SUCCESS)
-  - SE il jump fallisce (fall-through), `slot[0]` viene settato a `2` (FAILURE)
+  Independently verifies both branches of the jump:
+  - IF the jump succeeds, `slot[0]` is set to `1` (SUCCESS)
+  - IF the jump fails (fall-through), `slot[0]` is set to `2` (FAILURE)
 
-  Il test asserisce `slot[0] == 1`, che è osservabile solo se il template
-  addressing funziona davvero.
+  The test asserts `slot[0] == 1`, observable only if template addressing
+  actually works.
 
   Layout:
   ```
@@ -38,8 +38,8 @@ defmodule Lenies.Codeomes.TemplateJumper do
    20  :nop_0
   ```
 
-  Stack semantics promemoria: `:store` pops slot_idx (top), then value.
-  Le sequenze "push value, push slot_idx, store" qui in uso sono:
+  Stack semantics reminder: `:store` pops slot_idx (top), then value.
+  The "push value, push slot_idx, store" sequences used here are:
   `:push0, :push0, :store` → `slot[0] = 0`
   `:push1, :push0, :store` → `slot[0] = 1`
   `:push1, :dup, :add, :push0, :store` → `slot[0] = 2`

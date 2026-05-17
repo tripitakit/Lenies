@@ -1,16 +1,15 @@
 defmodule Lenies.Codeomes.MinimalReplicator do
   @moduledoc """
-  Codeome scritto a mano per replicazione emergente sostenibile.
+  Hand-written Codeome for sustainable emergent replication.
 
-  Differenza chiave rispetto a un replicator "minimo da test" (1 forage tra
-  divide e divide): qui dopo ogni `:divide` la cellula ruota a destra **o** a
-  sinistra in modo casuale (50/50 via `:pushN` + `:mod 2`), per uscire da
-  dietro al figlio appena nato che blocca il `:move`. Poi fa K=128 cicli di
-  forage prima di ritentare la replicazione. Questo amortizza il costo del
-  copy loop (~6 unità di energia per opcode copiato) su molte iterazioni di
-  forage, dando uno steady-state energetico positivo.
+  Key difference from a "minimal test" replicator (1 forage between divides):
+  after each `:divide` the cell turns right **or** left at random (50/50 via
+  `:pushN` + `:mod 2`), to escape from behind the newly born child that would
+  block `:move`. It then runs K=128 forage cycles before retrying replication.
+  This amortises the cost of the copy loop (~6 energy units per opcode copied)
+  over many forage iterations, yielding a positive energetic steady state.
 
-  ## Algoritmo
+  ## Algorithm
 
   ```
   LOOP_HEAD:
@@ -33,9 +32,9 @@ defmodule Lenies.Codeomes.MinimalReplicator do
 
   ## Template anchors (4-bit, Tierra-style)
 
-  Anchor = i nop incorporati nel codice. Le jump leggono il template (i nop
-  che seguono l'opcode di salto) e cercano nel codeome il *complemento* di
-  quel template. Bit-flip: `nop_0 ↔ nop_1`.
+  Anchors are the nops embedded in the code. Jump instructions read the template
+  (the nops following the jump opcode) and search the codeome for the *complement*
+  of that template. Bit-flip: `nop_0 ↔ nop_1`.
 
   | Label                | Anchor             | Jump template        |
   |----------------------|--------------------|----------------------|
@@ -46,46 +45,45 @@ defmodule Lenies.Codeomes.MinimalReplicator do
   | SKIP_TURN_ANCHOR     | [n0, n0, n1, n0]   | [n1, n1, n0, n1]     |
   | FORAGE_LOOP_HEAD     | [n0, n1, n0, n1]   | [n1, n0, n1, n0]     |
 
-  Sei pattern di anchor + sei template, tutti distinti tra loro. Ogni jump
-  trova in avanti (o backward, dopo wrap) il proprio target prima di
-  qualunque false match.
+  Six anchor patterns + six jump templates, all distinct. Every jump finds its
+  target (forward or backward after wrap) before any false match.
 
-  ## Separatori `push0`
+  ## Separators `push0`
 
-  Il template-extractor legge fino a `template_max_len` (default 8) nop
-  consecutivi. Per garantire che un template estragga sempre esattamente
-  4 nop, due blocchi di nop adiacenti devono essere separati da un opcode
-  non-nop. Due punti in cui ne servono:
+  The template-extractor reads up to `template_max_len` (default 8) consecutive
+  nops. To guarantee that a template always extracts exactly 4 nops, two adjacent
+  nop blocks must be separated by a non-nop opcode. Two positions where this is
+  needed:
 
-  - **Pos 67**: tra il template di `jmp_t skip` (63..66) e
+  - **Pos 67**: between the template of `jmp_t skip` (63..66) and
     `TURN_LEFT_ANCHOR` (68..71).
-  - **Pos 120**: tra il template del `jmp_t` finale (116..119) e
-    `LOOP_HEAD` (0..3) attraverso il wrap del codeome.
+  - **Pos 120**: between the template of the final `jmp_t` (116..119) and
+    `LOOP_HEAD` (0..3) across the codeome wrap.
 
-  Entrambi sono `:push0` posti in posizioni morte (unreachable code: i due
-  branch del turn random saltano oltre).
+  Both are `:push0` placed at dead positions (unreachable code: the two branches
+  of the random turn jump past them).
 
   ## Conventions
 
-  - `:store` pops slot_idx (top), pops value (second). Per V → slot[S]:
+  - `:store` pops slot_idx (top), pops value (second). To store V → slot[S]:
     `push V, push S, store`.
   - `:write_child` pops opcode_int (top), pops child_addr (second).
   - `:sub` pops a (top), pops b (second), pushes `b - a`.
   - `:mod` pops a (top), pops b (second), pushes `b mod a`.
   - `:load` pops slot_idx (top), pushes `slots[slot_idx]`.
-  - `:pushN` pushes un intero random in 0..255 (vedi `Interpreter.dispatch`).
-  - Slot[0] è usato in due fasi non sovrapposte: prima per N (taglia), poi
-    per il contatore di forage. Slot[1] è il contatore del copy loop.
+  - `:pushN` pushes a random integer in 0..255 (see `Interpreter.dispatch`).
+  - Slot[0] is used in two non-overlapping phases: first for N (size), then
+    for the forage counter. Slot[1] is the copy loop counter.
 
-  ## Energy balance (con `eat_amount` di default = 20)
+  ## Energy balance (with default `eat_amount` = 20)
 
-  - Codeome length: 121 opcode → copy loop body cost ~6/iter × 121 ≈ 726
+  - Codeome length: 121 opcodes → copy loop body cost ~6/iter × 121 ≈ 726
   - Allocate(121) + setup + divide ≈ ~33
-  - Costo totale per replicazione: ~759
-  - Forage per ciclo: 4 op (cost 6.1) + counter ops (~2.5) = 8.6. Eat gain = 20.
-    Netto: +11.4 per iter. × 128 ≈ +1459 per gen
+  - Total replication cost: ~759
+  - Forage per cycle: 4 ops (cost 6.1) + counter ops (~2.5) = 8.6. Eat gain = 20.
+    Net: +11.4 per iter. × 128 ≈ +1459 per gen
   - E_new = (E_old − 759) / 2 + 1459 = E_old/2 + 1080. Steady state ≈ 2160.
-    Sostenibile finché le celle attraversate hanno almeno ~20 unità di risorsa.
+    Sustainable as long as traversed cells have at least ~20 resource units.
   """
 
   alias Lenies.Codeome
@@ -163,7 +161,7 @@ defmodule Lenies.Codeomes.MinimalReplicator do
     :divide,
 
     # ── pos 47..50: ABORT_TARGET anchor [n1, n1, n0, n0] ─────────────────
-    # Landing pad sia per jz_t (allocate fallita) sia per fall-through dopo divide.
+    # Landing pad for both jz_t (allocate failed) and fall-through after divide.
     :nop_1,
     :nop_1,
     :nop_0,
@@ -183,7 +181,7 @@ defmodule Lenies.Codeomes.MinimalReplicator do
     :nop_1,
     :nop_1,
 
-    # ── pos 61: turn_right (eseguito quando r mod 2 == 1) ────────────────
+    # ── pos 61: turn_right (executed when r mod 2 == 1) ─────────────────
     :turn_right,
 
     # ── pos 62..66: jmp_t → skip turn_left branch ────────────────────────
@@ -194,8 +192,8 @@ defmodule Lenies.Codeomes.MinimalReplicator do
     :nop_1,
 
     # ── pos 67: separator (dead code, never executed) ────────────────────
-    # Serve a impedire al template-extractor di leggere oltre i 4 nop del
-    # template appena sopra (pos 63..66) finendo dentro TURN_LEFT_ANCHOR.
+    # Prevents the template-extractor from reading past the 4 nops of the
+    # template above (pos 63..66) and into TURN_LEFT_ANCHOR.
     :push0,
 
     # ── pos 68..71: TURN_LEFT_ANCHOR [n0, n1, n0, n0] ────────────────────
@@ -204,19 +202,19 @@ defmodule Lenies.Codeomes.MinimalReplicator do
     :nop_0,
     :nop_0,
 
-    # ── pos 72: turn_left (eseguito quando r mod 2 == 0) ─────────────────
+    # ── pos 72: turn_left (executed when r mod 2 == 0) ──────────────────
     :turn_left,
 
     # ── pos 73..76: SKIP_TURN_ANCHOR [n0, n0, n1, n0] ────────────────────
-    # I due rami (turn_right e turn_left) convergono qui per cadere
-    # naturalmente nel forage init.
+    # Both branches (turn_right and turn_left) converge here to fall
+    # naturally into the forage init.
     :nop_0,
     :nop_0,
     :nop_1,
     :nop_0,
 
     # ── pos 77..91: build K=128 on stack ─────────────────────────────────
-    # push1 (=1), poi 7 doppiamenti via dup+add: 2, 4, 8, 16, 32, 64, 128
+    # push1 (=1), then 7 doublings via dup+add: 2, 4, 8, 16, 32, 64, 128
     :push1,
     :dup,
     :add,
@@ -234,7 +232,7 @@ defmodule Lenies.Codeomes.MinimalReplicator do
     :add,
 
     # ── pos 92..93: store K in slot[0] ───────────────────────────────────
-    # slot[0] è libero qui: il prossimo `get_size; push0; store` la sovrascriverà
+    # slot[0] is free here: the next `get_size; push0; store` will overwrite it
     :push0,
     :store,
 
@@ -269,7 +267,7 @@ defmodule Lenies.Codeomes.MinimalReplicator do
     :nop_1,
     :nop_0,
 
-    # ── pos 115..119: jmp_t → back to LOOP_HEAD per ritentare replicazione
+    # ── pos 115..119: jmp_t → back to LOOP_HEAD to retry replication ─────
     :jmp_t,
     :nop_0,
     :nop_0,
@@ -277,9 +275,9 @@ defmodule Lenies.Codeomes.MinimalReplicator do
     :nop_0,
 
     # ── pos 120: separator (dead code, never executed) ───────────────────
-    # Senza questo, l'estrazione del template del jmp_t finale leggerebbe
-    # 4 nop del template + 4 nop del LOOP_HEAD attraverso il wrap (8 nop
-    # totali). Forzando un non-nop al wrap, l'estrazione si ferma a 4.
+    # Without this, the final jmp_t's template extraction would read
+    # 4 nops of the template + 4 nops of LOOP_HEAD across the wrap (8 nops
+    # total). Forcing a non-nop at the wrap stops extraction at 4.
     :push0
   ]
 

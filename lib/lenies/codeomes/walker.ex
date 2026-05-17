@@ -1,7 +1,7 @@
 defmodule Lenies.Codeomes.Walker do
   @moduledoc """
-  Codeome scritto a mano per testare il loop Lenie. Non si replica.
-  Cicla all'infinito: sense_front, eat, move forward.
+  Hand-written Codeome for testing the Lenie loop. Does not replicate.
+  Loops forever: sense_front, eat, move forward.
 
   ```
   loop:

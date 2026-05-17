@@ -1,11 +1,11 @@
 defmodule Lenies.Codeomes.Carnivore do
   @moduledoc """
-  Variante predatoria del minimal_replicator. La fase di foraggio inserisce :attack
-  prima di :eat. Stessa procedura di replicazione (4-bit template anchors).
+  Predatory variant of the minimal_replicator. The foraging phase inserts :attack
+  before :eat. Same replication procedure (4-bit template anchors).
 
-  Se davanti c'è un Lenie, :attack trasferisce energia direttamente. Se la cella
-  davanti è vuota o ha solo cibo, :attack ritorna :no_target (no-op) ma costa
-  comunque 5 energia.
+  If a Lenie is in front, :attack transfers energy directly. If the cell ahead
+  is empty or contains only food, :attack returns :no_target (no-op) but still
+  costs 5 energy.
   """
 
   alias Lenies.Codeome

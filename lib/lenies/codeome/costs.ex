@@ -1,28 +1,28 @@
 defmodule Lenies.Codeome.Costs do
   @moduledoc """
-  Costi energetici degli opcode. Vedi spec §4.3.
+  Energy costs for opcodes. See spec §4.3.
 
-  `cost/2` accetta `template_len` per gli opcode di salto (`:jmp_t`, ecc.)
-  che pagano `0.2 + 0.05 * template_len`. Per gli altri opcode il parametro
-  è ignorato.
+  `cost/2` accepts `template_len` for jump opcodes (`:jmp_t`, etc.)
+  which pay `0.2 + 0.05 * template_len`. For all other opcodes the
+  parameter is ignored.
   """
 
-  @doc "Costo energetico per un'esecuzione dell'opcode."
+  @doc "Energy cost for a single execution of the opcode."
   @spec cost(atom(), non_neg_integer()) :: float()
   def cost(opcode, template_len \\ 0)
 
   # Stack/template (cheap)
   def cost(op, _) when op in [:nop_0, :nop_1, :push0, :push1, :pushN, :dup, :drop, :swap], do: 0.1
 
-  # Aritmetica
+  # Arithmetic
   def cost(op, _) when op in [:add, :sub, :mul, :mod], do: 0.2
 
-  # Salti template-based: 0.2 + 0.05 * template_len
+  # Template-based jumps: 0.2 + 0.05 * template_len
   def cost(op, template_len) when op in [:jmp_t, :jz_t, :jnz_t, :call_t, :ret] do
     Float.round(0.2 + 0.05 * template_len, 10)
   end
 
-  # Sense + turn + memoria
+  # Sense + turn + memory
   def cost(op, _)
       when op in [
              :sense_front,
@@ -40,18 +40,18 @@ defmodule Lenies.Codeome.Costs do
   # Self-inspection
   def cost(op, _) when op in [:get_ip, :get_size, :read_self], do: 0.3
 
-  # Azione mondo: movimento/mangiare
+  # World actions: movement/eating
   def cost(op, _) when op in [:move, :eat], do: 2.0
 
-  # Predazione
+  # Predation
   def cost(:attack, _), do: 5.0
   def cost(:defend, _), do: 2.0
 
-  # Replicazione
+  # Replication
   def cost(:allocate, size_arg), do: 5.0 + 0.05 * size_arg
   def cost(:write_child, _), do: 1.0
   def cost(:divide, _), do: 10.0
 
-  # Opcode sconosciuto → trattato come :nop_0
+  # Unknown opcode → treated as :nop_0
   def cost(_, _), do: 0.1
 end
