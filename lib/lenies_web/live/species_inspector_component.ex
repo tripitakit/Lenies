@@ -286,15 +286,14 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
             class="px-2 py-0.5 border border-slate-500 hover:bg-slate-700"
           >Cancel</button>
         <% end %>
-        <%= if @editor_mode != :new_seed and not @edit_mode do %>
-          <button
-            type="button"
-            phx-click="enter_edit"
-            phx-target={@myself}
+        <%= if @selected_hash do %>
+          <.link
+            id="open-edit-for-species"
+            navigate={~p"/editor/edit/#{@selected_hash}"}
             class="px-2 py-0.5 border border-cyan-500/60 text-cyan-200 hover:bg-cyan-900/40"
           >
             Edit
-          </button>
+          </.link>
         <% end %>
 
         <%= if @dirty do %>

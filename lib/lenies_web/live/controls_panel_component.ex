@@ -127,14 +127,13 @@ defmodule LeniesWeb.ControlsPanelComponent do
         </div>
 
         <div class="flex items-center gap-2 text-xs">
-          <button
-            type="button"
-            phx-click="open_codeome_editor"
-            phx-target={@myself}
+          <.link
+            id="open-codeome-editor"
+            navigate={~p"/editor/new"}
             class="px-2 py-0.5 border border-cyan-500/60 text-cyan-200 hover:bg-cyan-900/40"
           >
             + New Seed
-          </button>
+          </.link>
 
           <button
             id="world-detail-open"
@@ -396,11 +395,6 @@ defmodule LeniesWeb.ControlsPanelComponent do
       end
 
     {:noreply, assign(socket, :snapshot_status, status)}
-  end
-
-  def handle_event("open_codeome_editor", _params, socket) do
-    send(self(), :open_codeome_editor)
-    {:noreply, socket}
   end
 
   def handle_event("open_world_detail", _params, socket) do

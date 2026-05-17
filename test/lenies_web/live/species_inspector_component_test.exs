@@ -198,10 +198,10 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
   end
 
   describe "edit mode toggle" do
-    test "Edit button visible in read mode" do
+    test "Edit link visible in read mode and navigates to /editor/edit/:hash" do
       html = render_component(SpeciesInspectorComponent, base_assigns())
-      assert html =~ ~s(phx-click="enter_edit")
-      refute html =~ ~s(phx-click="cancel_edit")
+      assert html =~ ~s(href="/editor/edit/abc12345abc12345")
+      refute html =~ ~s(phx-click="enter_edit")
     end
 
     test "the toolbar in read mode has the Edit button but not Cancel" do
