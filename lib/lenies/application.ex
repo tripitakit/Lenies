@@ -23,6 +23,7 @@ defmodule Lenies.Application do
       {Phoenix.PubSub, name: Lenies.PubSub},
       Lenies.Registry,
       Lenies.Seeds.CustomStore,
+      Lenies.Manual,
       Lenies.LenieSupervisor,
       LeniesWeb.Endpoint
     ]
