@@ -200,7 +200,11 @@ defmodule LeniesWeb.EditorLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="editor-root" phx-hook="RememberManualState" class="lenies-dashboard codeome-editor-page">
+    <div
+      id="editor-root"
+      phx-hook="RememberManualState"
+      class="lenies-dashboard codeome-editor-page h-screen w-screen overflow-hidden"
+    >
       <header class="codeome-editor-page-header">
         <.link
           navigate={back_to(@mode, @selected_hash)}

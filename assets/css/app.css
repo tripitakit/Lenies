@@ -604,7 +604,7 @@
    `1fr` is `auto` = min-content, which lets the row grow to fit a tall
    manual chapter and pushes the editor-grid past 100vh, breaking the
    per-pane scroll. Same trick on .editor-grid below. */
-.lenies-dashboard .codeome-editor-page {
+.lenies-dashboard.codeome-editor-page {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   height: 100vh;
@@ -615,7 +615,7 @@
    inline sidebar variant. The palette fills its pane and is sized so
    all categories fit without scrolling — the center pane intentionally
    has no scrollbar. */
-.lenies-dashboard .codeome-editor-page .codeome-palette {
+.lenies-dashboard.codeome-editor-page .codeome-palette {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
@@ -626,7 +626,7 @@
   overflow: hidden;
 }
 
-.lenies-dashboard .codeome-editor-page .palette-category {
+.lenies-dashboard.codeome-editor-page .palette-category {
   border: 1px solid rgba(34, 211, 238, 0.1);
   background: rgba(2, 6, 23, 0.5);
   padding: 5px 6px;
@@ -636,19 +636,26 @@
   min-width: 0;
 }
 
-.lenies-dashboard .codeome-editor-page .palette-category-label {
+.lenies-dashboard.codeome-editor-page .palette-category-label {
   font-size: 9px;
 }
 
-.lenies-dashboard .codeome-editor-page .palette-category-chips {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+/* One chip per category row so all chips have identical width
+   (= full category cell width) and the long opcode names like
+   SENSE_ENERGY / WRITE_CHILD / TURN_RIGHT don't get ellipsized. */
+.lenies-dashboard.codeome-editor-page .palette-category-chips {
+  grid-template-columns: 1fr;
   gap: 3px;
 }
 
-.lenies-dashboard .codeome-editor-page .palette-chip {
+.lenies-dashboard.codeome-editor-page .palette-chip {
   padding: 3px 4px;
   font-size: 10px;
   letter-spacing: 0.03em;
+  /* override base .palette-chip ellipsis — chips are now wide enough
+     for the full name, no truncation needed */
+  overflow: visible;
+  text-overflow: clip;
 }
 
 /* The listing pane stacks (title + blocks). The blocks container must
@@ -658,14 +665,14 @@
    wider gap between blocks gives SortableJS clean insertion-line
    space, and a dashed border on an empty container gives the user a
    visual drop hint. */
-.lenies-dashboard .codeome-editor-page .codeome-listing-pane .codeome-blocks {
+.lenies-dashboard.codeome-editor-page .codeome-listing-pane .codeome-blocks {
   flex: 1 1 auto;
   min-height: 80px;
   gap: 4px;
   overflow-y: auto;
 }
 
-.lenies-dashboard .codeome-editor-page .codeome-listing-pane .codeome-blocks:empty {
+.lenies-dashboard.codeome-editor-page .codeome-listing-pane .codeome-blocks:empty {
   border: 1px dashed rgba(34, 211, 238, 0.25);
 }
 
