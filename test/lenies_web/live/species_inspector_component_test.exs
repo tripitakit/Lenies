@@ -129,7 +129,7 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
   describe "fetch behavior" do
     test "no Lenie of the selected species → no-sample notice, zero opcode count" do
       html = render_component(SpeciesInspectorComponent, base_assigns())
-      assert html =~ "Nessun Lenie vivo"
+      assert html =~ "No live Lenie"
       assert html =~ ~r/ops.*?>\s*0\s*</s
     end
 
@@ -164,7 +164,7 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       # And it contains :get_size (self-inspect category)
       assert html =~ "op-self_inspect"
       assert html =~ ~r/get_size/i
-      refute html =~ "Nessun Lenie vivo"
+      refute html =~ "No live Lenie"
     end
 
     test "renders codeome lines as block tiles with the codeome-blocks container" do

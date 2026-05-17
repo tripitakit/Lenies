@@ -1,16 +1,16 @@
 defmodule Lenies.Codeome.Opcodes do
   @moduledoc """
-  Whitelist degli opcode validi e mapping bidirezionale atom ↔ integer.
+  Whitelist of valid opcodes and the bidirectional atom ↔ integer mapping.
 
-  L'integer encoding serve per `:read_self` (che ritorna l'opcode come integer
-  sullo stack) e per `:write_child` (sotto-progetto 3, che riceve l'integer
-  e lo decodifica per scrivere nello slot figlio).
+  The integer encoding is used by `:read_self` (which returns the opcode as
+  an integer on the stack) and by `:write_child` (which receives the integer
+  and decodes it to write into the child slot).
 
-  Vedi spec §4.2. Opcode non noti vengono trattati come `:nop_0` (tolleranza
-  alle mutazioni: nessun "syntax error").
+  See spec §4.2. Unknown opcodes are treated as `:nop_0` (mutation tolerance:
+  no "syntax error").
   """
 
-  # Whitelist completa di sotto-progetto 4 (include predazione).
+  # Full whitelist including predation.
   @opcodes [
     # Template / bit
     :nop_0,

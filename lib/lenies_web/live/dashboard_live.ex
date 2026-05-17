@@ -101,7 +101,7 @@ defmodule LeniesWeb.DashboardLive do
             GRID <span class="text-cyan-300">{elem(@grid, 0)}×{elem(@grid, 1)}</span>
           </span>
           <span class="opacity-70">
-            SPECIE <span class="text-violet-300">{@species_total}</span>
+            SPECIES <span class="text-violet-300">{@species_total}</span>
           </span>
           <button
             id="audio-toggle"

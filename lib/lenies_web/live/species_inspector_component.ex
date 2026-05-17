@@ -465,7 +465,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
 
       <%= if @fetch_status == :no_sample do %>
         <p class="text-[10px] opacity-60">
-          Nessun Lenie vivo di questa specie. Codeome non disponibile.
+          No live Lenie of this species. Codeome unavailable.
         </p>
       <% end %>
 

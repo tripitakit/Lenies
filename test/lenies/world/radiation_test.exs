@@ -26,7 +26,7 @@ defmodule Lenies.World.RadiationTest do
     deposit = Radiation.hotspot_deposit(@grid, 1000, hotspots, radius: 5)
     total = Map.values(deposit) |> Enum.sum()
     assert total == 1000
-    # tutte le posizioni depositate sono entro `radius` da un hotspot (toroide)
+    # every deposited position is within `radius` of a hotspot (toroidal)
     for {{x, y}, _} <- deposit do
       assert Enum.any?(hotspots, fn {hx, hy} ->
                toroidal_dist({x, y}, {hx, hy}, @grid) <= 5
