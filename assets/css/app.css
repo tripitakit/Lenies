@@ -258,6 +258,16 @@
   box-shadow: 0 0 0 1px var(--neon-cyan), 0 0 12px rgba(34, 211, 238, 0.35);
 }
 
+/* Chrome hides number-input spinners by default (opacity: 0, visible
+   only on hover). On our dark background that makes them effectively
+   invisible — force them visible and inverted so the arrows show
+   light on the dark field. */
+.lenies-dashboard input[type="number"]::-webkit-inner-spin-button,
+.lenies-dashboard input[type="number"]::-webkit-outer-spin-button {
+  opacity: 1;
+  filter: invert(0.85);
+}
+
 .lenies-dashboard .canvas-frame {
   position: relative;
   border: 1px solid var(--neon-cyan);
@@ -600,13 +610,15 @@
 }
 
 /* ----- Codeome editor page ----- */
-/* `minmax(0, 1fr)` (not just `1fr`) is required: the default min of
-   `1fr` is `auto` = min-content, which lets the row grow to fit a tall
-   manual chapter and pushes the editor-grid past 100vh, breaking the
-   per-pane scroll. Same trick on .editor-grid below. */
+/* Flex column so the optional spawn/save forms can slot between the
+   header and the editor-grid without breaking the layout: header is
+   auto, forms are auto when shown, editor-grid takes the rest with
+   flex: 1 + min-height: 0 so it doesn't push the page past 100vh.
+   (A grid with `auto 1fr` couldn't host a third intermediate item
+   without giving the form the 1fr cell.) */
 .lenies-dashboard.codeome-editor-page {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   overflow: hidden;
 }
@@ -736,6 +748,9 @@
   padding: 0.75rem;
   min-height: 0;
   overflow: hidden;
+  /* Parent .codeome-editor-page is flex column; take the remaining
+     vertical space after header (and any visible spawn/save form). */
+  flex: 1 1 0;
 }
 
 .lenies-dashboard .editor-grid.manual-collapsed {
