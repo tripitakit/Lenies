@@ -1,19 +1,18 @@
 defmodule Lenies.Lenie do
   @moduledoc """
-  Un singolo organismo digitale. GenServer la cui forma e comportamento
-  derivano dall'esecuzione del proprio Codeome via `Lenies.Interpreter`.
+  A single digital organism. GenServer whose shape and behaviour derive from
+  executing its own Codeome via `Lenies.Interpreter`.
 
   Lifecycle:
-  - `start_link/1` riceve id, codeome, energia iniziale, posizione, direzione, lineage
-  - In `init/1`: registra in `Lenies.Registry`, imposta `max_heap_size`, schedula
-    il primo tick metabolico
-  - Loop: ad ogni `:metabolize` esegue un batch di K istruzioni; se serve mondo,
-    fa `World.action/1`, applica il risultato; incrementa `age`; muore se energia
-    ≤ 0
-  - `terminate/2`: notifica il World per liberare la cella e (in futuro) lasciare
-    una carcassa
+  - `start_link/1` receives id, codeome, initial energy, position, direction, lineage
+  - In `init/1`: registers in `Lenies.Registry`, sets `max_heap_size`, schedules
+    the first metabolic tick
+  - Loop: on each `:metabolize` runs a batch of K instructions; if the world is
+    needed, calls `World.action/1` and applies the result; increments `age`; dies
+    if energy ≤ 0
+  - `terminate/2`: notifies the World to free the cell and leave a carcass
 
-  Vedi spec §4.4, §4.5.
+  See spec §4.4, §4.5.
   """
 
   use GenServer
@@ -29,7 +28,7 @@ defmodule Lenies.Lenie do
     GenServer.start_link(__MODULE__, opts)
   end
 
-  @doc "Restituisce uno snapshot dello stato interno (per ispezione/test)."
+  @doc "Returns a snapshot of the internal state (for inspection/test)."
   def inspect_state(pid), do: GenServer.call(pid, :inspect_state)
 
   # ----- Server -----

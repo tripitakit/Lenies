@@ -1,12 +1,12 @@
 defmodule Lenies.World.Cell do
   @moduledoc """
-  Struct di una cella della griglia mondo.
+  Struct for a single world-grid cell.
 
-  - `lenie_id`: id del Lenie residente, o `nil` se vuota.
-  - `resource`: biomassa accumulata dalla radiazione (clamp a `cell_resource_cap`).
-  - `carcass`: energia da carcasse (decay-tasso `carcass_decay`/tick).
+  - `lenie_id`: id of the resident Lenie, or `nil` if empty.
+  - `resource`: biomass accumulated by radiation (clamped to `cell_resource_cap`).
+  - `carcass`: energy from carcasses (decays at `carcass_decay` rate per tick).
   - `carcass_hue`: hue byte 0..255 (0 = no species color; 1..255 = hue byte
-    of the dead Lenie). Azzerato quando `carcass` torna a 0.
+    of the dead Lenie). Reset to 0 when `carcass` returns to 0.
   """
 
   alias Lenies.Config

@@ -1,9 +1,9 @@
 defmodule Lenies.World.Radiation do
   @moduledoc """
-  Distribuzione della radiazione "solare" sulla griglia toroidale.
+  Distribution of "solar" radiation across the toroidal grid.
 
-  Tutte le funzioni sono pure e restituiscono una mappa `%{{x, y} => amount}`
-  che il chiamante applicherà alle celle ETS. Total amount preserved.
+  All functions are pure and return a map `%{{x, y} => amount}` that the
+  caller applies to the ETS cells. Total amount is preserved.
   """
 
   @type grid :: {pos_integer(), pos_integer()}
@@ -30,7 +30,7 @@ defmodule Lenies.World.Radiation do
         scatter_amount(m, {w, h}, remainder)
 
       true ->
-        # distribuzione casuale di `amount` "pacchetti unitari"
+        # random scattering of `amount` "unit packets"
         scatter_amount(%{}, {w, h}, amount)
     end
   end

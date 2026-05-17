@@ -1,16 +1,16 @@
 defmodule Lenies.World.Tables do
   @moduledoc """
-  Crea e gestisce le tabelle ETS del progetto.
+  Creates and manages the project's ETS tables.
 
-  Convenzione di ownership: il chiamante (`Lenies.World` in produzione) deve
-  invocare `create_all/0` dal suo `init/1` per essere proprietario delle tabelle.
-  Tutte le tabelle sono `:set`, `:named_table`, `:public`.
+  Ownership convention: the caller (`Lenies.World` in production) must invoke
+  `create_all/0` from its `init/1` to become the owner of the tables. All
+  tables are `:set`, `:named_table`, `:public`.
 
-  Tabelle:
-  - `:cells`        — `{x,y} → %Lenies.World.Cell{}` (source of truth occupazione)
-  - `:lenies`       — `id    → snapshot` (scritto principalmente dai Lenies, eccezioni dal World)
-  - `:child_slots`  — `slot  → record di gestazione`
-  - `:history`      — ring buffer di metriche aggregate (scritto da Telemetry)
+  Tables:
+  - `:cells`        — `{x,y} → %Lenies.World.Cell{}` (source of truth for occupancy)
+  - `:lenies`       — `id    → snapshot` (written mainly by Lenies, with exceptions by World)
+  - `:child_slots`  — `slot  → gestation record`
+  - `:history`      — ring buffer of aggregated metrics (written by Telemetry)
   """
 
   @tables [:cells, :lenies, :child_slots, :history]

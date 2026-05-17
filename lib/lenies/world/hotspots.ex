@@ -1,7 +1,7 @@
 defmodule Lenies.World.Hotspots do
   @moduledoc """
-  Gestione dei centri "hotspot" di radiazione: posizioni che ricevono il 30%
-  della radiazione del tick. Si muovono lentamente sulla griglia toroidale.
+  Management of radiation "hotspot" centres: positions that receive 30% of the
+  tick's radiation. They drift slowly across the toroidal grid.
   """
 
   @type grid :: {pos_integer(), pos_integer()}

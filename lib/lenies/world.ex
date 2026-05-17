@@ -1,10 +1,10 @@
 defmodule Lenies.World do
   @moduledoc """
-  Il "mondo" della sandbox Lenies. GenServer singleton che possiede le tabelle
-  ETS, batte il tick ambientale, applica radiazione e decay carcasse, e fornisce
-  API pubblica per snapshot e sterilizzazione.
+  The Lenies sandbox "world". Singleton GenServer that owns the ETS tables,
+  drives the environmental tick, applies radiation and carcass decay, and
+  provides the public API for snapshots and sterilization.
 
-  Vedi `docs/superpowers/specs/2026-05-11-lenies-design.md` §3, §6, §9.
+  See `docs/superpowers/specs/2026-05-11-lenies-design.md` §3, §6, §9.
   """
 
   use GenServer
@@ -21,22 +21,22 @@ defmodule Lenies.World do
     GenServer.start_link(__MODULE__, opts, name: @name)
   end
 
-  @doc "Statistiche rapide della sandbox per console/test."
+  @doc "Quick sandbox stats for console/test."
   def snapshot_stats, do: GenServer.call(@name, :snapshot_stats)
 
-  @doc "Forza un singolo tick sincrono (per test deterministici)."
+  @doc "Force a single synchronous tick (for deterministic tests)."
   def tick_now, do: GenServer.call(@name, :tick_now)
 
-  @doc "Reset completo: kill di tutti i Lenies, clear ETS, riavvio del tick."
+  @doc "Full reset: kill all Lenies, clear ETS, restart the tick."
   def sterilize, do: GenServer.call(@name, :sterilize)
 
   @doc """
-  Esegue un'azione richiesta da un Lenie. Chiamata sincrona.
+  Execute an action requested by a Lenie. Synchronous call.
 
   Forms:
-  - `{:sense_front, {x, y}, dir}` — restituisce `{:ok, :empty | {:resource, n} | {:lenie, id}}`
-  - `{:move, {x, y}, dir, lenie_id}` — restituisce `{:ok, {:moved, {x2, y2}} | :blocked}`
-  - `{:eat, {x, y}}` — restituisce `{:ok, {:ate, amount}}`
+  - `{:sense_front, {x, y}, dir}` — returns `{:ok, :empty | {:resource, n} | {:lenie, id}}`
+  - `{:move, {x, y}, dir, lenie_id}` — returns `{:ok, {:moved, {x2, y2}} | :blocked}`
+  - `{:eat, {x, y}}` — returns `{:ok, {:ate, amount}}`
   """
   def action(action_spec), do: GenServer.call(@name, {:action, action_spec})
 
@@ -49,7 +49,7 @@ defmodule Lenies.World do
   @doc "Query current pause status."
   def paused?, do: GenServer.call(@name, :paused?)
 
-  @doc "Notifica al World che un Lenie è morto (libera cella, eventuale carcassa)."
+  @doc "Notify the World that a Lenie has died (frees the cell, optionally leaves a carcass)."
   def lenie_died(id, pos, energy_at_death, codeome_hash)
       when is_binary(codeome_hash) do
     GenServer.cast(@name, {:lenie_died, id, pos, energy_at_death, codeome_hash})

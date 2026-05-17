@@ -1,10 +1,10 @@
 defmodule Lenies.Config do
   @moduledoc """
-  Getter tipizzati per i parametri di simulazione del progetto Lenies.
+  Typed getters for Lenies simulation parameters.
 
-  I valori vengono letti via `Application.get_env/3` dalla chiave `:lenies`.
-  In `config/runtime.exs` sono definiti i default; possono essere mutati a
-  runtime via `Application.put_env/3` (per i tuning slider della GUI futura).
+  Values are read via `Application.get_env/3` under the `:lenies` key.
+  Defaults are defined in `config/runtime.exs`; they can be changed at runtime
+  via `Application.put_env/3` (for GUI tuning sliders).
   """
 
   @app :lenies

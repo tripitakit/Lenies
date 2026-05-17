@@ -1,9 +1,9 @@
 defmodule Lenies.Telemetry do
   @moduledoc """
-  Raccoglie eventi di tick dal World e mantiene un ring buffer in ETS (`:history`).
+  Collects tick events from the World and maintains a ring buffer in ETS (`:history`).
 
-  Sottoscrive `"world:tick"` via Phoenix.PubSub; ad ogni `{:tick, n}` calcola
-  uno snapshot aggregato e lo memorizza. Sponsorizza la GUI futura (sotto-progetto 5).
+  Subscribes to `"world:tick"` via Phoenix.PubSub; on each `{:tick, n}` it
+  computes an aggregated snapshot and stores it.
   """
 
   use GenServer
@@ -79,7 +79,7 @@ defmodule Lenies.Telemetry do
     current_size = :ets.info(:history, :size)
 
     if current_size > state.max_entries do
-      # rimuovi le entry più vecchie (counter più basso)
+      # remove oldest entries (lowest counter)
       to_remove = current_size - state.max_entries
 
       :ets.tab2list(:history)

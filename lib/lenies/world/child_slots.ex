@@ -1,17 +1,17 @@
 defmodule Lenies.World.ChildSlots do
   @moduledoc """
-  Helper per la tabella ETS `:child_slots` che ospita gli slot di gestazione
-  durante la replicazione.
+  Helper for the `:child_slots` ETS table, which holds gestation slots during
+  replication.
 
   Record: `slot_id` (binary) → `%{parent_id, target_cell, size, opcodes}`
-  - `parent_id`: id del Lenie genitore che ha allocato lo slot
-  - `target_cell`: `{x, y}` dove nascerà il figlio (cella libera al momento dell'allocate)
-  - `size`: lunghezza del Codeome figlio
-  - `opcodes`: tuple di atomi opcode (size elementi), inizializzata a `:nop_0`
+  - `parent_id`: id of the parent Lenie that allocated the slot
+  - `target_cell`: `{x, y}` where the child will be born (a free cell at allocate time)
+  - `size`: length of the child's Codeome
+  - `opcodes`: tuple of opcode atoms (size elements), initialized to `:nop_0`
 
-  Tutte le mutazioni passano per il `World` GenServer (single writer). I metodi
-  qui sono helper *chiamati da dentro* le callback del World. Lookup è pure ETS
-  (può essere chiamato da chiunque legge `:child_slots`).
+  All mutations go through the `World` GenServer (single writer). The functions
+  here are helpers *called from within* World callbacks. Lookups are plain ETS
+  (callable by anyone reading `:child_slots`).
   """
 
   @table :child_slots
@@ -23,7 +23,7 @@ defmodule Lenies.World.ChildSlots do
           opcodes: tuple()
         }
 
-  @doc "Crea uno slot vuoto inizializzato a `:nop_0` × size. Ritorna {:ok, slot_id}."
+  @doc "Create an empty slot initialized to `:nop_0` × size. Returns {:ok, slot_id}."
   @spec create(binary(), {non_neg_integer(), non_neg_integer()}, non_neg_integer()) ::
           {:ok, binary()}
   def create(parent_id, target_cell, size) do

@@ -1,12 +1,10 @@
 defmodule Lenies.LenieSupervisor do
   @moduledoc """
-  DynamicSupervisor che ospita tutti i processi Lenie.
+  DynamicSupervisor that hosts all Lenie processes.
 
-  Policy `:temporary`: un Lenie che muore (per esaurimento energia o errore)
-  non viene riavviato — è una morte definitiva. La replicazione (sotto-progetto 3)
-  userà `DynamicSupervisor.start_child/2` per spawnare nuovi Lenies.
-
-  Vuoto in questo sotto-progetto; pronto per essere popolato dal sotto-progetto 3.
+  Policy `:temporary`: a Lenie that dies (from energy exhaustion or error) is
+  not restarted — death is permanent. Replication uses
+  `DynamicSupervisor.start_child/2` to spawn new Lenies.
   """
 
   use DynamicSupervisor
