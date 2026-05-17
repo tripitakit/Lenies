@@ -193,7 +193,9 @@ defmodule LeniesWeb.DashboardLiveTest do
   end
 
   describe "inspector dirty notification" do
-    test "dashboard receives :inspector_dirty info messages and reflects them in the DOM", %{conn: conn} do
+    test "dashboard receives :inspector_dirty info messages and reflects them in the DOM", %{
+      conn: conn
+    } do
       {:ok, view, _} = live(conn, "/")
 
       send(view.pid, {:inspector_dirty, true})
@@ -403,7 +405,9 @@ defmodule LeniesWeb.DashboardLiveTest do
       Application.delete_env(:lenies, :dashboard_throttle_ticks)
     end
 
-    test "highlight is cleared when the selected species drops out of the species list", %{conn: conn} do
+    test "highlight is cleared when the selected species drops out of the species list", %{
+      conn: conn
+    } do
       Application.put_env(:lenies, :dashboard_throttle_ticks, 1)
 
       :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-WD-GONE", lineage: {nil, 0}}})
@@ -486,7 +490,19 @@ defmodule LeniesWeb.DashboardLiveTest do
           name: "My Test",
           color_hex: "#abcdef",
           energy_default: 7000.0,
-          opcodes: [:nop_1, :nop_1, :get_size, :push0, :store, :nop_1, :nop_1, :nop_1, :nop_1, :nop_1, :nop_1]
+          opcodes: [
+            :nop_1,
+            :nop_1,
+            :get_size,
+            :push0,
+            :store,
+            :nop_1,
+            :nop_1,
+            :nop_1,
+            :nop_1,
+            :nop_1,
+            :nop_1
+          ]
         })
 
       {:ok, _view, html} = live(conn, "/")
@@ -544,7 +560,19 @@ defmodule LeniesWeb.DashboardLiveTest do
           name: "Delete Me",
           color_hex: "#abcdef",
           energy_default: 1000.0,
-          opcodes: [:nop_1, :nop_1, :get_size, :push0, :store, :nop_1, :nop_1, :nop_1, :nop_1, :nop_1, :nop_1]
+          opcodes: [
+            :nop_1,
+            :nop_1,
+            :get_size,
+            :push0,
+            :store,
+            :nop_1,
+            :nop_1,
+            :nop_1,
+            :nop_1,
+            :nop_1,
+            :nop_1
+          ]
         })
 
       {:ok, view, _} = live(conn, "/")

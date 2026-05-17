@@ -38,7 +38,8 @@ defmodule Lenies.Seeds.CustomStore do
     Agent.get(__MODULE__, fn seeds -> Enum.find(seeds, &(&1.id == id)) end)
   end
 
-  @spec save(seed()) :: :ok | {:error, :invalid_name | :invalid_color | :invalid_opcodes | :io_error}
+  @spec save(seed()) ::
+          :ok | {:error, :invalid_name | :invalid_color | :invalid_opcodes | :io_error}
   def save(%{} = seed) do
     with :ok <- validate_name(seed),
          :ok <- validate_color(seed),
@@ -157,7 +158,11 @@ defmodule Lenies.Seeds.CustomStore do
     rescue
       ArgumentError ->
         require Logger
-        Logger.warning("Lenies.Seeds.CustomStore: dropping seed #{inspect(m["id"])} — unknown opcode(s)")
+
+        Logger.warning(
+          "Lenies.Seeds.CustomStore: dropping seed #{inspect(m["id"])} — unknown opcode(s)"
+        )
+
         nil
     end
   end

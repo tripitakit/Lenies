@@ -10,6 +10,7 @@ defmodule LeniesWeb.ManualPaneComponentTest do
       nil -> {:ok, _} = Lenies.Manual.start_link([])
       _ -> :ok
     end
+
     :ok
   end
 
@@ -50,7 +51,9 @@ defmodule LeniesWeb.ManualPaneComponentTest do
 
   test "rendering with a different chapter shows that chapter's content" do
     html1 = render_component(ManualPaneComponent, base_assigns())
-    html2 = render_component(ManualPaneComponent, base_assigns(%{chapter: "08-energy-economy.md"}))
+
+    html2 =
+      render_component(ManualPaneComponent, base_assigns(%{chapter: "08-energy-economy.md"}))
 
     refute html1 == html2
     assert html2 =~ "Energy"

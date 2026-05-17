@@ -55,8 +55,9 @@ defmodule LeniesWeb.WorldDetailComponentTest do
 
     # Pull every hash short-id in order of appearance and assert it matches
     # the population-desc order: BBBB(17), CCCC(11), AAAA(5).
-    hashes = Regex.scan(~r/world-detail-species-hash">([A-F0-9]{8})</, html)
-            |> Enum.map(fn [_, h] -> h end)
+    hashes =
+      Regex.scan(~r/world-detail-species-hash">([A-F0-9]{8})</, html)
+      |> Enum.map(fn [_, h] -> h end)
 
     assert hashes == ["BBBB2222", "CCCC3333", "AAAA1111"]
   end

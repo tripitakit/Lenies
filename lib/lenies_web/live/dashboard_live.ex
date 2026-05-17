@@ -390,7 +390,8 @@ defmodule LeniesWeb.DashboardLive do
         |> assign(:species, species)
         |> assign(:species_total, species_total)
         |> assign(:all_species, all_species)
-        |> assign(:selected_species_record,
+        |> assign(
+          :selected_species_record,
           find_selected_record(socket.assigns.selected_hash, species)
         )
         |> maybe_clear_world_detail_highlight(all_species)

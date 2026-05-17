@@ -102,7 +102,10 @@ defmodule LeniesWeb.EditorLiveTest do
     html = render(view)
     assert html =~ "Codeome — 1 ops"
     # After deleting index 0 (PUSH0), the sole remaining editable block is PUSH1.
-    editable_blocks = Regex.scan(~r/codeome-block-editable[^>]*>.*?codeome-block-name[^>]*>\s*([A-Z0-9]+)/s, html)
-    assert editable_blocks == [["PUSH1", "PUSH1"]] or Enum.map(editable_blocks, &List.last/1) == ["PUSH1"]
+    editable_blocks =
+      Regex.scan(~r/codeome-block-editable[^>]*>.*?codeome-block-name[^>]*>\s*([A-Z0-9]+)/s, html)
+
+    assert editable_blocks == [["PUSH1", "PUSH1"]] or
+             Enum.map(editable_blocks, &List.last/1) == ["PUSH1"]
   end
 end

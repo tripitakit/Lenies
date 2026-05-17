@@ -193,7 +193,8 @@ defmodule LeniesWeb.EditorLive do
   end
 
   def handle_event("cancel_edit", _params, socket) do
-    {:noreply, push_navigate(socket, to: back_to(socket.assigns.mode, socket.assigns.selected_hash))}
+    {:noreply,
+     push_navigate(socket, to: back_to(socket.assigns.mode, socket.assigns.selected_hash))}
   end
 
   @impl true
@@ -201,7 +202,10 @@ defmodule LeniesWeb.EditorLive do
     ~H"""
     <div id="editor-root" phx-hook="RememberManualState" class="lenies-dashboard codeome-editor-page">
       <header class="codeome-editor-page-header">
-        <.link navigate={back_to(@mode, @selected_hash)} class="text-xs px-2 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10">
+        <.link
+          navigate={back_to(@mode, @selected_hash)}
+          class="text-xs px-2 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
+        >
           ← Back
         </.link>
         <h1 class="text-sm flex-1">
@@ -219,7 +223,9 @@ defmodule LeniesWeb.EditorLive do
               <span class="opacity-60">({info.len} ops, {info.non_nops} non-nop)</span>
             <% {:error, errors} -> %>
               <span class="text-amber-300">⚠</span>
-              <span class="opacity-80">{Enum.map_join(errors, ", ", &format_validation_error/1)}</span>
+              <span class="opacity-80">
+                {Enum.map_join(errors, ", ", &format_validation_error/1)}
+              </span>
           <% end %>
         </span>
 
@@ -232,14 +238,18 @@ defmodule LeniesWeb.EditorLive do
           phx-click="cancel_edit"
           data-confirm={if @dirty, do: "Discard codeome edits?"}
           class="text-xs px-2 py-0.5 border border-slate-500 hover:bg-slate-700"
-        >Cancel</button>
+        >
+          Cancel
+        </button>
 
         <button
           type="button"
           phx-click="open_spawn_form"
           disabled={!match?({:ok, _}, @validation)}
           class="text-xs px-2 py-0.5 border border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/40 disabled:opacity-40"
-        >Spawn</button>
+        >
+          Spawn
+        </button>
 
         <%= if @mode == :new_seed do %>
           <button
@@ -247,36 +257,87 @@ defmodule LeniesWeb.EditorLive do
             phx-click="open_save_form"
             disabled={!match?({:ok, _}, @validation)}
             class="text-xs px-2 py-0.5 border border-violet-500/60 text-violet-200 hover:bg-violet-900/40 disabled:opacity-40"
-          >Save</button>
+          >
+            Save
+          </button>
         <% end %>
       </header>
 
       <%= if @show_spawn_form do %>
-        <form phx-submit="submit_spawn" class="flex gap-2 items-center text-[11px] p-2 border-b border-emerald-500/30">
-          <label class="flex gap-1 items-center"><span class="opacity-70">count</span>
+        <form
+          phx-submit="submit_spawn"
+          class="flex gap-2 items-center text-[11px] p-2 border-b border-emerald-500/30"
+        >
+          <label class="flex gap-1 items-center">
+            <span class="opacity-70">count</span>
             <input type="number" name="count" value="1" min="1" max="50" class="w-16 text-xs" />
           </label>
-          <label class="flex gap-1 items-center"><span class="opacity-70">energy</span>
-            <input type="number" name="energy" value="10000" min="1" max="1000000" class="w-24 text-xs" />
+          <label class="flex gap-1 items-center">
+            <span class="opacity-70">energy</span>
+            <input
+              type="number"
+              name="energy"
+              value="10000"
+              min="1"
+              max="1000000"
+              class="w-24 text-xs"
+            />
           </label>
-          <button type="button" phx-click="cancel_spawn_form" class="px-2 py-0.5 border border-slate-500">Cancel</button>
-          <button type="submit" class="px-2 py-0.5 border border-emerald-500/60 text-emerald-200">Spawn</button>
+          <button
+            type="button"
+            phx-click="cancel_spawn_form"
+            class="px-2 py-0.5 border border-slate-500"
+          >
+            Cancel
+          </button>
+          <button type="submit" class="px-2 py-0.5 border border-emerald-500/60 text-emerald-200">
+            Spawn
+          </button>
         </form>
       <% end %>
 
       <%= if @show_save_form do %>
-        <form phx-submit="submit_save_seed" class="flex gap-2 items-center text-[11px] p-2 border-b border-violet-500/30">
-          <label class="flex gap-1 items-center"><span class="opacity-70">name</span>
-            <input type="text" name="seed_name" required minlength="1" maxlength="40" placeholder="my replicator v1" class="text-xs" />
+        <form
+          phx-submit="submit_save_seed"
+          class="flex gap-2 items-center text-[11px] p-2 border-b border-violet-500/30"
+        >
+          <label class="flex gap-1 items-center">
+            <span class="opacity-70">name</span>
+            <input
+              type="text"
+              name="seed_name"
+              required
+              minlength="1"
+              maxlength="40"
+              placeholder="my replicator v1"
+              class="text-xs"
+            />
           </label>
-          <label class="flex gap-1 items-center"><span class="opacity-70">color</span>
+          <label class="flex gap-1 items-center">
+            <span class="opacity-70">color</span>
             <input type="color" name="color_hex" value={suggested_color(@buffer)} class="w-12 h-6" />
           </label>
-          <label class="flex gap-1 items-center"><span class="opacity-70">energy</span>
-            <input type="number" name="energy_default" value="10000" min="1" max="1000000" class="w-24 text-xs" />
+          <label class="flex gap-1 items-center">
+            <span class="opacity-70">energy</span>
+            <input
+              type="number"
+              name="energy_default"
+              value="10000"
+              min="1"
+              max="1000000"
+              class="w-24 text-xs"
+            />
           </label>
-          <button type="button" phx-click="cancel_save_form" class="px-2 py-0.5 border border-slate-500">Cancel</button>
-          <button type="submit" class="px-2 py-0.5 border border-violet-500/60 text-violet-200">Save</button>
+          <button
+            type="button"
+            phx-click="cancel_save_form"
+            class="px-2 py-0.5 border border-slate-500"
+          >
+            Cancel
+          </button>
+          <button type="submit" class="px-2 py-0.5 border border-violet-500/60 text-violet-200">
+            Save
+          </button>
         </form>
       <% end %>
 
@@ -296,7 +357,10 @@ defmodule LeniesWeb.EditorLive do
                 <div class="palette-category-label">{category}</div>
                 <div class="palette-category-chips">
                   <%= for op <- ops do %>
-                    <div class={"palette-chip op op-" <> Atom.to_string(Disassembler.opcode_class(op))} data-opcode={Atom.to_string(op)}>
+                    <div
+                      class={"palette-chip op op-" <> Atom.to_string(Disassembler.opcode_class(op))}
+                      data-opcode={Atom.to_string(op)}
+                    >
                       {Atom.to_string(op) |> String.upcase()}
                     </div>
                   <% end %>
@@ -315,12 +379,25 @@ defmodule LeniesWeb.EditorLive do
           >
             <%= for {opcode, idx} <- Enum.with_index(@buffer) do %>
               <div class="codeome-insert-slot"></div>
-              <div class={"codeome-block codeome-block-editable op op-" <> Atom.to_string(Disassembler.opcode_class(opcode))} data-idx={idx}>
+              <div
+                class={"codeome-block codeome-block-editable op op-" <> Atom.to_string(Disassembler.opcode_class(opcode))}
+                data-idx={idx}
+              >
                 <span class="codeome-drag-handle" title="Drag to reorder">≡</span>
-                <span class="codeome-block-idx">{String.pad_leading(Integer.to_string(idx), 3, "0")}</span>
+                <span class="codeome-block-idx">
+                  {String.pad_leading(Integer.to_string(idx), 3, "0")}
+                </span>
                 <span class="codeome-block-name">{Atom.to_string(opcode) |> String.upcase()}</span>
                 <span class="codeome-block-actions">
-                  <button type="button" phx-click="edit_delete" phx-value-index={idx} class="codeome-action-btn" title="Delete">⨯</button>
+                  <button
+                    type="button"
+                    phx-click="edit_delete"
+                    phx-value-index={idx}
+                    class="codeome-action-btn"
+                    title="Delete"
+                  >
+                    ⨯
+                  </button>
                 </span>
               </div>
             <% end %>

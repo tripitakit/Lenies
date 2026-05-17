@@ -117,7 +117,8 @@ defmodule LeniesWeb.ControlsPanelComponent do
             class={[
               "flex-1 text-xs px-2 py-2 border tracking-widest",
               if(@paused?,
-                do: "border-emerald-500/60 bg-emerald-900/30 text-emerald-200 hover:bg-emerald-800/50",
+                do:
+                  "border-emerald-500/60 bg-emerald-900/30 text-emerald-200 hover:bg-emerald-800/50",
                 else: "border-cyan-500/60 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/50"
               )
             ]}
