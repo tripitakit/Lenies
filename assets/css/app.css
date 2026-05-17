@@ -685,9 +685,13 @@
   background: rgba(2, 6, 23, 0.5);
 }
 
+/* Manual pane takes remaining space (prose-heavy, benefits from width),
+   palette is fixed (chip grid), listing is fixed wide enough for opcode
+   blocks (`≡ 000 OPCODE_NAME ⨯` is ~150px). When manual is collapsed,
+   the freed space goes to the listing. */
 .lenies-dashboard .editor-grid {
   display: grid;
-  grid-template-columns: 380px 360px 1fr;
+  grid-template-columns: minmax(0, 1fr) 360px 320px;
   gap: 0.75rem;
   padding: 0.75rem;
   min-height: 0;
@@ -695,7 +699,7 @@
 }
 
 .lenies-dashboard .editor-grid.manual-collapsed {
-  grid-template-columns: 24px 360px 1fr;
+  grid-template-columns: 24px 360px minmax(0, 1fr);
 }
 
 .lenies-dashboard .manual-pane {

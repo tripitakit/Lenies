@@ -1,6 +1,6 @@
 // CodeomeSortable hook: enables drag-and-drop reorder of codeome blocks in
-// the SpeciesInspectorComponent's edit mode. On drop, emits an
-// `edit_reorder` event to the component with the from/to indices.
+// the EditorLive listing pane. On drop, emits an `edit_reorder` event
+// to the parent LiveView with the from/to indices.
 //
 // Driven by vendored SortableJS (assets/vendor/sortable.js). Phoenix
 // LiveView re-renders after the event applies the mutation; SortableJS's
@@ -70,11 +70,11 @@ const CodeomeSortable = {
           typeof evt.newDraggableIndex === "number" &&
           evt.oldDraggableIndex !== evt.newDraggableIndex
         ) {
-          // pushEventTo accepts a DOM element and walks up to the nearest
-          // [data-phx-component] ancestor — here the <aside> root of
-          // SpeciesInspectorComponent — so the event is routed to that
-          // component's handle_event("edit_reorder", ...) clause.
-          this.pushEventTo(this.el, "edit_reorder", {
+          // pushEvent (not pushEventTo): the hook is attached to a plain
+          // element inside a LiveView (EditorLive), not a LiveComponent,
+          // so there is no [data-phx-component] ancestor for pushEventTo
+          // to target — it would silently drop the event.
+          this.pushEvent("edit_reorder", {
             from: evt.oldDraggableIndex,
             to: evt.newDraggableIndex,
           });
@@ -94,12 +94,8 @@ const CodeomeSortable = {
           if (sibling.classList.contains("codeome-block-editable")) index++;
           sibling = sibling.previousElementSibling;
         }
-        // Diagnostic logging — drag&drop has been intermittent across
-        // browsers; keep this until the dev confirms the flow end-to-end.
-        // Open DevTools → Console to see drop coordinates / opcode / index.
-        console.log("[CodeomeSortable] onAdd", { opcode, index, item: evt.item });
         if (opcode) {
-          this.pushEventTo(this.el, "edit_insert", { index, opcode });
+          this.pushEvent("edit_insert", { index, opcode });
         }
         evt.item.remove();
       },

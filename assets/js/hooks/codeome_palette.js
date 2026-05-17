@@ -1,8 +1,8 @@
 // CodeomePalette hook: enables drag of opcode chips from the palette into
-// the codeome listing in the SpeciesInspectorComponent's edit mode. Uses
-// SortableJS with `pull: "clone"` so the source palette is unaffected by
-// the drag. Drops are received by the CodeomeSortable hook on the
-// codeome listing, which fires `edit_insert` via pushEventTo.
+// the codeome listing in EditorLive. Uses SortableJS with `pull: "clone"`
+// so the source palette is unaffected by the drag. Drops are received by
+// the CodeomeSortable hook on the codeome listing, which fires
+// `edit_insert` on the LiveView.
 //
 // SortableJS reliably handles drag of items that are DIRECT children of the
 // Sortable container. Because the palette groups chips by category
