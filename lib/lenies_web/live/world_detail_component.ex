@@ -25,6 +25,25 @@ defmodule LeniesWeb.WorldDetailComponent do
       <header class="flex items-center gap-2">
         <h2 class="text-xs flex-1">World detail</h2>
         <button
+          id="world-detail-pause"
+          type="button"
+          phx-click="toggle_world_pause"
+          class={[
+            "text-xs px-2 py-0.5 border",
+            if(@paused?,
+              do: "border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/40",
+              else: "border-amber-500/60 text-amber-200 hover:bg-amber-900/40"
+            )
+          ]}
+          title={if @paused?, do: "Resume simulation tick", else: "Pause simulation tick"}
+        >
+          <%= if @paused? do %>
+            ▶ Resume
+          <% else %>
+            ⏸ Pause
+          <% end %>
+        </button>
+        <button
           id="world-detail-close"
           type="button"
           phx-click="close_world_detail"
@@ -56,7 +75,7 @@ defmodule LeniesWeb.WorldDetailComponent do
           >
           </canvas>
           <p class="world-detail-canvas-hint">
-            scroll: zoom · drag: pan · click: focus · dblclick: reset
+            scroll: zoom · drag: pan · click: focus · dblclick: edit Lenie (or reset zoom)
           </p>
         </section>
 

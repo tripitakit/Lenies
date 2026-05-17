@@ -41,8 +41,26 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:inspector_dirty, false)
       |> assign(:world_detail_open?, false)
       |> assign(:world_detail_highlight_hash, nil)
+      |> assign(:world_paused?, world_paused_status())
 
     {:ok, socket}
+  end
+
+  # Read the running world's actual pause flag at mount so the modal
+  # opens with the correct button state even if some other client (or
+  # an iex session) toggled it. Defaults to false if World isn't up.
+  defp world_paused_status do
+    case Process.whereis(Lenies.World) do
+      pid when is_pid(pid) ->
+        try do
+          Lenies.World.paused?()
+        catch
+          :exit, _ -> false
+        end
+
+      _ ->
+        false
+    end
   end
 
   # Returns {top_n, all_species, total_count} from a single Species.aggregate()
@@ -296,6 +314,7 @@ defmodule LeniesWeb.DashboardLive do
               species={@all_species}
               highlight_hash={@world_detail_highlight_hash}
               grid={@grid}
+              paused?={@world_paused?}
             />
           <% end %>
         </div>
@@ -362,6 +381,43 @@ defmodule LeniesWeb.DashboardLive do
 
   def handle_event("highlight_species_in_world", _params, socket) do
     {:noreply, socket}
+  end
+
+  def handle_event("toggle_world_pause", _params, socket) do
+    new_paused =
+      if socket.assigns.world_paused? do
+        Lenies.World.resume()
+        false
+      else
+        Lenies.World.pause()
+        true
+      end
+
+    {:noreply, assign(socket, :world_paused?, new_paused)}
+  end
+
+  def handle_event("select_lenie_at_cell", %{"x" => x, "y" => y}, socket)
+      when is_integer(x) and is_integer(y) do
+    case lookup_lenie_at_cell(x, y) do
+      {:ok, hash} ->
+        {:noreply, push_navigate(socket, to: ~p"/editor/edit/#{hash}")}
+
+      :error ->
+        # No Lenie there — bounce back a "reset_zoom" event so the
+        # canvas snaps to fit-to-canvas. Makes dblclick on empty space
+        # the natural "I want to see everything" gesture.
+        {:noreply, push_event(socket, "reset_zoom", %{})}
+    end
+  end
+
+  defp lookup_lenie_at_cell(x, y) do
+    with [{_, %{lenie_id: id}}] when is_binary(id) <- :ets.lookup(:cells, {x, y}),
+         [{^id, lenie_meta}] <- :ets.lookup(:lenies, id),
+         hash when is_binary(hash) <- Map.get(lenie_meta, :codeome_hash) do
+      {:ok, hash}
+    else
+      _ -> :error
+    end
   end
 
   @impl true

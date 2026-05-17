@@ -6,7 +6,9 @@
 //   - mouse wheel       : zoom in/out at the cursor (cursor stays anchored)
 //   - mousedown + drag  : pan the view in buffer space
 //   - click (no drag)   : center the view on the clicked buffer cell
-//   - double-click      : reset zoom to fit-to-canvas
+//   - double-click      : if the cell holds a Lenie, navigate to its
+//                         codeome editor; otherwise the server pushes
+//                         `reset_zoom` back and the view snaps to fit
 //
 // The highlight byte is read at draw time from the DOM attribute, so
 // LiveView re-renders that change data-highlight-hue automatically take
@@ -45,6 +47,14 @@ const WorldDetailCanvas = {
     this.handleEvent("render_frame", (payload) => {
       this.lastPayload = payload;
       this.renderFrame();
+    });
+
+    // Server bounces this back when dblclick lands on an empty cell.
+    this.handleEvent("reset_zoom", () => {
+      this.zoom = 1;
+      this.centerX = this.gridW / 2;
+      this.centerY = this.gridH / 2;
+      this.requestDraw();
     });
 
     this.attachInteractionHandlers();
@@ -129,10 +139,13 @@ const WorldDetailCanvas = {
 
     this.onDoubleClick = (e) => {
       e.preventDefault();
-      this.zoom = 1;
-      this.centerX = this.gridW / 2;
-      this.centerY = this.gridH / 2;
-      this.requestDraw();
+      const { bufX, bufY } = this.cursorToBuffer(e);
+      const x = Math.floor(bufX);
+      const y = Math.floor(bufY);
+      if (x < 0 || y < 0 || x >= this.gridW || y >= this.gridH) return;
+      // Server inspects the cell and either navigates to the editor
+      // (Lenie present) or pushes `reset_zoom` back (empty cell).
+      this.pushEvent("select_lenie_at_cell", { x, y });
     };
 
     this.canvas.style.cursor = "grab";
