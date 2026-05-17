@@ -765,3 +765,13 @@
   height: 100%;
   cursor: pointer;
 }
+
+/* Override the global button hover transform — without this, hover's
+   translateY(-1px) replaces the ribbon's rotate(180deg), the button
+   un-rotates, its bounding box changes, the cursor leaves, hover ends,
+   the ribbon re-rotates… and the cycle flickers infinitely. */
+.lenies-dashboard button.manual-ribbon:not(:disabled):hover,
+.lenies-dashboard button.manual-ribbon:not(:disabled):active {
+  transform: rotate(180deg);
+  background: rgba(34, 211, 238, 0.15);
+}
