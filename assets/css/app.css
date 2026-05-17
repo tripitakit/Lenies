@@ -658,6 +658,45 @@
   text-overflow: clip;
 }
 
+/* Free-text opcode entry form in the palette pane */
+.lenies-dashboard.codeome-editor-page .palette-text-input-form {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.lenies-dashboard.codeome-editor-page .palette-text-input {
+  flex: 1 1 auto;
+  font-family: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+  font-size: 11px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  color: #e2e8f0;
+  padding: 3px 6px;
+  min-width: 0;
+}
+
+.lenies-dashboard.codeome-editor-page .palette-text-input:focus {
+  outline: none;
+  border-color: rgba(34, 211, 238, 0.6);
+}
+
+.lenies-dashboard.codeome-editor-page .palette-text-input-submit {
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  background: transparent;
+  color: #67e8f9;
+  padding: 0 10px;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.lenies-dashboard.codeome-editor-page .palette-text-input-error {
+  color: #fbbf24;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
 /* The listing pane stacks (title + blocks). The blocks container must
    fill the remaining vertical space so an empty buffer still has a
    non-zero drop surface for SortableJS — without this the container

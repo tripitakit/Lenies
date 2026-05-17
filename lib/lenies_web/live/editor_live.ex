@@ -32,6 +32,8 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:show_save_form, false)
       |> assign(:current_chapter, @default_chapter)
       |> assign(:manual_collapsed?, false)
+      |> assign(:text_input_value, "")
+      |> assign(:text_input_error, nil)
 
     {:ok, socket}
   end
@@ -197,6 +199,25 @@ defmodule LeniesWeb.EditorLive do
      push_navigate(socket, to: back_to(socket.assigns.mode, socket.assigns.selected_hash))}
   end
 
+  def handle_event("submit_opcode_text", %{"opcodes" => text}, socket) do
+    case parse_opcode_text(text) do
+      {:ok, []} ->
+        {:noreply, assign(socket, text_input_value: "", text_input_error: nil)}
+
+      {:ok, opcodes} ->
+        new_buffer = socket.assigns.buffer ++ opcodes
+
+        {:noreply,
+         socket
+         |> apply_buffer_change(new_buffer)
+         |> assign(text_input_value: "", text_input_error: nil)}
+
+      {:error, invalid} ->
+        msg = "unknown: " <> Enum.join(invalid, ", ")
+        {:noreply, assign(socket, text_input_value: text, text_input_error: msg)}
+    end
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -354,7 +375,29 @@ defmodule LeniesWeb.EditorLive do
         />
 
         <section class="codeome-palette-pane min-h-0">
-          <div class="codeome-palette-pane-title">Opcodes — drag to insert</div>
+          <div class="codeome-palette-pane-title">
+            Opcodes — drag, dblclick, or type
+          </div>
+
+          <form phx-submit="submit_opcode_text" class="palette-text-input-form">
+            <input
+              type="text"
+              name="opcodes"
+              value={@text_input_value}
+              placeholder="e.g. push0 push1 add"
+              autocomplete="off"
+              spellcheck="false"
+              class="palette-text-input"
+            />
+            <button type="submit" class="palette-text-input-submit" title="Append opcodes">
+              +
+            </button>
+          </form>
+
+          <%= if @text_input_error do %>
+            <p class="palette-text-input-error">⚠ {@text_input_error}</p>
+          <% end %>
+
           <div class="codeome-palette" id="palette-grid" phx-hook="CodeomePalette">
             <%= for {category, ops} <- grouped_opcodes() do %>
               <div class="palette-category">
@@ -459,6 +502,40 @@ defmodule LeniesWeb.EditorLive do
 
   defp format_validation_error({:insufficient_non_nops, opts}),
     do: "too few non-nops (#{opts[:got]}, min #{opts[:min]})"
+
+  # Splits a free-text input on whitespace and commas, lowercases, then
+  # validates each token against the known opcode set. Returns
+  # `{:ok, [atom]}` if every token is a known opcode, or `{:error, [string]}`
+  # listing the unknown tokens. Empty input → `{:ok, []}`.
+  defp parse_opcode_text(text) when is_binary(text) do
+    tokens =
+      text
+      |> String.downcase()
+      |> String.split(~r/[\s,]+/, trim: true)
+
+    {valid, invalid} =
+      Enum.reduce(tokens, {[], []}, fn token, {valid, invalid} ->
+        case to_known_opcode(token) do
+          {:ok, atom} -> {[atom | valid], invalid}
+          :error -> {valid, [token | invalid]}
+        end
+      end)
+
+    if invalid == [] do
+      {:ok, Enum.reverse(valid)}
+    else
+      {:error, Enum.reverse(invalid)}
+    end
+  end
+
+  defp to_known_opcode(token) do
+    try do
+      atom = String.to_existing_atom(token)
+      if Lenies.Codeome.Opcodes.known?(atom), do: {:ok, atom}, else: :error
+    rescue
+      ArgumentError -> :error
+    end
+  end
 
   defp grouped_opcodes do
     Lenies.Codeome.Opcodes.all()

@@ -108,4 +108,59 @@ defmodule LeniesWeb.EditorLiveTest do
     assert editable_blocks == [["PUSH1", "PUSH1"]] or
              Enum.map(editable_blocks, &List.last/1) == ["PUSH1"]
   end
+
+  test "submit_opcode_text appends all tokens when all valid", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+
+    view
+    |> form("form[phx-submit=submit_opcode_text]", %{opcodes: "push0 push1 add"})
+    |> render_submit()
+
+    html = render(view)
+    assert html =~ "Codeome — 3 ops"
+    assert html =~ "PUSH0"
+    assert html =~ "PUSH1"
+    assert html =~ "ADD"
+    refute html =~ "palette-text-input-error"
+  end
+
+  test "submit_opcode_text is case-insensitive and tolerates commas", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+
+    view
+    |> form("form[phx-submit=submit_opcode_text]", %{opcodes: "PUSH0, ADD"})
+    |> render_submit()
+
+    html = render(view)
+    assert html =~ "Codeome — 2 ops"
+  end
+
+  test "submit_opcode_text rejects all-or-nothing on invalid token and surfaces error",
+       %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+
+    view
+    |> form("form[phx-submit=submit_opcode_text]", %{opcodes: "push0 foobar baz"})
+    |> render_submit()
+
+    html = render(view)
+    # buffer unchanged
+    assert html =~ "Codeome — 0 ops"
+    # error visible with the unknown tokens listed
+    assert html =~ "unknown: foobar, baz"
+    # input value preserved so user can edit it
+    assert html =~ ~s(value="push0 foobar baz")
+  end
+
+  test "submit_opcode_text with empty input is a no-op", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+
+    view
+    |> form("form[phx-submit=submit_opcode_text]", %{opcodes: "   "})
+    |> render_submit()
+
+    html = render(view)
+    assert html =~ "Codeome — 0 ops"
+    refute html =~ "palette-text-input-error"
+  end
 end
