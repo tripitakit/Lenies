@@ -75,7 +75,7 @@ defmodule LeniesWeb.WorldDetailComponent do
           >
           </canvas>
           <p class="world-detail-canvas-hint">
-            scroll: zoom · drag: pan · click: focus · dblclick: edit Lenie (or reset zoom)
+            scroll: zoom · drag: pan · click: focus · dblclick on a Lenie: edit codeome
           </p>
         </section>
 

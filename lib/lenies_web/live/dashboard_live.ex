@@ -405,14 +405,8 @@ defmodule LeniesWeb.DashboardLive do
   def handle_event("select_lenie_at_cell", %{"x" => x, "y" => y}, socket)
       when is_integer(x) and is_integer(y) do
     case lookup_lenie_at_cell(x, y) do
-      {:ok, hash} ->
-        {:noreply, push_navigate(socket, to: ~p"/editor/edit/#{hash}")}
-
-      :error ->
-        # No Lenie there — bounce back a "reset_zoom" event so the
-        # canvas snaps to fit-to-canvas. Makes dblclick on empty space
-        # the natural "I want to see everything" gesture.
-        {:noreply, push_event(socket, "reset_zoom", %{})}
+      {:ok, hash} -> {:noreply, push_navigate(socket, to: ~p"/editor/edit/#{hash}")}
+      :error -> {:noreply, socket}
     end
   end
 
