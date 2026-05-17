@@ -6,7 +6,7 @@ defmodule LeniesWeb.LenieInspectorLive do
   Subscribes to `"lenie:<id>"` PubSub topic and re-renders on each
   `{:lenie_update, snap}` broadcast.
 
-  Vedi spec §7.2.
+  See spec §7.2.
   """
 
   use LeniesWeb, :live_view
@@ -107,26 +107,26 @@ defmodule LeniesWeb.LenieInspectorLive do
 
       <%= if @found? do %>
         <div class="state">
-          <h2>Stato</h2>
+          <h2>State</h2>
           <table>
             <tr>
               <th>ID</th>
               <td>{@snap.id}</td>
             </tr>
             <tr>
-              <th>Energia</th>
+              <th>Energy</th>
               <td>{Float.round(@snap.energy, 2)}</td>
             </tr>
             <tr>
-              <th>Posizione</th>
+              <th>Position</th>
               <td>{inspect(@snap.pos)}</td>
             </tr>
             <tr>
-              <th>Direzione</th>
+              <th>Direction</th>
               <td>{@snap.dir}</td>
             </tr>
             <tr>
-              <th>Età</th>
+              <th>Age</th>
               <td>{Map.get(@snap, :age, 0)}</td>
             </tr>
             <tr>
@@ -158,10 +158,10 @@ defmodule LeniesWeb.LenieInspectorLive do
           </pre>
         </div>
       <% else %>
-        <p>Lenie <strong>{@id}</strong> non trovato (forse estinto).</p>
+        <p>Lenie <strong>{@id}</strong> not found (possibly extinct).</p>
       <% end %>
 
-      <a href="/">← Torna al dashboard</a>
+      <a href="/">← Back to dashboard</a>
     </div>
     """
   end

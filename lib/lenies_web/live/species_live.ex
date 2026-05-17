@@ -5,7 +5,7 @@ defmodule LeniesWeb.SpeciesLive do
   Shows population summary, Codeome (via sample Lenie), and lineage list.
   Phylogenetic tree visualization deferred (placeholder).
 
-  Vedi spec §7.3.
+  See spec §7.3.
   """
 
   use LeniesWeb, :live_view
@@ -74,10 +74,10 @@ defmodule LeniesWeb.SpeciesLive do
   def render(assigns) do
     ~H"""
     <div class="species-view">
-      <h1>Specie: {String.slice(@hash, 0..15)}…</h1>
+      <h1>Species: {String.slice(@hash, 0..15)}…</h1>
 
       <%= if @found? do %>
-        <p><strong>Popolazione:</strong> {@population}</p>
+        <p><strong>Population:</strong> {@population}</p>
 
         <h2>Codeome ({length(@codeome_lines)} opcodes)</h2>
         <pre class="disassembly">
@@ -98,7 +98,7 @@ defmodule LeniesWeb.SpeciesLive do
               <th>ID</th>
               <th>Parent</th>
               <th>Generation</th>
-              <th>Energia</th>
+              <th>Energy</th>
             </tr>
           </thead>
           <tbody>
@@ -116,13 +116,13 @@ defmodule LeniesWeb.SpeciesLive do
         </table>
 
         <p class="note">
-          (Filogenia SVG-tree e diff con specie sorelle: deferito a un futuro polish.)
+          (Phylogeny SVG-tree and sister-species diff: deferred to a future polish.)
         </p>
       <% else %>
-        <p>Specie con hash <code>{@hash}</code> non trovata (estinta o mai esistita).</p>
+        <p>Species with hash <code>{@hash}</code> not found (extinct or never existed).</p>
       <% end %>
 
-      <a href="/">← Torna al dashboard</a>
+      <a href="/">← Back to dashboard</a>
     </div>
     """
   end

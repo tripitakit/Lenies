@@ -57,7 +57,7 @@ defmodule LeniesWeb.SpeciesLiveTest do
     {:ok, _view, html} = live(conn, "/species/#{hash}")
 
     assert html =~ hash
-    assert html =~ ~r/Popolazione/i
+    assert html =~ ~r/Population/i
     # lineage entry
     assert html =~ "SP1"
 
@@ -66,6 +66,6 @@ defmodule LeniesWeb.SpeciesLiveTest do
 
   test "mount on /species/:hash with unknown hash shows empty/extinct", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/species/00000000")
-    assert html =~ ~r/(estinto|empty|nessuno|estinta|mai esistita)/i
+    assert html =~ ~r/(extinct|not found|never existed|empty)/i
   end
 end

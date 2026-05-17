@@ -48,13 +48,13 @@ defmodule LeniesWeb.DashboardLiveTest do
   test "clicking sterilize_init shows confirm prompt", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/")
 
-    refute render(view) =~ "Sei sicuro?"
+    refute render(view) =~ "Are you sure?"
 
     view
     |> element("button", "Sterilize")
     |> render_click()
 
-    assert render(view) =~ "Sei sicuro?"
+    assert render(view) =~ "Are you sure?"
   end
 
   test "clicking sterilize_confirm resets the world", %{conn: conn} do
@@ -69,7 +69,7 @@ defmodule LeniesWeb.DashboardLiveTest do
     |> render_click()
 
     view
-    |> element("button", "Sì, sterilizza")
+    |> element("button", "Yes, sterilize")
     |> render_click()
 
     stats_after = Lenies.World.snapshot_stats()

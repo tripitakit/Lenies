@@ -51,7 +51,7 @@ defmodule Lenies.WorldTest do
     {:ok, _pid} = World.start_link(tick_interval_ms: 0)
     max_total = 65_536 * 100
 
-    # 1000 tick → 100_000 unità versate (ben sotto il cap globale)
+    # 1000 ticks → 100_000 units poured (well below the global cap)
     for _ <- 1..1000, do: World.tick_now()
 
     stats = World.snapshot_stats()
@@ -74,7 +74,7 @@ defmodule Lenies.WorldTest do
 
     {:ok, _pid} = World.start_link(tick_interval_ms: 0)
 
-    # iniettiamo una carcassa manualmente in una cella
+    # manually inject a carcass into a cell
     [{key, cell}] = :ets.lookup(:cells, {10, 10})
     :ets.insert(:cells, {key, %{cell | carcass: 100}})
 

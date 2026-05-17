@@ -56,8 +56,8 @@ defmodule LeniesWeb.LenieInspectorLiveTest do
     {:ok, _view, html} = live(conn, "/lenie/INSP1")
 
     assert html =~ "INSP1"
-    assert html =~ ~r/Energia/i
-    assert html =~ ~r/Posizione/i
+    assert html =~ ~r/Energy/i
+    assert html =~ ~r/Position/i
 
     assert html =~ "nop_0"
     assert html =~ "push1"
@@ -70,6 +70,6 @@ defmodule LeniesWeb.LenieInspectorLiveTest do
     conn: conn
   } do
     {:ok, _view, html} = live(conn, "/lenie/nonexistent")
-    assert html =~ ~r/(non trovato|not found|estinto|deceased)/i
+    assert html =~ ~r/(not found|deceased)/i
   end
 end

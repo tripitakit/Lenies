@@ -119,7 +119,7 @@ defmodule LeniesWeb.DashboardLive do
       <div class="flex-1 grid gap-3 min-h-0 grid-rows-[minmax(0,1fr)_auto]">
         <div class="flex gap-3 min-h-0">
           <div class="panel p-3 flex flex-col gap-2 shrink-0">
-            <h2 class="text-xs">▮ Mondo</h2>
+            <h2 class="text-xs">▮ World</h2>
             <div class="canvas-frame">
               <canvas
                 id="grid-canvas"
@@ -154,7 +154,7 @@ defmodule LeniesWeb.DashboardLive do
                   checked={@layers_visible.resource}
                   class="accent-emerald-400"
                 />
-                <span>Risorse</span>
+                <span>Resources</span>
               </label>
               <label class="flex items-center gap-1.5 cursor-pointer">
                 <input
@@ -164,30 +164,30 @@ defmodule LeniesWeb.DashboardLive do
                   checked={@layers_visible.carcass}
                   class="accent-rose-400"
                 />
-                <span>Carcasse</span>
+                <span>Carcasses</span>
               </label>
             </div>
           </div>
 
           <div class="flex-1 grid grid-rows-2 gap-3 min-h-0 min-w-0">
             <div class="panel p-3 flex flex-col gap-2 min-h-0">
-              <h2 class="text-xs">▮ Telemetria — popolazione totale nel tempo</h2>
+              <h2 class="text-xs">▮ Telemetry — total population over time</h2>
               <% latest = List.last(@history) || %{population: 0, total_resource: 0, total_carcass: 0} %>
               <div class="grid grid-cols-3 gap-2 text-[11px]">
                 <div class="border border-cyan-500/30 px-2 py-1">
-                  <div class="opacity-60">popolaz.</div>
+                  <div class="opacity-60">pop.</div>
                   <div class="text-cyan-300 font-bold tabular-nums text-base">
                     {latest.population}
                   </div>
                 </div>
                 <div class="border border-emerald-500/30 px-2 py-1">
-                  <div class="opacity-60">risorse</div>
+                  <div class="opacity-60">resources</div>
                   <div class="text-emerald-300 font-bold tabular-nums text-base">
                     {latest.total_resource}
                   </div>
                 </div>
                 <div class="border border-rose-500/30 px-2 py-1">
-                  <div class="opacity-60">carcasse</div>
+                  <div class="opacity-60">carcasses</div>
                   <div class="text-rose-300 font-bold tabular-nums text-base">
                     {latest.total_carcass}
                   </div>
@@ -234,13 +234,13 @@ defmodule LeniesWeb.DashboardLive do
                 <text x="4" y="96" fill="#64748b" font-size="8" font-family="monospace">0</text>
               </svg>
               <p class="text-[9px] opacity-50 leading-tight">
-                Una linea per ciascuna delle top {length(@species)} specie correnti (top 20/tick salvate in history).
+                One line per species in the current top {length(@species)} (top 20 per tick saved to history).
               </p>
             </div>
 
             <div class="panel p-3 flex flex-col gap-2 min-h-0">
               <h2 class="text-xs">
-                ▮ Specie <span class="opacity-60">top {length(@species)} di {@species_total}</span>
+                ▮ Top {length(@species)} species of <span class="opacity-60">{@species_total}</span>
               </h2>
               <div class="flex-1 min-h-0 overflow-auto">
                 <table class="w-full text-[11px] tabular-nums">

@@ -67,7 +67,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
     ~H"""
     <div class="grid grid-cols-[minmax(260px,320px)_1fr] gap-3 min-h-0">
       <div class="panel p-3 flex flex-col gap-3">
-        <h2 class="text-xs">▮ Controllo</h2>
+        <h2 class="text-xs">▮ Controls</h2>
 
         <div class="flex gap-2">
           <%= if @sterilize_confirming do %>
@@ -77,21 +77,21 @@ defmodule LeniesWeb.ControlsPanelComponent do
               data-fx="danger"
               class="flex-1 flex flex-col gap-1 p-2 border border-rose-500/60 bg-rose-950/40"
             >
-              <p class="text-[11px] text-rose-200">Sei sicuro? Distrugge la sandbox.</p>
+              <p class="text-[11px] text-rose-200">Are you sure? This destroys the sandbox.</p>
               <div class="flex gap-1">
                 <button
                   phx-click="sterilize_confirm"
                   phx-target={@myself}
                   class="flex-1 text-xs px-2 py-1 border border-rose-500 bg-rose-700/40 text-rose-100 hover:bg-rose-600/60"
                 >
-                  Sì, sterilizza
+                  Yes, sterilize
                 </button>
                 <button
                   phx-click="sterilize_cancel"
                   phx-target={@myself}
                   class="flex-1 text-xs px-2 py-1 border border-slate-500 bg-slate-800 hover:bg-slate-700"
                 >
-                  Annulla
+                  Cancel
                 </button>
               </div>
             </div>
@@ -164,7 +164,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
         >
           <h3 class="text-[10px]">▸ Seed</h3>
           <label class="flex items-center gap-2 text-[11px]">
-            <span class="opacity-70 w-12">tipo</span>
+            <span class="opacity-70 w-12">type</span>
             <select name="seed_id" class="flex-1 text-xs">
               <%= for s <- Lenies.Seeds.all() do %>
                 <option value={Atom.to_string(s.id)}>{s.name}</option>
