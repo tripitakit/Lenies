@@ -8,8 +8,14 @@
 
 const RememberManualState = {
   mounted() {
-    const chapter = localStorage.getItem("lenies.manual.lastChapter");
-    const collapsed = localStorage.getItem("lenies.manual.collapsed");
+    let chapter = null;
+    let collapsed = null;
+    try {
+      chapter = localStorage.getItem("lenies.manual.lastChapter");
+      collapsed = localStorage.getItem("lenies.manual.collapsed");
+    } catch (_e) {
+      // localStorage unavailable (Safari private mode, disabled storage, etc.) — skip restore
+    }
 
     const payload = {};
     if (chapter) payload.chapter = chapter;
@@ -20,11 +26,15 @@ const RememberManualState = {
     }
 
     this.handleEvent("persist_manual_state", ({ chapter, collapsed }) => {
-      if (typeof chapter === "string") {
-        localStorage.setItem("lenies.manual.lastChapter", chapter);
-      }
-      if (typeof collapsed === "boolean") {
-        localStorage.setItem("lenies.manual.collapsed", String(collapsed));
+      try {
+        if (typeof chapter === "string") {
+          localStorage.setItem("lenies.manual.lastChapter", chapter);
+        }
+        if (typeof collapsed === "boolean") {
+          localStorage.setItem("lenies.manual.collapsed", String(collapsed));
+        }
+      } catch (_e) {
+        // localStorage unavailable — silently skip persistence
       }
     });
   },

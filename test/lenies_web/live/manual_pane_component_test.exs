@@ -47,4 +47,12 @@ defmodule LeniesWeb.ManualPaneComponentTest do
     html = render_component(ManualPaneComponent, base_assigns(%{collapsed?: false}))
     refute html =~ "manual-ribbon"
   end
+
+  test "rendering with a different chapter shows that chapter's content" do
+    html1 = render_component(ManualPaneComponent, base_assigns())
+    html2 = render_component(ManualPaneComponent, base_assigns(%{chapter: "08-energy-economy.md"}))
+
+    refute html1 == html2
+    assert html2 =~ "Energy"
+  end
 end

@@ -15,7 +15,7 @@ defmodule LeniesWeb.ManualPaneComponent do
     assigns =
       assigns
       |> assign_new(:chapters, fn -> Manual.list_chapters() end)
-      |> assign_new(:entry, fn -> Manual.get(assigns.chapter) end)
+      |> assign(:entry, Manual.get(assigns.chapter))
 
     ~H"""
     <aside id={@id} class={["manual-pane", @collapsed? && "manual-pane-collapsed"]}>
@@ -54,7 +54,7 @@ defmodule LeniesWeb.ManualPaneComponent do
         </header>
 
         <div
-          id="manual-content"
+          id={"manual-content-" <> @chapter}
           phx-hook="ManualLinkInterceptor"
           phx-update="ignore"
           class="manual-content"
