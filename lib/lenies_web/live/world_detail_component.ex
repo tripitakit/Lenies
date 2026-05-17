@@ -55,6 +55,9 @@ defmodule LeniesWeb.WorldDetailComponent do
             class="world-detail-canvas"
           >
           </canvas>
+          <p class="world-detail-canvas-hint">
+            scroll: zoom · drag: pan · click: focus · dblclick: reset
+          </p>
         </section>
 
         <section class="world-detail-species-pane">

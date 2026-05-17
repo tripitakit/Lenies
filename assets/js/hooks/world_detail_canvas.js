@@ -1,13 +1,23 @@
 // WorldDetailCanvas hook: renders the same render_frame payload as the
-// dashboard's GridCanvas hook but at a larger pixel scale and with an
+// dashboard's GridCanvas hook but at a larger pixel scale, with an
 // optional "highlight" filter that dims every pixel whose species byte
-// does not match data-highlight-hue.
+// does not match data-highlight-hue, and with pan/zoom controls:
+//
+//   - mouse wheel       : zoom in/out at the cursor (cursor stays anchored)
+//   - mousedown + drag  : pan the view in buffer space
+//   - click (no drag)   : center the view on the clicked buffer cell
+//   - double-click      : reset zoom to fit-to-canvas
 //
 // The highlight byte is read at draw time from the DOM attribute, so
 // LiveView re-renders that change data-highlight-hue automatically take
 // effect on the next frame without any extra event plumbing.
 
 import { HUE_LUT } from "./grid_canvas_hue_lut.js";
+
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 32;
+const ZOOM_STEP = 1.2;
+const CLICK_DRAG_THRESHOLD_PX = 3;
 
 const WorldDetailCanvas = {
   mounted() {
@@ -23,10 +33,21 @@ const WorldDetailCanvas = {
 
     this.lastPayload = null;
 
+    // View state — viewport in buffer coordinates.
+    this.zoom = 1;
+    this.centerX = this.gridW / 2;
+    this.centerY = this.gridH / 2;
+
+    this.isDragging = false;
+    this.dragMoved = false;
+    this.dragStart = null;
+
     this.handleEvent("render_frame", (payload) => {
       this.lastPayload = payload;
       this.renderFrame();
     });
+
+    this.attachInteractionHandlers();
 
     // Initial black fill until the first frame arrives.
     this.ctx.fillStyle = "#000";
@@ -38,6 +59,146 @@ const WorldDetailCanvas = {
   // immediately without waiting for the next server frame.
   updated() {
     if (this.lastPayload) this.renderFrame();
+  },
+
+  attachInteractionHandlers() {
+    // Wheel = zoom toward the cursor (cursor stays anchored on the same
+    // buffer cell across the zoom).
+    this.onWheel = (e) => {
+      e.preventDefault();
+      const { mx, my, bufX, bufY } = this.cursorToBuffer(e);
+      const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+      const newZoom = clamp(this.zoom * factor, MIN_ZOOM, MAX_ZOOM);
+      if (newZoom === this.zoom) return;
+      this.zoom = newZoom;
+      const eff = this.effectiveScale();
+      this.centerX = bufX - (mx - this.canvas.width / 2) / eff;
+      this.centerY = bufY - (my - this.canvas.height / 2) / eff;
+      this.clampCenter();
+      this.requestDraw();
+    };
+
+    this.onMouseDown = (e) => {
+      if (e.button !== 0) return;
+      this.isDragging = true;
+      this.dragMoved = false;
+      this.dragStart = {
+        clientX: e.clientX,
+        clientY: e.clientY,
+        centerX: this.centerX,
+        centerY: this.centerY,
+      };
+      this.canvas.style.cursor = "grabbing";
+    };
+
+    this.onMouseMove = (e) => {
+      if (!this.isDragging) return;
+      const dx = e.clientX - this.dragStart.clientX;
+      const dy = e.clientY - this.dragStart.clientY;
+      if (Math.abs(dx) + Math.abs(dy) > CLICK_DRAG_THRESHOLD_PX) {
+        this.dragMoved = true;
+      }
+      // Convert pixel delta to buffer-coord delta. Drag right ⇒ view
+      // shifts left in buffer space (we look further left).
+      const rect = this.canvas.getBoundingClientRect();
+      const eff = this.effectiveScale() * (this.canvas.width / rect.width);
+      this.centerX = this.dragStart.centerX - dx / eff;
+      this.centerY = this.dragStart.centerY - dy / eff;
+      this.clampCenter();
+      this.requestDraw();
+    };
+
+    this.onMouseUp = (e) => {
+      if (!this.isDragging) return;
+      const wasClick = !this.dragMoved;
+      this.isDragging = false;
+      this.canvas.style.cursor = "grab";
+      if (wasClick) {
+        const { bufX, bufY } = this.cursorToBuffer(e);
+        this.centerX = bufX;
+        this.centerY = bufY;
+        this.clampCenter();
+        this.requestDraw();
+      }
+    };
+
+    this.onMouseLeave = () => {
+      this.isDragging = false;
+      this.canvas.style.cursor = "grab";
+    };
+
+    this.onDoubleClick = (e) => {
+      e.preventDefault();
+      this.zoom = 1;
+      this.centerX = this.gridW / 2;
+      this.centerY = this.gridH / 2;
+      this.requestDraw();
+    };
+
+    this.canvas.style.cursor = "grab";
+    this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
+    this.canvas.addEventListener("mousedown", this.onMouseDown);
+    this.canvas.addEventListener("mousemove", this.onMouseMove);
+    this.canvas.addEventListener("mouseup", this.onMouseUp);
+    this.canvas.addEventListener("mouseleave", this.onMouseLeave);
+    this.canvas.addEventListener("dblclick", this.onDoubleClick);
+  },
+
+  detachInteractionHandlers() {
+    if (!this.onWheel) return;
+    this.canvas.removeEventListener("wheel", this.onWheel);
+    this.canvas.removeEventListener("mousedown", this.onMouseDown);
+    this.canvas.removeEventListener("mousemove", this.onMouseMove);
+    this.canvas.removeEventListener("mouseup", this.onMouseUp);
+    this.canvas.removeEventListener("mouseleave", this.onMouseLeave);
+    this.canvas.removeEventListener("dblclick", this.onDoubleClick);
+  },
+
+  // Display pixels per buffer cell at current zoom.
+  effectiveScale() {
+    return (this.canvas.width / this.gridW) * this.zoom;
+  },
+
+  // Convert a mouse event's client coords into both canvas-internal
+  // pixel coords and the buffer cell under the cursor.
+  cursorToBuffer(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (this.canvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (this.canvas.height / rect.height);
+    const eff = this.effectiveScale();
+    const bufX = this.centerX + (mx - this.canvas.width / 2) / eff;
+    const bufY = this.centerY + (my - this.canvas.height / 2) / eff;
+    return { mx, my, bufX, bufY };
+  },
+
+  // Keep the visible buffer region within the grid bounds so panning
+  // never reveals empty space outside the world.
+  clampCenter() {
+    const eff = this.effectiveScale();
+    const halfW = this.canvas.width / 2 / eff;
+    const halfH = this.canvas.height / 2 / eff;
+    if (halfW * 2 >= this.gridW) {
+      this.centerX = this.gridW / 2;
+    } else {
+      this.centerX = clamp(this.centerX, halfW, this.gridW - halfW);
+    }
+    if (halfH * 2 >= this.gridH) {
+      this.centerY = this.gridH / 2;
+    } else {
+      this.centerY = clamp(this.centerY, halfH, this.gridH - halfH);
+    }
+  },
+
+  // Coalesce interaction-driven redraws to the next animation frame —
+  // wheel/mousemove can fire faster than 60 Hz.
+  requestDraw() {
+    if (!this.lastPayload) return;
+    if (this.drawScheduled) return;
+    this.drawScheduled = true;
+    requestAnimationFrame(() => {
+      this.drawScheduled = false;
+      this.renderFrame();
+    });
   },
 
   decodeBase64(b64) {
@@ -99,19 +260,32 @@ const WorldDetailCanvas = {
 
     this.bufferCtx.putImageData(imageData, 0, 0);
 
-    // Nearest-neighbor upscale onto the display canvas.
+    // Nearest-neighbor upscale of the current viewport onto the display
+    // canvas. zoom=1 + center at grid center => full grid fills canvas
+    // (matches the pre-pan/zoom behavior).
+    const eff = this.effectiveScale();
+    const srcW = this.canvas.width / eff;
+    const srcH = this.canvas.height / eff;
+    const sx = this.centerX - srcW / 2;
+    const sy = this.centerY - srcH / 2;
+
     this.ctx.imageSmoothingEnabled = false;
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.ctx.drawImage(
       this.bufferCanvas,
-      0, 0, this.gridW, this.gridH,
+      sx, sy, srcW, srcH,
       0, 0, this.canvas.width, this.canvas.height
     );
   },
 
   destroyed() {
+    this.detachInteractionHandlers();
     this.lastPayload = null;
   }
 };
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
 
 export default WorldDetailCanvas;
