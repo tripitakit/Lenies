@@ -8,6 +8,9 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
   refetches only when `selected_hash` changes. Population and average
   generation come from the parent via `species_record` and refresh on every
   parent update (same throttle as the species table).
+
+  Editing is no longer performed in-place; the header includes an **Edit**
+  link that navigates to the standalone `/editor/edit/:hash` page.
   """
 
   use LeniesWeb, :live_component
@@ -21,34 +24,10 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
      socket
      |> assign(:codeome_lines, [])
      |> assign(:fetch_status, :ok)
-     |> assign(:cached_codeome_hash, nil)
-     |> assign(:edit_mode, false)
-     |> assign(:buffer, [])
-     |> assign(:dirty, false)
-     |> assign(:validation, {:ok, %{len: 0, non_nops: 0}})
-     |> assign(:show_spawn_form, false)
-     |> assign(:show_save_form, false)
-     |> assign(:editor_mode, nil)}
+     |> assign(:cached_codeome_hash, nil)}
   end
 
   @impl true
-  def update(%{editor_mode: :new_seed} = assigns, socket) do
-    cleared =
-      socket
-      |> assign(assigns)
-      |> assign(:codeome_lines, [])
-      |> assign(:fetch_status, :ok)
-      |> assign(:cached_codeome_hash, nil)
-      |> assign(:edit_mode, true)
-      |> assign(:buffer, [])
-      |> assign(:dirty, false)
-      |> assign(:validation, LeniesWeb.CodeomeBuffer.validate([]))
-      |> assign(:show_spawn_form, false)
-      |> assign(:show_save_form, false)
-
-    {:ok, cleared}
-  end
-
   def update(%{selected_hash: hash} = assigns, socket)
       when is_binary(hash) and hash != "" do
     if hash == socket.assigns.cached_codeome_hash do
@@ -61,13 +40,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
        |> assign(assigns)
        |> assign(:codeome_lines, lines)
        |> assign(:fetch_status, status)
-       |> assign(:cached_codeome_hash, hash)
-       |> assign(:edit_mode, false)
-       |> assign(:buffer, [])
-       |> assign(:dirty, false)
-       |> assign(:validation, {:ok, %{len: 0, non_nops: 0}})
-       |> assign(:show_spawn_form, false)
-       |> notify_parent_dirty(false)}
+       |> assign(:cached_codeome_hash, hash)}
     end
   end
 
@@ -76,391 +49,64 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
   end
 
   @impl true
-  def handle_event("enter_edit", _params, socket) do
-    buffer = Enum.map(socket.assigns.codeome_lines, & &1.opcode)
-
-    {:noreply,
-     socket
-     |> assign(:edit_mode, true)
-     |> assign(:buffer, buffer)
-     |> assign(:dirty, false)
-     |> assign(:validation, LeniesWeb.CodeomeBuffer.validate(buffer))}
-  end
-
-  def handle_event("cancel_edit", _params, socket) do
-    socket =
-      socket
-      |> assign(:edit_mode, false)
-      |> assign(:buffer, [])
-      |> assign(:dirty, false)
-      |> assign(:validation, {:ok, %{len: 0, non_nops: 0}})
-      |> assign(:show_spawn_form, false)
-      |> assign(:show_save_form, false)
-      |> notify_parent_dirty(false)
-
-    if socket.assigns[:editor_mode] == :new_seed do
-      send(self(), {:editor_mode, nil})
-      {:noreply, assign(socket, :editor_mode, nil)}
-    else
-      {:noreply, socket}
-    end
-  end
-
-  def handle_event("edit_delete", %{"index" => index_str}, socket) do
-    index = String.to_integer(index_str)
-    new_buffer = LeniesWeb.CodeomeBuffer.delete(socket.assigns.buffer, index)
-    apply_buffer_change(socket, new_buffer)
-  end
-
-  def handle_event("open_spawn_form", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:show_spawn_form, true)
-     |> assign(:show_save_form, false)}
-  end
-
-  def handle_event("cancel_spawn_form", _params, socket) do
-    {:noreply, assign(socket, :show_spawn_form, false)}
-  end
-
-  def handle_event("edit_reorder", %{"from" => from, "to" => to}, socket) do
-    new_buffer = LeniesWeb.CodeomeBuffer.move(socket.assigns.buffer, from, to)
-    apply_buffer_change(socket, new_buffer)
-  end
-
-  def handle_event("edit_insert", %{"index" => index, "opcode" => opcode_str}, socket)
-      when is_integer(index) and is_binary(opcode_str) do
-    try do
-      opcode = String.to_existing_atom(opcode_str)
-
-      if Lenies.Codeome.Opcodes.known?(opcode) do
-        new_buffer = LeniesWeb.CodeomeBuffer.insert(socket.assigns.buffer, index, opcode)
-        apply_buffer_change(socket, new_buffer)
-      else
-        {:noreply, socket}
-      end
-    rescue
-      ArgumentError -> {:noreply, socket}
-    end
-  end
-
-  def handle_event("submit_spawn", %{"count" => count_str, "energy" => energy_str}, socket) do
-    count = parse_clamped(count_str, 1, 50, 1)
-    energy = parse_clamped(energy_str, 1, 1_000_000, 10_000)
-
-    case socket.assigns.validation do
-      {:ok, _} ->
-        codeome = LeniesWeb.CodeomeBuffer.to_codeome(socket.assigns.buffer)
-        dirs = [:n, :s, :e, :w]
-
-        Enum.each(1..count, fn _ ->
-          Lenies.World.spawn_lenie(codeome, energy: energy * 1.0, dir: Enum.random(dirs))
-        end)
-
-        {:noreply, assign(socket, :show_spawn_form, false)}
-
-      {:error, _} ->
-        # Invalid buffer — do nothing, leave the form open.
-        {:noreply, socket}
-    end
-  end
-
-  def handle_event("open_save_form", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:show_save_form, true)
-     |> assign(:show_spawn_form, false)}
-  end
-
-  def handle_event("cancel_save_form", _params, socket) do
-    {:noreply, assign(socket, :show_save_form, false)}
-  end
-
-  def handle_event(
-        "submit_save_seed",
-        %{
-          "seed_name" => name,
-          "color_hex" => color,
-          "energy_default" => energy_str
-        },
-        socket
-      ) do
-    case socket.assigns.validation do
-      {:ok, _} ->
-        seed = %{
-          id: slug(name),
-          name: name,
-          color_hex: color,
-          energy_default: parse_clamped(energy_str, 1, 1_000_000, 10_000) * 1.0,
-          opcodes: socket.assigns.buffer
-        }
-
-        case Lenies.Seeds.CustomStore.save(seed) do
-          :ok ->
-            send(self(), {:editor_mode, nil})
-            Phoenix.LiveView.send_update(LeniesWeb.ControlsPanelComponent,
-              id: "controls",
-              refresh_custom_seeds: true
-            )
-
-            {:noreply,
-             socket
-             |> assign(:editor_mode, nil)
-             |> assign(:show_save_form, false)
-             |> assign(:edit_mode, false)
-             |> assign(:buffer, [])
-             |> assign(:dirty, false)
-             |> notify_parent_dirty(false)}
-
-          {:error, _reason} ->
-            {:noreply, socket}
-        end
-
-      {:error, _} ->
-        {:noreply, socket}
-    end
-  end
-
-  @impl true
   def render(assigns) do
     ~H"""
-    <aside
-      id="species-inspector"
-      class={[
-        "panel flex flex-col gap-2 min-h-0",
-        @edit_mode && "codeome-editor-modal p-4",
-        !@edit_mode && "w-[320px] shrink-0 p-3"
-      ]}
-    >
+    <aside id="species-inspector" class="panel w-[320px] shrink-0 flex flex-col gap-2 p-3 min-h-0">
       <header class="flex items-center gap-2">
-        <%= if @editor_mode == :new_seed do %>
-          <span class="inline-block w-3 h-3 shrink-0 bg-slate-500"></span>
-          <h2 class="text-xs flex-1 truncate">New Seed</h2>
-          <button
-            id="inspector-close-new-seed"
-            type="button"
-            data-confirm={if @dirty, do: "Discard codeome edits?"}
-            phx-click="cancel_edit"
-            phx-target={@myself}
-            class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
-            title="Close editor"
-          >
-            ×
-          </button>
-        <% else %>
-          <span
-            class="inline-block w-3 h-3 shrink-0"
-            style={"background:#{SpeciesColor.hex(@selected_hash)}"}
-          >
-          </span>
-          <h2 class="text-xs flex-1 truncate">
-            {String.slice(@selected_hash, 0..15)}…
-          </h2>
-          <.link
-            navigate={~p"/species/#{@selected_hash}"}
-            class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
-            title="Open full species page"
-          >
-            ↗
-          </.link>
-          <button
-            id={"inspector-close-#{@selected_hash}"}
-            data-confirm={if @dirty, do: "Discard codeome edits?"}
-            phx-click="select_species"
-            phx-value-hash={@selected_hash}
-            class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
-          >
-            ×
-          </button>
-        <% end %>
-      </header>
-
-      <div class="flex items-center gap-2 text-[10px]">
-        <%= if @edit_mode do %>
-          <button
-            id={"inspector-cancel-#{@selected_hash || "new_seed"}"}
-            type="button"
-            data-confirm={if @dirty, do: "Discard codeome edits?"}
-            phx-click="cancel_edit"
-            phx-target={@myself}
-            class="px-2 py-0.5 border border-slate-500 hover:bg-slate-700"
-          >Cancel</button>
-        <% end %>
+        <span
+          class="inline-block w-3 h-3 shrink-0"
+          style={"background:#{SpeciesColor.hex(@selected_hash)}"}
+        >
+        </span>
+        <h2 class="text-xs flex-1 truncate">
+          {String.slice(@selected_hash, 0..15)}…
+        </h2>
+        <.link
+          navigate={~p"/species/#{@selected_hash}"}
+          class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
+          title="Open full species page"
+        >
+          ↗
+        </.link>
         <%= if @selected_hash do %>
           <.link
             id="open-edit-for-species"
             navigate={~p"/editor/edit/#{@selected_hash}"}
-            class="px-2 py-0.5 border border-cyan-500/60 text-cyan-200 hover:bg-cyan-900/40"
+            class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
           >
             Edit
           </.link>
         <% end %>
+        <button
+          id={"inspector-close-#{@selected_hash}"}
+          phx-click="select_species"
+          phx-value-hash={@selected_hash}
+          class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
+        >
+          ×
+        </button>
+      </header>
 
-        <%= if @dirty do %>
-          <span class="text-amber-300 text-[10px]">●dirty</span>
-        <% end %>
-
-        <%= if @edit_mode do %>
-          <button
-            type="button"
-            phx-click="open_spawn_form"
-            phx-target={@myself}
-            disabled={!match?({:ok, _}, @validation)}
-            class="ml-auto px-2 py-0.5 border border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/40 disabled:opacity-40 disabled:cursor-not-allowed"
-          >Spawn</button>
-        <% end %>
-        <%= if @editor_mode == :new_seed and @edit_mode do %>
-          <button
-            type="button"
-            phx-click="open_save_form"
-            phx-target={@myself}
-            disabled={!match?({:ok, _}, @validation)}
-            class="px-2 py-0.5 border border-violet-500/60 text-violet-200 hover:bg-violet-900/40 disabled:opacity-40 disabled:cursor-not-allowed"
-          >Save</button>
-        <% end %>
+      <div class="grid grid-cols-3 gap-2 text-[11px]">
+        <div class="border border-cyan-500/30 px-2 py-1">
+          <div class="opacity-60">pop.</div>
+          <div class="text-cyan-300 font-bold tabular-nums text-base">
+            {population(@species_record)}
+          </div>
+        </div>
+        <div class="border border-violet-500/30 px-2 py-1">
+          <div class="opacity-60">gen.</div>
+          <div class="text-violet-300 font-bold tabular-nums text-base">
+            {avg_gen(@species_record)}
+          </div>
+        </div>
+        <div class="border border-emerald-500/30 px-2 py-1">
+          <div class="opacity-60">ops</div>
+          <div class="text-emerald-300 font-bold tabular-nums text-base">
+            {length(@codeome_lines)}
+          </div>
+        </div>
       </div>
-
-      <%= if @edit_mode do %>
-        <div class="text-[10px]">
-          <%= case @validation do %>
-            <% {:ok, info} -> %>
-              <span class="text-emerald-300">✓ valid</span>
-              <span class="opacity-60">
-                ({info.len} ops, {info.non_nops} non-nop)
-              </span>
-            <% {:error, errors} -> %>
-              <span class="text-amber-300">⚠</span>
-              <span class="opacity-80">
-                {Enum.map_join(errors, ", ", &format_validation_error/1)}
-              </span>
-          <% end %>
-        </div>
-      <% end %>
-
-      <%= if @edit_mode and @show_spawn_form do %>
-        <form
-          phx-submit="submit_spawn"
-          phx-target={@myself}
-          class="flex flex-col gap-1.5 border border-emerald-500/30 p-2 text-[11px]"
-        >
-          <label class="flex items-center gap-2">
-            <span class="opacity-70 w-14">count</span>
-            <input
-              type="number"
-              name="count"
-              value="1"
-              min="1"
-              max="50"
-              class="w-16 text-xs"
-            />
-          </label>
-          <label class="flex items-center gap-2">
-            <span class="opacity-70 w-14">energy</span>
-            <input
-              type="number"
-              name="energy"
-              value="10000"
-              min="1"
-              max="1000000"
-              class="w-24 text-xs"
-            />
-          </label>
-          <div class="flex gap-1 justify-end">
-            <button
-              type="button"
-              phx-click="cancel_spawn_form"
-              phx-target={@myself}
-              class="px-2 py-0.5 border border-slate-500 hover:bg-slate-700"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              class="px-2 py-0.5 border border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/40"
-            >Spawn</button>
-          </div>
-        </form>
-      <% end %>
-
-      <%= if @edit_mode and @show_save_form do %>
-        <form
-          phx-submit="submit_save_seed"
-          phx-target={@myself}
-          class="flex flex-col gap-1.5 border border-violet-500/30 p-2 text-[11px]"
-        >
-          <label class="flex items-center gap-2">
-            <span class="opacity-70 w-14">name</span>
-            <input
-              type="text"
-              name="seed_name"
-              required
-              minlength="1"
-              maxlength="40"
-              placeholder="my replicator v1"
-              class="flex-1 text-xs"
-            />
-          </label>
-          <label class="flex items-center gap-2">
-            <span class="opacity-70 w-14">color</span>
-            <input
-              type="color"
-              name="color_hex"
-              value={suggested_color(@buffer)}
-              class="w-12 h-6 cursor-pointer border border-violet-500/30"
-            />
-          </label>
-          <label class="flex items-center gap-2">
-            <span class="opacity-70 w-14">energy</span>
-            <input
-              type="number"
-              name="energy_default"
-              value="10000"
-              min="1"
-              max="1000000"
-              class="w-24 text-xs"
-            />
-          </label>
-          <div class="flex gap-1 justify-end">
-            <button
-              type="button"
-              phx-click="cancel_save_form"
-              phx-target={@myself}
-              class="px-2 py-0.5 border border-slate-500 hover:bg-slate-700"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              class="px-2 py-0.5 border border-violet-500/60 text-violet-200 hover:bg-violet-900/40"
-            >
-              Save
-            </button>
-          </div>
-        </form>
-      <% end %>
-
-      <%= if @editor_mode != :new_seed do %>
-        <div class="grid grid-cols-3 gap-2 text-[11px]">
-          <div class="border border-cyan-500/30 px-2 py-1">
-            <div class="opacity-60">pop.</div>
-            <div class="text-cyan-300 font-bold tabular-nums text-base">
-              {population(@species_record)}
-            </div>
-          </div>
-          <div class="border border-violet-500/30 px-2 py-1">
-            <div class="opacity-60">gen.</div>
-            <div class="text-violet-300 font-bold tabular-nums text-base">
-              {avg_gen(@species_record)}
-            </div>
-          </div>
-          <div class="border border-emerald-500/30 px-2 py-1">
-            <div class="opacity-60">ops</div>
-            <div class="text-emerald-300 font-bold tabular-nums text-base">
-              {length(@codeome_lines)}
-            </div>
-          </div>
-        </div>
-      <% end %>
 
       <%= if @fetch_status == :no_sample do %>
         <p class="text-[10px] opacity-60">
@@ -468,94 +114,19 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
         </p>
       <% end %>
 
-
-      <div class={[
-        "flex-1 min-h-0",
-        @edit_mode && "codeome-editor-body grid gap-3 min-w-0",
-        !@edit_mode && "overflow-auto"
-      ]}>
-        <%= if @edit_mode do %>
-          <section class="codeome-palette-pane min-h-0">
-            <div class="codeome-palette-pane-title">Opcodes — drag to insert</div>
-            <div
-              class="codeome-palette"
-              id="palette-grid"
-              phx-hook="CodeomePalette"
-            >
-              <%= for {category, ops} <- grouped_opcodes() do %>
-                <div class="palette-category">
-                  <div class="palette-category-label">{category}</div>
-                  <div class="palette-category-chips">
-                    <%= for op <- ops do %>
-                      <div
-                        class={"palette-chip op op-" <> Atom.to_string(Disassembler.opcode_class(op))}
-                        data-opcode={Atom.to_string(op)}
-                      >
-                        {Atom.to_string(op) |> String.upcase()}
-                      </div>
-                    <% end %>
-                  </div>
-                </div>
-              <% end %>
-            </div>
-          </section>
-        <% end %>
-
-        <section class={[
-          "min-h-0 min-w-0",
-          @edit_mode && "codeome-listing-pane overflow-auto"
-        ]}>
-          <%= if @edit_mode do %>
-            <div class="codeome-listing-pane-title">
-              Codeome — {length(@buffer)} ops
+      <div class="flex-1 min-h-0 overflow-auto">
+        <div class="codeome-blocks" id={"codeome-blocks-#{@selected_hash}"}>
+          <%= for line <- @codeome_lines do %>
+            <div class={"codeome-block op op-" <> Atom.to_string(Disassembler.opcode_class(line.opcode))}>
+              <span class="codeome-block-idx">
+                {String.pad_leading(Integer.to_string(line.index), 3, "0")}
+              </span>
+              <span class="codeome-block-name">
+                {Atom.to_string(line.opcode) |> String.upcase()}
+              </span>
             </div>
           <% end %>
-          <div
-            class="codeome-blocks"
-            id={"codeome-blocks-#{blocks_phase(assigns)}"}
-            phx-hook={@edit_mode && "CodeomeSortable"}
-          >
-            <%= if @edit_mode do %>
-              <%= for {opcode, idx} <- Enum.with_index(@buffer) do %>
-                <div
-                  class={"codeome-block codeome-block-editable op op-" <> Atom.to_string(Disassembler.opcode_class(opcode))}
-                  data-idx={idx}
-                >
-                  <span class="codeome-drag-handle" title="Drag to reorder">≡</span>
-                  <span class="codeome-block-idx">
-                    {String.pad_leading(Integer.to_string(idx), 3, "0")}
-                  </span>
-                  <span class="codeome-block-name">
-                    {Atom.to_string(opcode) |> String.upcase()}
-                  </span>
-                  <span class="codeome-block-actions">
-                    <button
-                      type="button"
-                      phx-click="edit_delete"
-                      phx-value-index={idx}
-                      phx-target={@myself}
-                      class="codeome-action-btn"
-                      title="Delete"
-                    >
-                      ⨯
-                    </button>
-                  </span>
-                </div>
-              <% end %>
-            <% else %>
-              <%= for line <- @codeome_lines do %>
-                <div class={"codeome-block op op-" <> Atom.to_string(Disassembler.opcode_class(line.opcode))}>
-                  <span class="codeome-block-idx">
-                    {String.pad_leading(Integer.to_string(line.index), 3, "0")}
-                  </span>
-                  <span class="codeome-block-name">
-                    {Atom.to_string(line.opcode) |> String.upcase()}
-                  </span>
-                </div>
-              <% end %>
-            <% end %>
-          </div>
-        </section>
+        </div>
       </div>
     </aside>
     """
@@ -598,97 +169,6 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
       Lenies.Registry.whereis(id)
     catch
       :exit, _ -> nil
-    end
-  end
-
-  # Force a fresh DOM identity for .codeome-blocks across editor phases so
-  # Phoenix LiveView's morphdom treats each phase as a new element. Without
-  # this, the element keeps the same id across (view → edit-existing →
-  # cancel → new-seed) transitions; LV then patches attributes in place
-  # but the JS-side hook lifecycle (mounted/destroyed) does not always
-  # fire on `phx-hook` attribute toggle alone, leaving the CodeomeSortable
-  # instance unattached until a full page reload.
-  defp blocks_phase(%{editor_mode: :new_seed}), do: "new"
-  defp blocks_phase(%{edit_mode: true, selected_hash: hash}) when is_binary(hash), do: "edit-#{hash}"
-  defp blocks_phase(%{selected_hash: hash}) when is_binary(hash), do: "view-#{hash}"
-  defp blocks_phase(_), do: "empty"
-
-  defp parse_clamped(s, min, max, fallback) do
-    case Integer.parse(s) do
-      {n, _} -> n |> max(min) |> min(max)
-      :error -> fallback
-    end
-  end
-
-  defp slug(name) when is_binary(name) do
-    name
-    |> String.downcase()
-    |> String.replace(~r/[^a-z0-9]+/, "-")
-    |> String.trim("-")
-  end
-
-  defp suggested_color([]), do: "#888888"
-
-  defp suggested_color(buffer) when is_list(buffer) do
-    buffer
-    |> Lenies.Codeome.from_list()
-    |> Lenies.Codeome.hash()
-    |> Lenies.SpeciesColor.hex()
-  end
-
-  defp format_validation_error({:too_short, opts}),
-    do: "too short (#{opts[:got]} ops, min #{opts[:min]})"
-
-  defp format_validation_error({:too_long, opts}),
-    do: "too long (#{opts[:got]} ops, max #{opts[:max]})"
-
-  defp format_validation_error({:insufficient_non_nops, opts}),
-    do: "too few non-nops (#{opts[:got]}, min #{opts[:min]})"
-
-  # Notify the parent LiveView about dirty-state changes so it can decorate
-  # interactive elements (e.g. species table rows) with a confirm prompt.
-  # The parent is wired up in Task 7; until then this is a no-op for the
-  # parent (the DashboardLive simply ignores unknown :inspector_dirty info).
-  defp notify_parent_dirty(socket, dirty) do
-    send(self(), {:inspector_dirty, dirty})
-    socket
-  end
-
-  # Shared mutation epilogue: compute dirty state and notify the parent.
-  defp apply_buffer_change(socket, new_buffer) do
-    original = Enum.map(socket.assigns.codeome_lines, & &1.opcode)
-    dirty = new_buffer != original
-
-    {:noreply,
-     socket
-     |> assign(:buffer, new_buffer)
-     |> assign(:dirty, dirty)
-     |> assign(:validation, LeniesWeb.CodeomeBuffer.validate(new_buffer))
-     |> notify_parent_dirty(dirty)}
-  end
-
-  # Groups all whitelisted opcodes by Disassembler category, in a stable order.
-  # Used by the picker dropdown to lay out chips per category section.
-  defp grouped_opcodes do
-    order = [
-      :template,
-      :stack,
-      :arith,
-      :control,
-      :sense,
-      :action,
-      :predation,
-      :self_inspect,
-      :replication,
-      :memory
-    ]
-
-    by_class =
-      Lenies.Codeome.Opcodes.all()
-      |> Enum.group_by(&Disassembler.opcode_class/1)
-
-    for cat <- order, ops = by_class[cat], is_list(ops) and ops != [] do
-      {cat, Enum.sort(ops)}
     end
   end
 end

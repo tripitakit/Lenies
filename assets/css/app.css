@@ -434,11 +434,13 @@
   cursor: grabbing;
 }
 
-/* ----- Codeome editor: fullscreen modal layout ----- */
+/* ----- Generic fullscreen modal overlay ----- */
 /* The backdrop is rendered via a huge box-shadow on the modal itself,
    so we keep the LiveComponent's single-root requirement (Phoenix LiveView
-   1.1: "Stateful components must have a single static HTML tag at the root"). */
-.lenies-dashboard .codeome-editor-modal {
+   1.1: "Stateful components must have a single static HTML tag at the root").
+   Used by the World Detail modal; the in-place codeome editor modal was
+   removed in favor of the standalone /editor page. */
+.lenies-dashboard .lenies-modal-overlay {
   position: fixed;
   inset: 1.5rem;
   width: auto;
@@ -450,10 +452,8 @@
   overflow: hidden;
 }
 
-.lenies-dashboard .codeome-editor-body {
-  grid-template-columns: minmax(420px, 38%) 1fr;
-}
-
+/* Shared palette/listing pane chrome — used by the standalone editor
+   page (EditorLive) and any future code-block layouts. */
 .lenies-dashboard .codeome-palette-pane,
 .lenies-dashboard .codeome-listing-pane {
   display: flex;
@@ -476,82 +476,14 @@
   flex-shrink: 0;
 }
 
-/* In modal: palette fills its pane, all categories visible, no scroll */
-.lenies-dashboard .codeome-editor-modal .codeome-palette {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: min-content;
-  gap: 8px 10px;
-  font-size: 10px;
-  overflow: auto;
-}
-
-.lenies-dashboard .codeome-editor-modal .palette-category {
-  border: 1px solid rgba(34, 211, 238, 0.1);
-  background: rgba(2, 6, 23, 0.5);
-  padding: 5px 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-
-.lenies-dashboard .codeome-editor-modal .palette-category-label {
-  font-size: 9px;
-}
-
-.lenies-dashboard .codeome-editor-modal .palette-category-chips {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 3px;
-}
-
-.lenies-dashboard .codeome-editor-modal .palette-chip {
-  padding: 3px 4px;
-  font-size: 10px;
-  letter-spacing: 0.03em;
-}
-
 .lenies-dashboard .codeome-listing-pane {
   /* keep scrollbar only for the listing */
   overflow: auto;
 }
 
-/* In the editor modal the listing pane stacks (title + blocks). The
-   blocks container must fill the remaining vertical space so an empty
-   buffer still has a non-zero drop surface for SortableJS — without
-   this the container collapses to ~0px and the cursor never hovers
-   over it on drop. A wider gap between blocks gives SortableJS clean
-   insertion-line space, and a dashed border on an empty container
-   gives the user a visual drop hint. */
-.lenies-dashboard .codeome-editor-modal .codeome-listing-pane .codeome-blocks {
-  flex: 1 1 auto;
-  min-height: 80px;
-  gap: 4px;
-}
-
-.lenies-dashboard .codeome-editor-modal .codeome-listing-pane .codeome-blocks:empty {
-  border: 1px dashed rgba(34, 211, 238, 0.25);
-}
-
-/* Insert-slot in modal mode: a visible thin gap between blocks. Without
-   a real height the slots are 0px tall and the cursor can't land on
-   them — SortableJS then has no hit area between adjacent blocks and
-   drops in the gap silently fail. */
-.lenies-dashboard .codeome-editor-modal .codeome-insert-slot {
-  min-height: 8px;
-  border-radius: 2px;
-  transition: background 80ms ease;
-}
-
-.lenies-dashboard .codeome-editor-modal .codeome-insert-slot:hover {
-  background: rgba(34, 211, 238, 0.08);
-}
-
 /* ----- World Detail modal ----- */
 .lenies-dashboard .world-detail-modal {
-  /* reuses .codeome-editor-modal for the overlay + backdrop; only add
+  /* reuses .lenies-modal-overlay for the overlay + backdrop; only add
      layout adjustments here */
   padding: 1rem;
 }
@@ -672,6 +604,76 @@
   grid-template-rows: auto 1fr;
   height: 100vh;
   overflow: hidden;
+}
+
+/* In the editor page the palette uses a wider/denser layout than the
+   inline sidebar variant. The palette fills its pane, all categories
+   visible, with scroll if needed. */
+.lenies-dashboard .codeome-editor-page .codeome-palette {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: min-content;
+  gap: 8px 10px;
+  font-size: 10px;
+  overflow: auto;
+}
+
+.lenies-dashboard .codeome-editor-page .palette-category {
+  border: 1px solid rgba(34, 211, 238, 0.1);
+  background: rgba(2, 6, 23, 0.5);
+  padding: 5px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.lenies-dashboard .codeome-editor-page .palette-category-label {
+  font-size: 9px;
+}
+
+.lenies-dashboard .codeome-editor-page .palette-category-chips {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.lenies-dashboard .codeome-editor-page .palette-chip {
+  padding: 3px 4px;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+
+/* The listing pane stacks (title + blocks). The blocks container must
+   fill the remaining vertical space so an empty buffer still has a
+   non-zero drop surface for SortableJS — without this the container
+   collapses to ~0px and the cursor never hovers over it on drop. A
+   wider gap between blocks gives SortableJS clean insertion-line
+   space, and a dashed border on an empty container gives the user a
+   visual drop hint. */
+.lenies-dashboard .codeome-editor-page .codeome-listing-pane .codeome-blocks {
+  flex: 1 1 auto;
+  min-height: 80px;
+  gap: 4px;
+}
+
+.lenies-dashboard .codeome-editor-page .codeome-listing-pane .codeome-blocks:empty {
+  border: 1px dashed rgba(34, 211, 238, 0.25);
+}
+
+/* Insert-slot: a visible thin gap between blocks. Without a real
+   height the slots are 0px tall and the cursor can't land on them —
+   SortableJS then has no hit area between adjacent blocks and drops
+   in the gap silently fail. */
+.lenies-dashboard .codeome-editor-page .codeome-insert-slot {
+  min-height: 8px;
+  border-radius: 2px;
+  transition: background 80ms ease;
+}
+
+.lenies-dashboard .codeome-editor-page .codeome-insert-slot:hover {
+  background: rgba(34, 211, 238, 0.08);
 }
 
 .lenies-dashboard .codeome-editor-page-header {

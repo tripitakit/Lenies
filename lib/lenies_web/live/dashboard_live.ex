@@ -39,7 +39,6 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:selected_hash, nil)
       |> assign(:selected_species_record, nil)
       |> assign(:inspector_dirty, false)
-      |> assign(:editor_mode, nil)
       |> assign(:world_detail_open?, false)
       |> assign(:world_detail_highlight_hash, nil)
 
@@ -282,13 +281,12 @@ defmodule LeniesWeb.DashboardLive do
             </div>
           </div>
 
-          <%= if @selected_hash || @editor_mode == :new_seed do %>
+          <%= if @selected_hash do %>
             <.live_component
               module={LeniesWeb.SpeciesInspectorComponent}
               id="species-inspector"
               selected_hash={@selected_hash}
               species_record={@selected_species_record}
-              editor_mode={@editor_mode}
             />
           <% end %>
           <%= if @world_detail_open? do %>
@@ -411,14 +409,6 @@ defmodule LeniesWeb.DashboardLive do
 
   def handle_info({:inspector_dirty, dirty}, socket) do
     {:noreply, assign(socket, :inspector_dirty, dirty)}
-  end
-
-  def handle_info(:open_codeome_editor, socket) do
-    {:noreply, assign(socket, :editor_mode, :new_seed)}
-  end
-
-  def handle_info({:editor_mode, mode}, socket) when mode in [nil, :new_seed] do
-    {:noreply, assign(socket, :editor_mode, mode)}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}

@@ -18,7 +18,7 @@ defmodule LeniesWeb.WorldDetailComponent do
     ~H"""
     <aside
       id="world-detail"
-      class="panel codeome-editor-modal world-detail-modal flex flex-col gap-3 p-4"
+      class="panel lenies-modal-overlay world-detail-modal flex flex-col gap-3 p-4"
       phx-window-keydown="close_world_detail"
       phx-key="Escape"
     >
