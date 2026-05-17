@@ -11,7 +11,8 @@ defmodule LeniesWeb.WorldDetailComponentTest do
         id: "world-detail",
         species: [],
         highlight_hash: nil,
-        grid: {256, 256}
+        grid: {256, 256},
+        paused?: false
       },
       overrides
     )

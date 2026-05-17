@@ -194,19 +194,25 @@ defmodule LeniesWeb.DashboardLive do
                 <div class="border border-cyan-500/30 px-2 py-1">
                   <div class="opacity-60">pop.</div>
                   <div class="text-cyan-300 font-bold tabular-nums text-base">
-                    {latest.population}
+                    {format_count(latest.population)}
                   </div>
                 </div>
                 <div class="border border-emerald-500/30 px-2 py-1">
                   <div class="opacity-60">resources</div>
-                  <div class="text-emerald-300 font-bold tabular-nums text-base">
-                    {latest.total_resource}
+                  <div
+                    class="text-emerald-300 font-bold tabular-nums text-base"
+                    title={"#{latest.total_resource}"}
+                  >
+                    {format_count(latest.total_resource)}
                   </div>
                 </div>
                 <div class="border border-rose-500/30 px-2 py-1">
                   <div class="opacity-60">carcasses</div>
-                  <div class="text-rose-300 font-bold tabular-nums text-base">
-                    {latest.total_carcass}
+                  <div
+                    class="text-rose-300 font-bold tabular-nums text-base"
+                    title={"#{latest.total_carcass}"}
+                  >
+                    {format_count(latest.total_carcass)}
                   </div>
                 </div>
               </div>
@@ -469,6 +475,22 @@ defmodule LeniesWeb.DashboardLive do
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
+
+  # Format large counters (resources / carcasses) so the user can read
+  # them at a glance: thousand-separated below 1k, then k/M/B suffixes
+  # so a runaway carcass_decay = 0 simulation doesn't render as an
+  # unreadable 14-digit number that looks like a bug.
+  defp format_count(n) when is_integer(n) and n >= 0 do
+    cond do
+      n < 1_000 -> Integer.to_string(n)
+      n < 1_000_000 -> "#{Float.round(n / 1_000, 1)}k"
+      n < 1_000_000_000 -> "#{Float.round(n / 1_000_000, 2)}M"
+      true -> "#{Float.round(n / 1_000_000_000, 2)}B"
+    end
+  end
+
+  defp format_count(n) when is_float(n), do: format_count(trunc(n))
+  defp format_count(_), do: "0"
 
   defp maybe_clear_world_detail_highlight(socket, species) do
     case socket.assigns.world_detail_highlight_hash do

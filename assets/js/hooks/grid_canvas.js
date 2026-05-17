@@ -84,6 +84,18 @@ const GridCanvas = {
         const rgb = HUE_LUT[speciesByte];
         r = rgb.r; g = rgb.g; b = rgb.b;
         a = 255;
+        // If a carcass also sits in this cell (a Lenie respawned over old
+        // remains — common with low/zero carcass_decay), blend the
+        // carcass color into the species color at 30% so the carcass
+        // checkbox stays meaningful even when species are on top.
+        if (showCarcass && carc > 0) {
+          const carcRgb = carcHueByte > 0
+            ? HUE_LUT[carcHueByte]
+            : { r: 255, g: 60, b: 60 };
+          r = Math.floor(r * 0.7 + carcRgb.r * 0.3);
+          g = Math.floor(g * 0.7 + carcRgb.g * 0.3);
+          b = Math.floor(b * 0.7 + carcRgb.b * 0.3);
+        }
       } else if (showCarcass && carc > 0) {
         if (carcHueByte > 0) {
           const rgb = HUE_LUT[carcHueByte];
