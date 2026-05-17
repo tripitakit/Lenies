@@ -600,9 +600,13 @@
 }
 
 /* ----- Codeome editor page ----- */
+/* `minmax(0, 1fr)` (not just `1fr`) is required: the default min of
+   `1fr` is `auto` = min-content, which lets the row grow to fit a tall
+   manual chapter and pushes the editor-grid past 100vh, breaking the
+   per-pane scroll. Same trick on .editor-grid below. */
 .lenies-dashboard .codeome-editor-page {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
 }
@@ -681,6 +685,7 @@
 .lenies-dashboard .editor-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px 320px;
+  grid-template-rows: minmax(0, 1fr);
   gap: 0.75rem;
   padding: 0.75rem;
   min-height: 0;
