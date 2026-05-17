@@ -15,10 +15,6 @@ import Sortable from "../../vendor/sortable.js";
 
 const CodeomePalette = {
   mounted() {
-    console.log("[CodeomePalette] mounted", {
-      id: this.el.id,
-      chipContainers: this.el.querySelectorAll(".palette-category-chips").length,
-    });
     this.sortables = [];
     this.el.querySelectorAll(".palette-category-chips").forEach((container) => {
       this.sortables.push(
@@ -42,7 +38,6 @@ const CodeomePalette = {
   },
 
   destroyed() {
-    console.log("[CodeomePalette] destroyed", { id: this.el.id });
     if (this.sortables) {
       this.sortables.forEach((s) => s.destroy());
       this.sortables = null;

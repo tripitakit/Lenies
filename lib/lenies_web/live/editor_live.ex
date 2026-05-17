@@ -378,7 +378,6 @@ defmodule LeniesWeb.EditorLive do
             phx-hook="CodeomeSortable"
           >
             <%= for {opcode, idx} <- Enum.with_index(@buffer) do %>
-              <div class="codeome-insert-slot"></div>
               <div
                 class={"codeome-block codeome-block-editable op op-" <> Atom.to_string(Disassembler.opcode_class(opcode))}
                 data-idx={idx}
@@ -401,7 +400,6 @@ defmodule LeniesWeb.EditorLive do
                 </span>
               </div>
             <% end %>
-            <div class="codeome-insert-slot"></div>
           </div>
         </section>
       </div>

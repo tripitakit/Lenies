@@ -1,6 +1,10 @@
 // CodeomeSortable hook: enables drag-and-drop reorder of codeome blocks in
-// the EditorLive listing pane. On drop, emits an `edit_reorder` event
-// to the parent LiveView with the from/to indices.
+// the EditorLive listing pane, plus accepts drops from the palette
+// (CodeomePalette hook, same SortableJS group "codeome").
+//
+// Uses `pushEvent` (not `pushEventTo`): the hook is attached to a plain
+// element inside a LiveView (EditorLive), not a LiveComponent, so there
+// is no `[data-phx-component]` ancestor for `pushEventTo` to target.
 //
 // Driven by vendored SortableJS (assets/vendor/sortable.js). Phoenix
 // LiveView re-renders after the event applies the mutation; SortableJS's
@@ -12,27 +16,17 @@ import Sortable from "../../vendor/sortable.js";
 
 const CodeomeSortable = {
   mounted() {
-    console.log("[CodeomeSortable] mounted", { id: this.el.id, children: this.el.children.length });
     this.attach();
   },
 
   // LiveView morphdom updates the children of the .codeome-blocks element
-  // in place when the buffer changes. SortableJS normally adapts to the
-  // new DOM on the next drag event, but in two edge cases the Sortable
-  // instance gets out of sync and silently rejects drops:
-  //   1. Closing the editor (cancel/save) and reopening it on a different
-  //      flow can leave the previous Sortable still bound to the same DOM
-  //      element if Phoenix doesn't fire destroyed()/mounted().
-  //   2. enter_edit → buffer suddenly has N children where it had 0, and
-  //      SortableJS's cached child list goes stale.
-  // Re-attach defensively if we somehow lost the instance.
+  // in place when the buffer changes. Re-attach defensively if we somehow
+  // lost the instance after a re-render.
   updated() {
-    console.log("[CodeomeSortable] updated", { id: this.el.id, hasSortable: !!this.sortable, children: this.el.children.length });
     if (!this.sortable) this.attach();
   },
 
   destroyed() {
-    console.log("[CodeomeSortable] destroyed", { id: this.el.id });
     if (this.sortable) {
       this.sortable.destroy();
       this.sortable = null;
@@ -70,10 +64,6 @@ const CodeomeSortable = {
           typeof evt.newDraggableIndex === "number" &&
           evt.oldDraggableIndex !== evt.newDraggableIndex
         ) {
-          // pushEvent (not pushEventTo): the hook is attached to a plain
-          // element inside a LiveView (EditorLive), not a LiveComponent,
-          // so there is no [data-phx-component] ancestor for pushEventTo
-          // to target — it would silently drop the event.
           this.pushEvent("edit_reorder", {
             from: evt.oldDraggableIndex,
             to: evt.newDraggableIndex,
