@@ -12,13 +12,24 @@
 //
 // Pixel composition priority per cell:
 //   1. occupied (lenies > 0)  + show_lenies   → HSL species fill, alpha 255
-//   2. carcass > 0           + show_carcass   →
-//        if carcass_hue > 0 → HSL species fill, alpha = carcass * 4
-//        else                → red (255, 60, 60), alpha = carcass * 4
+//                                               (carcass under it blends in
+//                                               at 30% with its own decay
+//                                               tint — see below)
+//   2. carcass > 0           + show_carcass   → species (or red) lerped
+//                                               toward light gray as the
+//                                               carcass decays, alpha 255
 //   3. resource > 0          + show_resource  → green channel = resource * 2
 //   4. default                                → empty (alpha 192)
+//
+// Carcass decay: alpha stays constant so old carcasses don't fade into the
+// black background; instead the colour lerps from species (or red) toward
+// CARCASS_GRAY as `carc` falls 50→0. Keeps them legible while still
+// signalling age.
 
 import { HUE_LUT } from "./grid_canvas_hue_lut.js";
+
+const CARCASS_MAX = 50;
+const CARCASS_GRAY = 180;
 
 const GridCanvas = {
   mounted() {
@@ -80,30 +91,38 @@ const GridCanvas = {
 
       let r = 0, g = 0, b = 0, a = 192;
 
+      // Precompute the carcass display colour once: species (or red for
+      // untagged) lerped toward light gray by t = 1 - carc/CARCASS_MAX.
+      // Used both as the standalone carcass fill and as the 30% tint
+      // when a Lenie sits on top of an old carcass.
+      let carcRgb = null;
+      if (showCarcass && carc > 0) {
+        const fresh = carcHueByte > 0
+          ? HUE_LUT[carcHueByte]
+          : { r: 255, g: 60, b: 60 };
+        const t = 1 - carc / CARCASS_MAX;
+        carcRgb = {
+          r: Math.round(fresh.r + (CARCASS_GRAY - fresh.r) * t),
+          g: Math.round(fresh.g + (CARCASS_GRAY - fresh.g) * t),
+          b: Math.round(fresh.b + (CARCASS_GRAY - fresh.b) * t),
+        };
+      }
+
       if (showLenies && speciesByte > 0) {
         const rgb = HUE_LUT[speciesByte];
         r = rgb.r; g = rgb.g; b = rgb.b;
         a = 255;
-        // If a carcass also sits in this cell (a Lenie respawned over old
-        // remains — common with low/zero carcass_decay), blend the
-        // carcass color into the species color at 30% so the carcass
-        // checkbox stays meaningful even when species are on top.
-        if (showCarcass && carc > 0) {
-          const carcRgb = carcHueByte > 0
-            ? HUE_LUT[carcHueByte]
-            : { r: 255, g: 60, b: 60 };
+        // A carcass sitting under a Lenie (low/zero carcass_decay,
+        // respawn over remains) blends in at 30% so the carcass checkbox
+        // stays meaningful even when species are on top.
+        if (carcRgb) {
           r = Math.floor(r * 0.7 + carcRgb.r * 0.3);
           g = Math.floor(g * 0.7 + carcRgb.g * 0.3);
           b = Math.floor(b * 0.7 + carcRgb.b * 0.3);
         }
-      } else if (showCarcass && carc > 0) {
-        if (carcHueByte > 0) {
-          const rgb = HUE_LUT[carcHueByte];
-          r = rgb.r; g = rgb.g; b = rgb.b;
-        } else {
-          r = 255; g = 60; b = 60;
-        }
-        a = Math.min(255, carc * 4);
+      } else if (carcRgb) {
+        r = carcRgb.r; g = carcRgb.g; b = carcRgb.b;
+        a = 255;
       } else if (showResource && res > 0) {
         g = Math.min(255, res * 2);
       }

@@ -23,6 +23,11 @@ const CLICK_DRAG_THRESHOLD_PX = 3;
 // most browsers' dblclick threshold so we don't recenter and shift the
 // view out from under the dblclick handler's cursor→cell math.
 const CLICK_RECENTER_DELAY_MS = 250;
+// Carcasses keep constant alpha but lerp toward a light gray as they
+// decay (carc 50→0) so they stay visible against the black background.
+// Mirrors the dashboard's GridCanvas hook.
+const CARCASS_MAX = 50;
+const CARCASS_GRAY = 180;
 
 const WorldDetailCanvas = {
   mounted() {
@@ -265,13 +270,14 @@ const WorldDetailCanvas = {
         r = rgb.r; g = rgb.g; b = rgb.b;
         a = 255;
       } else if (carc > 0) {
-        if (carcHueByte > 0) {
-          const rgb = HUE_LUT[carcHueByte];
-          r = rgb.r; g = rgb.g; b = rgb.b;
-        } else {
-          r = 255; g = 60; b = 60;
-        }
-        a = Math.min(255, carc * 4);
+        const fresh = carcHueByte > 0
+          ? HUE_LUT[carcHueByte]
+          : { r: 255, g: 60, b: 60 };
+        const t = 1 - carc / CARCASS_MAX;
+        r = Math.round(fresh.r + (CARCASS_GRAY - fresh.r) * t);
+        g = Math.round(fresh.g + (CARCASS_GRAY - fresh.g) * t);
+        b = Math.round(fresh.b + (CARCASS_GRAY - fresh.b) * t);
+        a = 255;
       } else if (res > 0) {
         g = Math.min(255, res * 2);
       }
