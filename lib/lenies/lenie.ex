@@ -61,8 +61,27 @@ defmodule Lenies.Lenie do
     }
 
     maybe_write_snapshot(state)
+    cache_codeome_by_hash(state.codeome)
     schedule_metabolize()
     {:ok, state}
+  end
+
+  # First Lenie of a species writes its codeome into the per-hash cache
+  # so the species table can show size / cost / max-gain without a
+  # `GenServer.call` round-trip for every species on every dashboard
+  # render. Subsequent Lenies of the same hash skip the insert (hash →
+  # codeome is invariant by definition).
+  defp cache_codeome_by_hash(codeome) do
+    if :ets.info(:species_codeomes) != :undefined do
+      hash = Codeome.hash(codeome)
+
+      case :ets.lookup(:species_codeomes, hash) do
+        [] -> :ets.insert(:species_codeomes, {hash, Codeome.to_list(codeome)})
+        _ -> :ok
+      end
+    end
+
+    :ok
   end
 
   @impl true

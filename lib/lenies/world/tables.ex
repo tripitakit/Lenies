@@ -7,13 +7,16 @@ defmodule Lenies.World.Tables do
   tables are `:set`, `:named_table`, `:public`.
 
   Tables:
-  - `:cells`        — `{x,y} → %Lenies.World.Cell{}` (source of truth for occupancy)
-  - `:lenies`       — `id    → snapshot` (written mainly by Lenies, with exceptions by World)
-  - `:child_slots`  — `slot  → gestation record`
-  - `:history`      — ring buffer of aggregated metrics (written by Telemetry)
+  - `:cells`             — `{x,y} → %Lenies.World.Cell{}` (source of truth for occupancy)
+  - `:lenies`            — `id    → snapshot` (written mainly by Lenies, with exceptions by World)
+  - `:child_slots`       — `slot  → gestation record`
+  - `:history`           — ring buffer of aggregated metrics (written by Telemetry)
+  - `:species_codeomes`  — `hash  → [opcode]` cache populated by `Lenie.init/1`,
+    so the species table can show per-species size / cost / max-gain without
+    a `GenServer.call` round-trip to a representative Lenie on every render.
   """
 
-  @tables [:cells, :lenies, :child_slots, :history]
+  @tables [:cells, :lenies, :child_slots, :history, :species_codeomes]
 
   def tables, do: @tables
 

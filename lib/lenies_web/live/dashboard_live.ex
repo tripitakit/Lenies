@@ -232,6 +232,19 @@ defmodule LeniesWeb.DashboardLive do
                   <thead class="text-cyan-300/80 sticky top-0 bg-slate-950/80">
                     <tr>
                       <th class="text-left py-1">Hash</th>
+                      <th class="text-right py-1" title="Codeome length (opcodes)">codeome size</th>
+                      <th
+                        class="text-right py-1"
+                        title="Static energy cost for one linear pass through the codeome"
+                      >
+                        Cost
+                      </th>
+                      <th
+                        class="text-right py-1"
+                        title="Max energy gain for one linear pass (all eat/attack succeed)"
+                      >
+                        Gain
+                      </th>
                       <th class="text-right py-1">Pop</th>
                       <th class="text-right py-1">Gen</th>
                     </tr>
@@ -257,6 +270,9 @@ defmodule LeniesWeb.DashboardLive do
                             {String.slice(sp.hash, 0..7)}
                           </span>
                         </td>
+                        <td class="text-right">{sp.size}</td>
+                        <td class="text-right text-rose-300">{format_energy(sp.cost)}</td>
+                        <td class="text-right text-emerald-300">{format_energy(sp.max_gain)}</td>
                         <td class="text-right">{sp.population}</td>
                         <td class="text-right">{Float.round(sp.avg_generation, 2)}</td>
                       </tr>
@@ -400,6 +416,23 @@ defmodule LeniesWeb.DashboardLive do
 
   defp format_count(n) when is_float(n), do: format_count(trunc(n))
   defp format_count(_), do: "0"
+
+  # Compact energy display for the species table: integer when whole,
+  # one decimal otherwise. Avoids `0.0` clutter for codeomes with no
+  # eat/attack opcodes and keeps the column width predictable.
+  defp format_energy(n) when is_integer(n), do: Integer.to_string(n)
+
+  defp format_energy(n) when is_float(n) do
+    rounded = Float.round(n, 1)
+
+    if rounded == trunc(rounded) do
+      Integer.to_string(trunc(rounded))
+    else
+      :erlang.float_to_binary(rounded, decimals: 1)
+    end
+  end
+
+  defp format_energy(_), do: "0"
 
   # When the species the user is inspecting falls out of the active set
   # (extinct or pushed out of the top-N), close the inspector and drop

@@ -7,6 +7,13 @@ defmodule Lenies.Species do
   - `population`: count of currently-alive Lenies with this hash
   - `avg_generation`: average generation number across the population
   - `sample_lenie_id`: id of one representative Lenie (for fetching the full Codeome via Registry)
+  - `size`: codeome length in opcodes (0 if the codeome isn't cached yet —
+    transient race before `Lenie.init/1` finishes caching)
+  - `cost`: static energy cost for one linear pass through the codeome,
+    using the current tuning values for `eat_amount` and `attack_damage`
+  - `max_gain`: strict upper bound for one linear pass — `n_eat × eat_amount
+    + n_attack × attack_damage`. See `LeniesWeb.CodeomeBuffer.economics/3`
+    for the underlying maths and the single-pass caveat.
 
   Vedi spec §5.4 (speciazione) e §7.1 (panel Specie).
   """
@@ -15,7 +22,10 @@ defmodule Lenies.Species do
           hash: binary(),
           population: pos_integer(),
           avg_generation: float(),
-          sample_lenie_id: binary()
+          sample_lenie_id: binary(),
+          size: non_neg_integer(),
+          cost: float(),
+          max_gain: float()
         }
 
   @doc """
@@ -32,6 +42,9 @@ defmodule Lenies.Species do
   end
 
   defp do_aggregate do
+    eat_amount = Application.get_env(:lenies, :eat_amount, 20)
+    attack_damage = Application.get_env(:lenies, :attack_damage, 10)
+
     :ets.tab2list(:lenies)
     |> Enum.group_by(fn {_id, snap} -> snap.codeome_hash end)
     |> Enum.map(fn {hash, entries} ->
@@ -45,15 +58,42 @@ defmodule Lenies.Species do
         if Enum.empty?(gens), do: 0.0, else: Enum.sum(gens) / length(gens) * 1.0
 
       {sample_id, _} = hd(entries)
+      {size, cost, max_gain} = codeome_metrics(hash, eat_amount, attack_damage)
 
       %{
         hash: hash,
         population: length(entries),
         avg_generation: avg_gen,
-        sample_lenie_id: sample_id
+        sample_lenie_id: sample_id,
+        size: size,
+        cost: cost,
+        max_gain: max_gain
       }
     end)
     |> Enum.sort_by(& &1.population, :desc)
+  end
+
+  # Reads the cached opcode list for a species hash and computes energy
+  # metrics via `LeniesWeb.CodeomeBuffer.economics/3`. Returns zeros when
+  # the cache miss (briefly possible if `aggregate/0` runs before
+  # `Lenie.init/1` finishes — population would also be 0 in that case,
+  # so the row is harmless).
+  defp codeome_metrics(hash, eat_amount, attack_damage) do
+    case ets_safe_lookup(:species_codeomes, hash) do
+      [{^hash, opcodes}] when is_list(opcodes) ->
+        e = LeniesWeb.CodeomeBuffer.economics(opcodes, eat_amount, attack_damage)
+        {length(opcodes), e.cost, e.max_gain}
+
+      _ ->
+        {0, 0.0, 0.0}
+    end
+  end
+
+  defp ets_safe_lookup(table, key) do
+    case :ets.info(table) do
+      :undefined -> []
+      _ -> :ets.lookup(table, key)
+    end
   end
 
   @doc "Return all `:lenies` records (raw {id, snap} tuples) with the given codeome_hash."
