@@ -17,7 +17,7 @@ defmodule LeniesWeb.DashboardLive do
   alias LeniesWeb.GridRenderer
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Lenies.PubSub, "world:tick")
       Phoenix.PubSub.subscribe(Lenies.PubSub, "world:control")
@@ -25,6 +25,10 @@ defmodule LeniesWeb.DashboardLive do
 
     grid = Lenies.Config.grid_size()
     {species, all_species, species_total} = aggregate_with_top(10)
+
+    # `?world_detail=1` reopens the modal — used by the editor's Back/Cancel
+    # to restore the view it was launched from (dblclick on a Lenie cell).
+    world_detail_open? = params["world_detail"] == "1"
 
     socket =
       socket
@@ -39,7 +43,7 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:selected_hash, nil)
       |> assign(:selected_species_record, nil)
       |> assign(:inspector_dirty, false)
-      |> assign(:world_detail_open?, false)
+      |> assign(:world_detail_open?, world_detail_open?)
       |> assign(:world_detail_highlight_hash, nil)
       |> assign(:world_paused?, world_paused_status())
 
@@ -405,8 +409,14 @@ defmodule LeniesWeb.DashboardLive do
   def handle_event("select_lenie_at_cell", %{"x" => x, "y" => y}, socket)
       when is_integer(x) and is_integer(y) do
     case lookup_lenie_at_cell(x, y) do
-      {:ok, hash} -> {:noreply, push_navigate(socket, to: ~p"/editor/edit/#{hash}")}
-      :error -> {:noreply, socket}
+      {:ok, hash} ->
+        # `from=world-detail` lets the editor's Back/Cancel reopen the
+        # modal instead of dropping the user on the plain dashboard.
+        {:noreply,
+         push_navigate(socket, to: ~p"/editor/edit/#{hash}?from=world-detail")}
+
+      :error ->
+        {:noreply, socket}
     end
   end
 
