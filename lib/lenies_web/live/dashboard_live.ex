@@ -261,15 +261,10 @@ defmodule LeniesWeb.DashboardLive do
                 </text>
                 <text x="4" y="96" fill="#64748b" font-size="8" font-family="monospace">0</text>
               </svg>
-              <p class="text-[9px] opacity-50 leading-tight">
-                One line per species in the current top {length(@species)} (top 20 per tick saved to history).
-              </p>
             </div>
 
             <div class="panel p-3 flex flex-col gap-2 min-h-0">
-              <h2 class="text-xs">
-                ▮ Top {length(@species)} species of <span class="opacity-60">{@species_total}</span>
-              </h2>
+              <h2 class="text-xs">▮ {@species_total} species</h2>
               <div class="flex-1 min-h-0 overflow-auto">
                 <table class="w-full text-[11px] tabular-nums">
                   <thead class="text-cyan-300/80 sticky top-0 bg-slate-950/80">
@@ -280,7 +275,7 @@ defmodule LeniesWeb.DashboardLive do
                     </tr>
                   </thead>
                   <tbody>
-                    <%= for sp <- @species do %>
+                    <%= for sp <- @all_species do %>
                       <tr
                         class={[
                           "hover:bg-cyan-500/10 cursor-pointer",
@@ -345,7 +340,10 @@ defmodule LeniesWeb.DashboardLive do
     socket =
       socket
       |> assign(:selected_hash, new_hash)
-      |> assign(:selected_species_record, find_selected_record(new_hash, socket.assigns.species))
+      |> assign(
+        :selected_species_record,
+        find_selected_record(new_hash, socket.assigns.all_species)
+      )
 
     socket =
       if is_nil(new_hash),
@@ -403,7 +401,7 @@ defmodule LeniesWeb.DashboardLive do
         |> assign(:all_species, all_species)
         |> assign(
           :selected_species_record,
-          find_selected_record(socket.assigns.selected_hash, species)
+          find_selected_record(socket.assigns.selected_hash, all_species)
         )
         |> maybe_clear_selected_species(all_species)
 
