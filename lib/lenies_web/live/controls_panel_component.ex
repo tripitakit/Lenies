@@ -30,11 +30,11 @@ defmodule LeniesWeb.ControlsPanelComponent do
     %{key: :copy_insert_rate, label: "Copy insert rate", min: 0.0, max: 0.05, step: 0.0005},
     %{key: :copy_delete_rate, label: "Copy delete rate", min: 0.0, max: 0.05, step: 0.0005},
     %{
-      key: :background_mutation_interval_ticks,
-      label: "BG mutation interval (ticks, 0=off)",
+      key: :background_mutation_rate_per_1000_ticks,
+      label: "BG mutations / 1000 ticks (0=off)",
       min: 0,
-      max: 10000,
-      step: 100
+      max: 100,
+      step: 1
     },
     %{key: :attack_damage, label: "Attack damage", min: 0, max: 50, step: 1}
   ]

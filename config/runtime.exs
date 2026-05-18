@@ -42,7 +42,7 @@ config :lenies,
   copy_insert_rate: 0.0005,
   copy_delete_rate: 0.0005,
   min_viable_codeome_opcodes: 10,
-  background_mutation_interval_ticks: 1000,
+  background_mutation_rate_per_1000_ticks: 1,
   defense_window_ticks: 5,
   attack_damage: 10,
   defense_attacker_penalty: 5

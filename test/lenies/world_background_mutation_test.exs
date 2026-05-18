@@ -25,8 +25,9 @@ defmodule Lenies.WorldBackgroundMutationTest do
     :ok
   end
 
-  test "background mutation invokes Mutator on tick boundary (interval = 1)" do
-    Application.put_env(:lenies, :background_mutation_interval_ticks, 1)
+  test "background mutation invokes Mutator on tick boundary at max rate" do
+    # rate 1000 per 1000 ticks → World converts to interval=1 → fires every tick.
+    Application.put_env(:lenies, :background_mutation_rate_per_1000_ticks, 1000)
 
     # The hook runs but with no Lenies, it's a no-op. Just verify no crash.
     World.tick_now()
@@ -34,8 +35,8 @@ defmodule Lenies.WorldBackgroundMutationTest do
     assert true
   end
 
-  test "background mutation interval = 0 disables the hook" do
-    Application.put_env(:lenies, :background_mutation_interval_ticks, 0)
+  test "background mutation rate = 0 disables the hook" do
+    Application.put_env(:lenies, :background_mutation_rate_per_1000_ticks, 0)
     for _ <- 1..10, do: World.tick_now()
     assert true
   end

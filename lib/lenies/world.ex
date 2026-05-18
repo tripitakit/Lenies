@@ -293,11 +293,20 @@ defmodule Lenies.World do
     end
   end
 
+  # Background mutations are configured as a RATE — N mutations per 1000
+  # world ticks (0 = off) — because a rate scale is monotone with the
+  # observed mutation pressure (higher = more), unlike an interval scale
+  # where bigger numbers mean rarer events. We convert internally to a
+  # tick interval so the rest of the logic stays modular arithmetic.
   defp maybe_background_mutation(state) do
-    interval = Application.get_env(:lenies, :background_mutation_interval_ticks, 1000)
+    rate = Application.get_env(:lenies, :background_mutation_rate_per_1000_ticks, 1)
 
-    if interval > 0 and rem(state.tick_count + 1, interval) == 0 do
-      apply_random_background_mutation()
+    if rate > 0 do
+      interval = max(1, div(1000, rate))
+
+      if rem(state.tick_count + 1, interval) == 0 do
+        apply_random_background_mutation()
+      end
     end
 
     :ok
