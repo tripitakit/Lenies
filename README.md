@@ -191,7 +191,7 @@ through seven hand-crafted codeomes of growing complexity — see the
 
 ## Built-in seeds
 
-Three seeds come pre-loaded in the spawn dropdown:
+Five seeds come pre-loaded in the spawn dropdown:
 
 - **Minimal Replicator** — a hand-written 121-opcode self-replicator with a
   128-step forage cycle between divisions. Robust enough to maintain a
@@ -203,9 +203,22 @@ Three seeds come pre-loaded in the spawn dropdown:
   `:eat`. Demonstrates predation; thrives in dense populations, starves
   in sparse ones. Source:
   [lib/lenies/codeomes/carnivore.ex](lib/lenies/codeomes/carnivore.ex).
-- **Random** — a random codeome of length 30..120 sampled uniformly from
-  the whitelist. Almost never replicates; useful as a baseline for how
-  fragile a "naive" creature is.
+- **Defender** — pacifist herbivore with a pseudo-random walk: every 5
+  forage steps the Lenie fires a random turn, making it hard to track
+  for a directional predator. Net forage gain is ~5% lower than the
+  Minimal Replicator. Source:
+  [lib/lenies/codeomes/defender.ex](lib/lenies/codeomes/defender.ex).
+- **Hunter** — reactive predator. Each forage iteration checks
+  `sense_front` and attacks if it sees a Lenie; every 8 iterations a
+  360° sweep rotates four times left, sensing in each direction and
+  attacking the first prey detected. More efficient than the Carnivore
+  on sparse worlds where blind attacks waste energy. Source:
+  [lib/lenies/codeomes/hunter.ex](lib/lenies/codeomes/hunter.ex).
+- **Forager** — adaptive herbivore. Counts consecutive empty
+  `sense_front` sightings; on the 5th, fires a random turn and resets
+  the counter. Walks away from exhausted patches and tends to settle
+  in hotspots. Source:
+  [lib/lenies/codeomes/forager.ex](lib/lenies/codeomes/forager.ex).
 
 ---
 
