@@ -19,6 +19,10 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 32;
 const ZOOM_STEP = 1.2;
 const CLICK_DRAG_THRESHOLD_PX = 3;
+// Window in which a second click can promote to a dblclick. Must exceed
+// most browsers' dblclick threshold so we don't recenter and shift the
+// view out from under the dblclick handler's cursor→cell math.
+const CLICK_RECENTER_DELAY_MS = 250;
 
 const WorldDetailCanvas = {
   mounted() {
@@ -42,6 +46,10 @@ const WorldDetailCanvas = {
     this.isDragging = false;
     this.dragMoved = false;
     this.dragStart = null;
+    // Pending single-click recenter — held in a timer so a follow-up
+    // dblclick can cancel it before it shifts the view out from under
+    // the dblclick handler's cursor-to-cell math.
+    this.pendingClickTimer = null;
 
     this.handleEvent("render_frame", (payload) => {
       this.lastPayload = payload;
@@ -114,13 +122,24 @@ const WorldDetailCanvas = {
       const wasClick = !this.dragMoved;
       this.isDragging = false;
       this.canvas.style.cursor = "grab";
-      if (wasClick) {
-        const { bufX, bufY } = this.cursorToBuffer(e);
+      if (!wasClick) return;
+      // Skip recenter on the second mouseup of a double-click — the
+      // dblclick handler will clear the pending recenter from the first
+      // mouseup and navigate instead. e.detail counts consecutive clicks
+      // at roughly the same spot within the OS dblclick window.
+      if (e.detail >= 2) return;
+      // Defer the recenter: if a dblclick follows, it cancels the timer
+      // before centerX/Y change, so cursorToBuffer in onDoubleClick still
+      // points at the originally-clicked cell.
+      const { bufX, bufY } = this.cursorToBuffer(e);
+      if (this.pendingClickTimer) clearTimeout(this.pendingClickTimer);
+      this.pendingClickTimer = setTimeout(() => {
+        this.pendingClickTimer = null;
         this.centerX = bufX;
         this.centerY = bufY;
         this.clampCenter();
         this.requestDraw();
-      }
+      }, CLICK_RECENTER_DELAY_MS);
     };
 
     this.onMouseLeave = () => {
@@ -130,12 +149,20 @@ const WorldDetailCanvas = {
 
     this.onDoubleClick = (e) => {
       e.preventDefault();
+      // Cancel the deferred recenter from the first mouseup before
+      // reading the cursor cell — otherwise the recenter could already
+      // have run if the user clicked slowly, but more importantly we
+      // never want it to run after the dblclick decides to navigate.
+      if (this.pendingClickTimer) {
+        clearTimeout(this.pendingClickTimer);
+        this.pendingClickTimer = null;
+      }
       const { bufX, bufY } = this.cursorToBuffer(e);
       const x = Math.floor(bufX);
       const y = Math.floor(bufY);
       if (x < 0 || y < 0 || x >= this.gridW || y >= this.gridH) return;
-      // Server inspects the cell and either navigates to the editor
-      // (Lenie present) or pushes `reset_zoom` back (empty cell).
+      // Server navigates to the editor if a Lenie occupies the cell,
+      // otherwise it's a no-op (empty cell).
       this.pushEvent("select_lenie_at_cell", { x, y });
     };
 
@@ -284,6 +311,10 @@ const WorldDetailCanvas = {
 
   destroyed() {
     this.detachInteractionHandlers();
+    if (this.pendingClickTimer) {
+      clearTimeout(this.pendingClickTimer);
+      this.pendingClickTimer = null;
+    }
     this.lastPayload = null;
   }
 };
