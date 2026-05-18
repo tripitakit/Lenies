@@ -11,7 +11,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
   @tunable_params [
     %{key: :radiation_per_tick, label: "Radiation per tick", min: 0, max: 20000, step: 100},
     %{key: :eat_amount, label: "Eat amount", min: 1, max: 1000, step: 10},
-    %{key: :carcass_decay, label: "Carcass decay/tick", min: 0.0, max: 0.2, step: 0.005},
+    %{key: :carcass_decay, label: "Carcass decay/tick", min: 0.0, max: 0.05, step: 0.0005},
     %{
       key: :lenie_metabolize_delay_ms,
       label: "Lenie metabolize delay (ms)",

@@ -27,8 +27,10 @@ defmodule Lenies.World.CellTest do
   end
 
   test "decay_carcass/2 floors at 0" do
+    # rate = 1.0 → total = carcass × 1.0 is integer, bulk removes
+    # everything deterministically; no stochastic residue to handle.
     cell = %Cell{carcass: 1}
-    cell = Cell.decay_carcass(cell, 0.99)
+    cell = Cell.decay_carcass(cell, 1.0)
     assert cell.carcass == 0
   end
 

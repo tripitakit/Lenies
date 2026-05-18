@@ -30,7 +30,17 @@ defmodule Lenies.World.Cell do
   def add_resource(%__MODULE__{} = cell, _), do: cell
 
   def decay_carcass(%__MODULE__{} = cell, rate) when rate >= 0 and rate <= 1 do
-    new_amount = max(0, floor(cell.carcass * (1 - rate)))
+    # Proportional decay: per tick remove `carcass * rate` on average.
+    # The integer part is removed deterministically; the fractional part
+    # is removed with probability equal to itself, so the long-run mean
+    # matches the ideal `carcass * (1 - rate)` without the floor() bias
+    # that used to force −1/tick at small rates and turned every "slow"
+    # slider value into a fast cleanup of small carcasses.
+    total = cell.carcass * rate
+    bulk = trunc(total)
+    remainder = total - bulk
+    extra = if remainder > 0 and :rand.uniform() < remainder, do: 1, else: 0
+    new_amount = max(0, cell.carcass - bulk - extra)
     new_hue = if new_amount == 0, do: 0, else: cell.carcass_hue
     %{cell | carcass: new_amount, carcass_hue: new_hue}
   end
