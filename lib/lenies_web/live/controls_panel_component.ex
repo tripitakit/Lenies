@@ -65,11 +65,11 @@ defmodule LeniesWeb.ControlsPanelComponent do
   @impl true
   def render(assigns) do
     ~H"""
-    <%!-- Controls is sized to comfortably fit its three secondary buttons
-          on one line (~380-420px); Tuning is capped at ~1100px so the
-          sliders don't sprawl across ultrawide displays. Any leftover
-          space stays on the right. --%>
-    <div class="grid grid-cols-[minmax(380px,420px)_minmax(0,1100px)] gap-3 min-h-0">
+    <%!-- Dashboard's right-bottom row is narrower than the panel used to
+          sit in, so Controls and Tuning stack vertically here. Each is
+          full width of the right column; Tuning's internal slider grid
+          remains 2-col. --%>
+    <div class="grid grid-rows-[auto_minmax(0,1fr)] gap-3 min-h-0">
       <div class="panel p-3 flex flex-col gap-3">
         <h2 class="text-xs">▮ Controls</h2>
 
@@ -139,17 +139,6 @@ defmodule LeniesWeb.ControlsPanelComponent do
           >
             + New Seed
           </.link>
-
-          <button
-            id="world-detail-open"
-            type="button"
-            phx-click="open_world_detail"
-            phx-target={@myself}
-            class="px-2 py-0.5 border border-cyan-500/60 text-cyan-200 hover:bg-cyan-900/40 whitespace-nowrap"
-            title="Open the zoomed world detail view"
-          >
-            ⛶ World detail
-          </button>
 
           <button
             type="button"
@@ -400,11 +389,6 @@ defmodule LeniesWeb.ControlsPanelComponent do
       end
 
     {:noreply, assign(socket, :snapshot_status, status)}
-  end
-
-  def handle_event("open_world_detail", _params, socket) do
-    send(self(), :open_world_detail)
-    {:noreply, socket}
   end
 
   def handle_event("toggle_custom_manage", _params, socket) do

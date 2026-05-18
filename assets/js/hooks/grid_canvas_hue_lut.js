@@ -1,5 +1,4 @@
-// Shared hue-byte → RGB lookup table used by both GridCanvas (dashboard)
-// and WorldDetailCanvas (world detail modal).
+// Shared hue-byte → RGB lookup table used by GridCanvas.
 //
 // Hue byte → degrees: deg = (byte - 1) / 255 * 360. Must match
 // Lenies.SpeciesColor.byte_to_hex/1 (S=0.70, L=0.55).

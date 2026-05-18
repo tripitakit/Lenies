@@ -24,7 +24,6 @@ defmodule LeniesWeb.EditorLive do
       socket
       |> assign(:mode, mode)
       |> assign(:selected_hash, selected_hash)
-      |> assign(:return_to, parse_return_to(params))
       |> assign(:buffer, buffer)
       |> assign(:original_buffer, buffer)
       |> assign(:dirty, false)
@@ -39,14 +38,6 @@ defmodule LeniesWeb.EditorLive do
 
     {:ok, socket}
   end
-
-  # `?from=world-detail` is set by the dashboard when the editor is opened
-  # via dblclick on a Lenie cell — we use it to send the user back to the
-  # dashboard with the world-detail modal reopened. Anything else
-  # (Edit link in the species inspector, /editor/new, direct URL) falls
-  # back to the plain dashboard.
-  defp parse_return_to(%{"from" => "world-detail"}), do: :world_detail
-  defp parse_return_to(_), do: :dashboard
 
   defp init_for_route(:new, _params) do
     {:new_seed, nil, []}
@@ -205,7 +196,7 @@ defmodule LeniesWeb.EditorLive do
   end
 
   def handle_event("cancel_edit", _params, socket) do
-    {:noreply, push_navigate(socket, to: back_to(socket.assigns.return_to))}
+    {:noreply, push_navigate(socket, to: ~p"/")}
   end
 
   def handle_event("submit_opcode_text", %{"opcodes" => text}, socket) do
@@ -237,7 +228,7 @@ defmodule LeniesWeb.EditorLive do
     >
       <header class="codeome-editor-page-header">
         <.link
-          navigate={back_to(@return_to)}
+          navigate={~p"/"}
           class="text-xs px-2 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
         >
           ← Back
@@ -498,13 +489,6 @@ defmodule LeniesWeb.EditorLive do
     </div>
     """
   end
-
-  # Back/Cancel sends the user to the view that opened the editor. We
-  # intentionally never link to `/species/:hash` — that page is legacy
-  # and slated for removal; the dashboard (with the world-detail modal
-  # restored when applicable) is the single canonical return target.
-  defp back_to(:world_detail), do: ~p"/?world_detail=1"
-  defp back_to(_), do: ~p"/"
 
   defp maybe_assign(socket, _key, nil), do: socket
   defp maybe_assign(socket, key, value), do: assign(socket, key, value)

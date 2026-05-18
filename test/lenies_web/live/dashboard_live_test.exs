@@ -123,20 +123,26 @@ defmodule LeniesWeb.DashboardLiveTest do
     assert html =~ ~r/hashA[\s\S]+2/
   end
 
-  test "cell_clicked event on occupied cell triggers navigate to inspector", %{conn: conn} do
+  test "select_lenie_at_cell on occupied cell navigates to the codeome editor",
+       %{conn: conn} do
     [{key, cell}] = :ets.lookup(:cells, {5, 5})
     :ets.insert(:cells, {key, %{cell | lenie_id: "CLICKED"}})
 
+    :ets.insert(
+      :lenies,
+      {"CLICKED", %{id: "CLICKED", codeome_hash: "CLICKED-HASH", lineage: {nil, 0}}}
+    )
+
     {:ok, view, _html} = live(conn, "/")
 
-    assert {:error, {:live_redirect, %{to: "/lenie/CLICKED"}}} =
-             render_hook(view, "cell_clicked", %{"x" => 5, "y" => 5})
+    assert {:error, {:live_redirect, %{to: "/editor/edit/CLICKED-HASH"}}} =
+             render_hook(view, "select_lenie_at_cell", %{"x" => 5, "y" => 5})
   end
 
-  test "cell_clicked event on empty cell stays on dashboard", %{conn: conn} do
+  test "select_lenie_at_cell on empty cell stays on dashboard", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/")
     # Cell {7, 8} is empty by default
-    assert render_hook(view, "cell_clicked", %{"x" => 7, "y" => 8})
+    assert render_hook(view, "select_lenie_at_cell", %{"x" => 7, "y" => 8})
   end
 
   test "Seed dropdown is rendered with available seeds", %{conn: conn} do
@@ -301,163 +307,57 @@ defmodule LeniesWeb.DashboardLiveTest do
     end
   end
 
-  describe "world detail modal — open/close" do
-    test "world_detail_open? starts false", %{conn: conn} do
+  describe "map highlight driven by selected species" do
+    test "no highlight by default — data-highlight-hue is 0", %{conn: conn} do
       {:ok, _view, html} = live(conn, "/")
-      refute html =~ ~s(id="world-detail")
+      assert html =~ ~s(data-highlight-hue="0")
     end
 
-    test ":open_world_detail info message sets the flag", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/")
-      send(view.pid, :open_world_detail)
-      html = render(view)
-      assert html =~ ~s(id="world-detail")
-    end
-
-    test "clicking the ⛶ World detail button opens the modal", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/")
-
-      view
-      |> element("button#world-detail-open")
-      |> render_click()
-
-      assert render(view) =~ ~s(id="world-detail")
-    end
-
-    test "close_world_detail event clears the flag and the highlight", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/")
-      send(view.pid, :open_world_detail)
-      assert render(view) =~ ~s(id="world-detail")
-
-      # Set a highlight via the highlight event so we can verify clear.
-      render_hook(view, "highlight_species_in_world", %{"hash" => "DOES-NOT-EXIST"})
-
-      view |> element("button#world-detail-close") |> render_click()
-      refute render(view) =~ ~s(id="world-detail")
-    end
-
-    test "clicking a species row sets the highlight on the canvas", %{conn: conn} do
-      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-WD-A", lineage: {nil, 0}}})
+    test "selecting a species row sets the canvas highlight to its hue", %{conn: conn} do
+      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-SEL-A", lineage: {nil, 0}}})
 
       {:ok, view, _} = live(conn, "/")
-      send(view.pid, :open_world_detail)
 
       html =
         view
-        |> element("button[phx-click='highlight_species_in_world'][phx-value-hash='HASH-WD-A']")
+        |> element("tr#species-row-HASH-SEL-A")
         |> render_click()
 
-      hue = Lenies.SpeciesColor.hue_byte("HASH-WD-A")
+      hue = Lenies.SpeciesColor.hue_byte("HASH-SEL-A")
       assert html =~ ~s(data-highlight-hue="#{hue}")
     end
 
-    test "clicking the same species row twice clears the highlight", %{conn: conn} do
-      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-WD-B", lineage: {nil, 0}}})
+    test "clicking the selected row again deselects and clears the highlight", %{conn: conn} do
+      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-SEL-B", lineage: {nil, 0}}})
 
       {:ok, view, _} = live(conn, "/")
-      send(view.pid, :open_world_detail)
 
-      view
-      |> element("button[phx-click='highlight_species_in_world'][phx-value-hash='HASH-WD-B']")
-      |> render_click()
-
-      html =
-        view
-        |> element("button[phx-click='highlight_species_in_world'][phx-value-hash='HASH-WD-B']")
-        |> render_click()
+      view |> element("tr#species-row-HASH-SEL-B") |> render_click()
+      html = view |> element("tr#species-row-HASH-SEL-B") |> render_click()
 
       assert html =~ ~s(data-highlight-hue="0")
     end
 
-    test "clicking a different species row swaps the highlight", %{conn: conn} do
-      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-WD-X", lineage: {nil, 0}}})
-      :ets.insert(:lenies, {"L2", %{id: "L2", codeome_hash: "HASH-WD-Y", lineage: {nil, 0}}})
-
-      {:ok, view, _} = live(conn, "/")
-      send(view.pid, :open_world_detail)
-
-      view
-      |> element("button[phx-click='highlight_species_in_world'][phx-value-hash='HASH-WD-X']")
-      |> render_click()
-
-      html =
-        view
-        |> element("button[phx-click='highlight_species_in_world'][phx-value-hash='HASH-WD-Y']")
-        |> render_click()
-
-      hue_y = Lenies.SpeciesColor.hue_byte("HASH-WD-Y")
-      assert html =~ ~s(data-highlight-hue="#{hue_y}")
-    end
-
-    test "render_frame events are still pushed while the modal is open", %{conn: conn} do
-      # Disable throttle so every tick triggers a push_event.
+    test "highlight is cleared when the selected species drops out of the top-N",
+         %{conn: conn} do
       Application.put_env(:lenies, :dashboard_throttle_ticks, 1)
 
-      {:ok, view, _} = live(conn, "/")
-      send(view.pid, :open_world_detail)
-
-      # Force a tick to make sure the dashboard re-pushes.
-      Lenies.World.tick_now()
-      send(view.pid, {:tick, 1})
-
-      assert_push_event view, "render_frame", %{lenies: _}
-    after
-      Application.delete_env(:lenies, :dashboard_throttle_ticks)
-    end
-
-    test "highlight is cleared when the selected species drops out of the species list", %{
-      conn: conn
-    } do
-      Application.put_env(:lenies, :dashboard_throttle_ticks, 1)
-
-      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-WD-GONE", lineage: {nil, 0}}})
+      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "HASH-GONE", lineage: {nil, 0}}})
 
       {:ok, view, _} = live(conn, "/")
-      send(view.pid, :open_world_detail)
+      view |> element("tr#species-row-HASH-GONE") |> render_click()
 
-      view
-      |> element("button[phx-click='highlight_species_in_world'][phx-value-hash='HASH-WD-GONE']")
-      |> render_click()
-
-      hue = Lenies.SpeciesColor.hue_byte("HASH-WD-GONE")
+      hue = Lenies.SpeciesColor.hue_byte("HASH-GONE")
       assert render(view) =~ ~s(data-highlight-hue="#{hue}")
 
-      # The Lenie disappears (extinct).
+      # The Lenie disappears (extinct) — the next tick recomputes the top-N
+      # and the selection should be dropped along with the highlight.
       :ets.delete(:lenies, "L1")
       send(view.pid, {:tick, 1})
 
       assert render(view) =~ ~s(data-highlight-hue="0")
     after
       Application.delete_env(:lenies, :dashboard_throttle_ticks)
-    end
-
-    test "modal species list shows ALL active species (not just dashboard top-10)", %{conn: conn} do
-      # 15 distinct species → more than the dashboard's top-10 cap. The
-      # modal must list every one of them. Hash short-ids in the component
-      # are the first 8 characters of the hash, so we keep those 8 chars
-      # unique per species.
-      hashes =
-        for i <- 1..15 do
-          # SPnnX...  — first 8 chars uniquely encode i (zero-padded)
-          "SP" <> String.pad_leading(Integer.to_string(i), 2, "0") <> "XXXX-FILLER"
-        end
-
-      for {hash, i} <- Enum.with_index(hashes, 1) do
-        for j <- 1..i do
-          id = "L-#{i}-#{j}"
-          :ets.insert(:lenies, {id, %{id: id, codeome_hash: hash, lineage: {nil, 0}}})
-        end
-      end
-
-      {:ok, view, _} = live(conn, "/")
-      send(view.pid, :open_world_detail)
-      html = render(view)
-
-      # All 15 short-ids appear in the modal markup.
-      for hash <- hashes do
-        short = String.slice(hash, 0..7)
-        assert html =~ short, "expected modal to list species #{short} but it was missing"
-      end
     end
   end
 

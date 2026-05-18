@@ -34,11 +34,10 @@ import ActionFeedback from "./hooks/action_feedback"
 import CodeomeSortable from "./hooks/codeome_sortable"
 import ConfirmAction from "./hooks/confirm_action"
 import CodeomePalette from "./hooks/codeome_palette"
-import WorldDetailCanvas from "./hooks/world_detail_canvas"
 import RememberManualState from "./hooks/remember_manual_state"
 import ManualLinkInterceptor from "./hooks/manual_link_interceptor"
 
-const Hooks = {GridCanvas, ActionFeedback, CodeomeSortable, ConfirmAction, CodeomePalette, WorldDetailCanvas, RememberManualState, ManualLinkInterceptor, ...colocatedHooks}
+const Hooks = {GridCanvas, ActionFeedback, CodeomeSortable, ConfirmAction, CodeomePalette, RememberManualState, ManualLinkInterceptor, ...colocatedHooks}
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {

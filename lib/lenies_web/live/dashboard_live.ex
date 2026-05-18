@@ -2,11 +2,14 @@ defmodule LeniesWeb.DashboardLive do
   @moduledoc """
   Main dashboard for monitoring the Lenies sandbox.
 
-  Four panels (per spec §7.1):
-  1. World (canvas 512×512 with 3 toggleable layers)
-  2. Telemetry (population over time)
-  3. Species (top-N table)
-  4. Controls (delegated to LeniesWeb.ControlsPanelComponent — see file)
+  Layout:
+  - **Left** : World canvas, full-height. Owns pan/zoom/dblclick — clicking
+    a Lenie cell opens its codeome editor; the canvas dims every other
+    species when one row in the species table is selected.
+  - **Right top** : Telemetry + species table + (when a row is selected)
+    species inspector.
+  - **Right bottom** : Controls + Tuning (delegated to
+    `LeniesWeb.ControlsPanelComponent`).
 
   Only the world canvas and telemetry/species panels re-render on tick;
   controls live in a LiveComponent so form/input state is preserved.
@@ -14,10 +17,11 @@ defmodule LeniesWeb.DashboardLive do
 
   use LeniesWeb, :live_view
 
+  alias Lenies.SpeciesColor
   alias LeniesWeb.GridRenderer
 
   @impl true
-  def mount(params, _session, socket) do
+  def mount(_params, _session, socket) do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Lenies.PubSub, "world:tick")
       Phoenix.PubSub.subscribe(Lenies.PubSub, "world:control")
@@ -25,10 +29,6 @@ defmodule LeniesWeb.DashboardLive do
 
     grid = Lenies.Config.grid_size()
     {species, all_species, species_total} = aggregate_with_top(10)
-
-    # `?world_detail=1` reopens the modal — used by the editor's Back/Cancel
-    # to restore the view it was launched from (dblclick on a Lenie cell).
-    world_detail_open? = params["world_detail"] == "1"
 
     socket =
       socket
@@ -43,28 +43,19 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:selected_hash, nil)
       |> assign(:selected_species_record, nil)
       |> assign(:inspector_dirty, false)
-      |> assign(:world_detail_open?, world_detail_open?)
-      |> assign(:world_detail_highlight_hash, nil)
-      |> assign(:world_paused?, world_paused_status())
+
+    # Push an initial frame as soon as the websocket is connected so the
+    # canvas isn't black between mount and the next throttled tick
+    # (especially after navigating back from the editor).
+    socket =
+      if connected?(socket) do
+        payload = GridRenderer.encode_payload(grid)
+        push_event(socket, "render_frame", payload)
+      else
+        socket
+      end
 
     {:ok, socket}
-  end
-
-  # Read the running world's actual pause flag at mount so the modal
-  # opens with the correct button state even if some other client (or
-  # an iex session) toggled it. Defaults to false if World isn't up.
-  defp world_paused_status do
-    case Process.whereis(Lenies.World) do
-      pid when is_pid(pid) ->
-        try do
-          Lenies.World.paused?()
-        catch
-          :exit, _ -> false
-        end
-
-      _ ->
-        false
-    end
   end
 
   # Returns {top_n, all_species, total_count} from a single Species.aggregate()
@@ -137,62 +128,72 @@ defmodule LeniesWeb.DashboardLive do
         </div>
       </header>
 
-      <div class="flex-1 grid gap-3 min-h-0 grid-rows-[minmax(0,1fr)_auto]">
-        <div class="flex gap-3 min-h-0">
-          <div class="panel p-3 flex flex-col gap-2 shrink-0">
-            <h2 class="text-xs">▮ World</h2>
-            <div class="canvas-frame">
-              <canvas
-                id="grid-canvas"
-                phx-hook="GridCanvas"
-                data-grid-width={elem(@grid, 0)}
-                data-grid-height={elem(@grid, 1)}
-                data-show-lenies={@layers_visible.lenies}
-                data-show-resource={@layers_visible.resource}
-                data-show-carcass={@layers_visible.carcass}
-                width="512"
-                height="512"
-                class="block"
-              >
-              </canvas>
-            </div>
-            <div class="flex gap-3 text-xs">
-              <label class="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  phx-click="toggle_layer"
-                  phx-value-layer="lenies"
-                  checked={@layers_visible.lenies}
-                  class="accent-cyan-400"
-                />
-                <span>Lenies</span>
-              </label>
-              <label class="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  phx-click="toggle_layer"
-                  phx-value-layer="resource"
-                  checked={@layers_visible.resource}
-                  class="accent-emerald-400"
-                />
-                <span>Resources</span>
-              </label>
-              <label class="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  phx-click="toggle_layer"
-                  phx-value-layer="carcass"
-                  checked={@layers_visible.carcass}
-                  class="accent-rose-400"
-                />
-                <span>Carcasses</span>
-              </label>
-            </div>
+      <div class="flex-1 flex gap-3 min-h-0">
+        <section class="panel p-3 flex flex-col gap-2 min-h-0 shrink-0 dashboard-map-pane">
+          <h2 class="text-xs">▮ World</h2>
+          <%!-- phx-update="ignore" keeps morphdom from patching the canvas
+                BITMAP; the element's own attributes (data-show-*,
+                data-highlight-hue) are still morphed on every render so
+                the hook's updated() picks them up immediately. --%>
+          <div class="dashboard-map-frame">
+            <canvas
+              id="grid-canvas"
+              phx-hook="GridCanvas"
+              phx-update="ignore"
+              data-grid-width={elem(@grid, 0)}
+              data-grid-height={elem(@grid, 1)}
+              data-show-lenies={@layers_visible.lenies}
+              data-show-resource={@layers_visible.resource}
+              data-show-carcass={@layers_visible.carcass}
+              data-highlight-hue={highlight_hue(@selected_hash)}
+              width={elem(@grid, 0) * 2}
+              height={elem(@grid, 1) * 2}
+              class="dashboard-map-canvas"
+            >
+            </canvas>
           </div>
+          <div class="flex gap-3 text-xs">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                phx-click="toggle_layer"
+                phx-value-layer="lenies"
+                checked={@layers_visible.lenies}
+                class="accent-cyan-400"
+              />
+              <span>Lenies</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                phx-click="toggle_layer"
+                phx-value-layer="resource"
+                checked={@layers_visible.resource}
+                class="accent-emerald-400"
+              />
+              <span>Resources</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                phx-click="toggle_layer"
+                phx-value-layer="carcass"
+                checked={@layers_visible.carcass}
+                class="accent-rose-400"
+              />
+              <span>Carcasses</span>
+            </label>
+          </div>
+          <p class="dashboard-map-hint">
+            scroll: zoom · drag: pan · click: focus · dblclick on a Lenie: edit codeome
+          </p>
+        </section>
 
-          <div class="flex-1 grid grid-rows-2 gap-3 min-h-0 min-w-0">
-            <div class="panel p-3 flex flex-col gap-2 min-h-0">
-              <h2 class="text-xs">▮ Telemetry — total population over time</h2>
+        <div class="flex-1 grid grid-rows-[minmax(0,1fr)_auto] gap-3 min-h-0 min-w-0">
+          <div class="flex gap-3 min-h-0 min-w-0">
+            <div class="flex-1 grid grid-rows-2 gap-3 min-h-0 min-w-0">
+              <div class="panel p-3 flex flex-col gap-2 min-h-0">
+                <h2 class="text-xs">▮ Telemetry — total population over time</h2>
               <% latest = List.last(@history) || %{population: 0, total_resource: 0, total_carcass: 0} %>
               <div class="grid grid-cols-3 gap-2 text-[11px]">
                 <div class="border border-cyan-500/30 px-2 py-1">
@@ -307,33 +308,30 @@ defmodule LeniesWeb.DashboardLive do
                 </table>
               </div>
             </div>
+            </div>
+
+            <%= if @selected_hash do %>
+              <.live_component
+                module={LeniesWeb.SpeciesInspectorComponent}
+                id="species-inspector"
+                selected_hash={@selected_hash}
+                species_record={@selected_species_record}
+              />
+            <% end %>
           </div>
 
-          <%= if @selected_hash do %>
-            <.live_component
-              module={LeniesWeb.SpeciesInspectorComponent}
-              id="species-inspector"
-              selected_hash={@selected_hash}
-              species_record={@selected_species_record}
-            />
-          <% end %>
-          <%= if @world_detail_open? do %>
-            <.live_component
-              module={LeniesWeb.WorldDetailComponent}
-              id="world-detail"
-              species={@all_species}
-              highlight_hash={@world_detail_highlight_hash}
-              grid={@grid}
-              paused?={@world_paused?}
-            />
-          <% end %>
+          <.live_component module={LeniesWeb.ControlsPanelComponent} id="controls" />
         </div>
-
-        <.live_component module={LeniesWeb.ControlsPanelComponent} id="controls" />
       </div>
     </div>
     """
   end
+
+  # Maps the selected species hash to the 0..255 hue byte that the canvas
+  # reads from `data-highlight-hue`. 0 means "no highlight" so the hook
+  # renders every cell at full intensity.
+  defp highlight_hue(nil), do: 0
+  defp highlight_hue(hash) when is_binary(hash), do: SpeciesColor.hue_byte(hash)
 
   @impl true
   def handle_event("select_species", %{"hash" => hash}, socket) do
@@ -363,60 +361,14 @@ defmodule LeniesWeb.DashboardLive do
     {:noreply, assign(socket, :layers_visible, new_visible)}
   end
 
-  def handle_event("cell_clicked", %{"x" => x, "y" => y}, socket)
-      when is_integer(x) and is_integer(y) do
-    case :ets.lookup(:cells, {x, y}) do
-      [{_, %{lenie_id: id}}] when is_binary(id) ->
-        {:noreply, push_navigate(socket, to: ~p"/lenie/#{id}")}
-
-      _ ->
-        {:noreply, socket}
-    end
-  end
-
-  def handle_event("close_world_detail", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:world_detail_open?, false)
-     |> assign(:world_detail_highlight_hash, nil)}
-  end
-
-  def handle_event("highlight_species_in_world", %{"hash" => hash}, socket)
-      when is_binary(hash) do
-    new_hash =
-      if socket.assigns.world_detail_highlight_hash == hash, do: nil, else: hash
-
-    {:noreply, assign(socket, :world_detail_highlight_hash, new_hash)}
-  end
-
-  def handle_event("highlight_species_in_world", _params, socket) do
-    {:noreply, socket}
-  end
-
-  def handle_event("toggle_world_pause", _params, socket) do
-    new_paused =
-      if socket.assigns.world_paused? do
-        Lenies.World.resume()
-        false
-      else
-        Lenies.World.pause()
-        true
-      end
-
-    {:noreply, assign(socket, :world_paused?, new_paused)}
-  end
-
+  # Pushed by the GridCanvas hook on dblclick. We resolve the cell to a
+  # Lenie via the :cells / :lenies ETS tables and navigate to its
+  # editor; misses (empty cells) are a silent no-op.
   def handle_event("select_lenie_at_cell", %{"x" => x, "y" => y}, socket)
       when is_integer(x) and is_integer(y) do
     case lookup_lenie_at_cell(x, y) do
-      {:ok, hash} ->
-        # `from=world-detail` lets the editor's Back/Cancel reopen the
-        # modal instead of dropping the user on the plain dashboard.
-        {:noreply,
-         push_navigate(socket, to: ~p"/editor/edit/#{hash}?from=world-detail")}
-
-      :error ->
-        {:noreply, socket}
+      {:ok, hash} -> {:noreply, push_navigate(socket, to: ~p"/editor/edit/#{hash}")}
+      :error -> {:noreply, socket}
     end
   end
 
@@ -431,13 +383,6 @@ defmodule LeniesWeb.DashboardLive do
   end
 
   @impl true
-  def handle_info(:open_world_detail, socket) do
-    {:noreply,
-     socket
-     |> assign(:world_detail_open?, true)
-     |> assign(:world_detail_highlight_hash, nil)}
-  end
-
   def handle_info({:tick, n}, socket) do
     throttle = Application.get_env(:lenies, :dashboard_throttle_ticks, 5)
     new_counter = socket.assigns.throttle_counter + 1
@@ -460,7 +405,7 @@ defmodule LeniesWeb.DashboardLive do
           :selected_species_record,
           find_selected_record(socket.assigns.selected_hash, species)
         )
-        |> maybe_clear_world_detail_highlight(all_species)
+        |> maybe_clear_selected_species(all_species)
 
       payload = GridRenderer.encode_payload(socket.assigns.grid)
       {:noreply, push_event(socket, "render_frame", payload)}
@@ -496,8 +441,12 @@ defmodule LeniesWeb.DashboardLive do
   defp format_count(n) when is_float(n), do: format_count(trunc(n))
   defp format_count(_), do: "0"
 
-  defp maybe_clear_world_detail_highlight(socket, species) do
-    case socket.assigns.world_detail_highlight_hash do
+  # When the species the user is inspecting falls out of the active set
+  # (extinct or pushed out of the top-N), close the inspector and drop
+  # the canvas highlight so we don't keep dimming the map against a
+  # ghost selection.
+  defp maybe_clear_selected_species(socket, species) do
+    case socket.assigns.selected_hash do
       nil ->
         socket
 
@@ -505,7 +454,10 @@ defmodule LeniesWeb.DashboardLive do
         if Enum.any?(species, &(&1.hash == hash)) do
           socket
         else
-          assign(socket, :world_detail_highlight_hash, nil)
+          socket
+          |> assign(:selected_hash, nil)
+          |> assign(:selected_species_record, nil)
+          |> assign(:inspector_dirty, false)
         end
     end
   end
