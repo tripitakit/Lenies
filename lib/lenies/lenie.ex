@@ -20,7 +20,7 @@ defmodule Lenies.Lenie do
   alias Lenies.{Codeome, Interpreter, World}
   alias Lenies.Interpreter.State
 
-  defstruct [:id, :codeome, :interp, :lineage, batch_count: 0]
+  defstruct [:id, :codeome, :interp, :lineage, :seed_origin, batch_count: 0]
 
   # ----- Public API -----
 
@@ -41,6 +41,11 @@ defmodule Lenies.Lenie do
     pos = Keyword.fetch!(opts, :pos)
     dir = Keyword.get(opts, :dir, :n)
     lineage = Keyword.get(opts, :lineage, {nil, 0})
+    # Seed of origin — propagates through replication and mutation so the
+    # species table can show "evolved from <seed>" for descendants of a
+    # known seed. `nil` for Lenies whose origin isn't tracked (e.g. tests
+    # spawning directly via `Lenie.start_link`).
+    seed_origin = Keyword.get(opts, :seed_origin)
 
     :erlang.process_flag(:max_heap_size, %{
       size: Application.get_env(:lenies, :lenie_max_heap_size, 1_000_000),
@@ -57,6 +62,7 @@ defmodule Lenies.Lenie do
       codeome: codeome,
       interp: interp,
       lineage: lineage,
+      seed_origin: seed_origin,
       batch_count: 0
     }
 
@@ -185,7 +191,8 @@ defmodule Lenies.Lenie do
         age: state.interp.age,
         ip: state.interp.ip,
         codeome_hash: Lenies.Codeome.hash(state.codeome),
-        lineage: state.lineage
+        lineage: state.lineage,
+        seed_origin: state.seed_origin
       }
 
       existing =

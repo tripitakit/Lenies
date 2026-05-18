@@ -232,6 +232,12 @@ defmodule LeniesWeb.DashboardLive do
                     <thead class="text-cyan-300/80 sticky top-0 bg-slate-950/80">
                       <tr>
                         <th class="text-left py-1">Hash</th>
+                        <th
+                          class="text-left py-1"
+                          title="Seed of origin — bare seed name when the species' codeome still matches the pristine seed; prefixed with 'evolved from' once mutations have drifted it"
+                        >
+                          Seed
+                        </th>
                         <th class="text-right py-1" title="Codeome length (opcodes)">Codeome size</th>
                         <th
                           class="text-right py-1"
@@ -270,6 +276,7 @@ defmodule LeniesWeb.DashboardLive do
                               {String.slice(sp.hash, 0..7)}
                             </span>
                           </td>
+                          <td class="py-0.5 opacity-80">{format_seed_origin(sp)}</td>
                           <td class="text-right">{sp.size}</td>
                           <td class="text-right text-rose-300">{format_energy(sp.cost)}</td>
                           <td class="text-right text-emerald-300">{format_energy(sp.max_gain)}</td>
@@ -416,6 +423,33 @@ defmodule LeniesWeb.DashboardLive do
 
   defp format_count(n) when is_float(n), do: format_count(trunc(n))
   defp format_count(_), do: "0"
+
+  # Pristine-codeome hashes for every built-in seed, computed once at
+  # module load. Custom user seeds aren't covered because their pristine
+  # codeome lives in `Seeds.CustomStore` (the user could even edit and
+  # save back at any time) — for those we always show the "evolved from"
+  # form because we can't reliably know what "pristine" means.
+  @builtin_pristine_hashes Map.new(
+                             Lenies.Seeds.all(),
+                             fn s -> {s.name, Lenies.Codeome.hash(s.codeome)} end
+                           )
+
+  # Renders the Seed column. Three cases:
+  #   - seed_origin is nil → "—" (Lenie pre-feature or untracked).
+  #   - the species' hash matches the pristine hash of `seed_origin` → bare
+  #     seed name (Lenie hasn't drifted from its seed).
+  #   - otherwise → "evolved from <seed_origin>" (mutation / copy-error
+  #     descendant).
+  defp format_seed_origin(%{seed_origin: nil}), do: "—"
+
+  defp format_seed_origin(%{seed_origin: origin, hash: hash}) do
+    case Map.get(@builtin_pristine_hashes, origin) do
+      ^hash -> origin
+      _ -> "evolved from " <> origin
+    end
+  end
+
+  defp format_seed_origin(_), do: "—"
 
   # Compact energy display for the species table: integer when whole,
   # one decimal otherwise. Avoids `0.0` clutter for codeomes with no

@@ -332,7 +332,8 @@ defmodule LeniesWeb.ControlsPanelComponent do
         for _ <- 1..count do
           Lenies.World.spawn_lenie(codeome,
             energy: seed.energy_default,
-            dir: Enum.random(dirs)
+            dir: Enum.random(dirs),
+            seed_origin: "★ " <> seed.name
           )
         end
 
@@ -348,12 +349,16 @@ defmodule LeniesWeb.ControlsPanelComponent do
     count = String.to_integer(count_str) |> max(1) |> min(50)
 
     case Lenies.Seeds.get(seed_id) do
-      %{codeome: codeome, default_options: opts} ->
+      %{codeome: codeome, default_options: opts, name: seed_name} ->
         energy = Map.get(opts, :energy, 500.0)
         dirs = [:n, :s, :e, :w]
 
         for _ <- 1..count do
-          Lenies.World.spawn_lenie(codeome, energy: energy, dir: Enum.random(dirs))
+          Lenies.World.spawn_lenie(codeome,
+            energy: energy,
+            dir: Enum.random(dirs),
+            seed_origin: seed_name
+          )
         end
 
       nil ->

@@ -160,6 +160,7 @@ defmodule Lenies.World do
         energy = Keyword.get(opts, :energy, 500.0)
         dir = Keyword.get(opts, :dir, :n)
         lineage = Keyword.get(opts, :lineage, {nil, 0})
+        seed_origin = Keyword.get(opts, :seed_origin)
 
         child_opts = [
           id: lenie_id,
@@ -167,7 +168,8 @@ defmodule Lenies.World do
           energy: energy * 1.0,
           pos: pos,
           dir: dir,
-          lineage: lineage
+          lineage: lineage,
+          seed_origin: seed_origin
         ]
 
         {:ok, _pid} =
@@ -553,6 +555,9 @@ defmodule Lenies.World do
     child_energy = trunc(parent_energy / 2)
     child_codeome = Codeome.from_list(Tuple.to_list(slot.opcodes))
     parent_generation = parent_record |> Map.get(:lineage, {nil, 0}) |> elem(1)
+    # Inherit the seed_origin from the parent so descendants of a known
+    # seed keep their lineage label across replications + mutations.
+    parent_seed_origin = Map.get(parent_record, :seed_origin)
 
     child_opts = [
       id: child_id,
@@ -560,7 +565,8 @@ defmodule Lenies.World do
       energy: child_energy * 1.0,
       pos: slot.target_cell,
       dir: parent_record.dir,
-      lineage: {parent_id, parent_generation + 1}
+      lineage: {parent_id, parent_generation + 1},
+      seed_origin: parent_seed_origin
     ]
 
     {:ok, _child_pid} =

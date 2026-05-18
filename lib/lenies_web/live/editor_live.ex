@@ -142,9 +142,14 @@ defmodule LeniesWeb.EditorLive do
       {:ok, _} ->
         codeome = LeniesWeb.CodeomeBuffer.to_codeome(socket.assigns.buffer)
         dirs = [:n, :s, :e, :w]
+        seed_origin = spawn_seed_origin(socket.assigns)
 
         Enum.each(1..count, fn _ ->
-          Lenies.World.spawn_lenie(codeome, energy: energy * 1.0, dir: Enum.random(dirs))
+          Lenies.World.spawn_lenie(codeome,
+            energy: energy * 1.0,
+            dir: Enum.random(dirs),
+            seed_origin: seed_origin
+          )
         end)
 
         {:noreply, push_navigate(socket, to: ~p"/")}
@@ -492,6 +497,22 @@ defmodule LeniesWeb.EditorLive do
 
   defp maybe_assign(socket, _key, nil), do: socket
   defp maybe_assign(socket, key, value), do: assign(socket, key, value)
+
+  # New-seed mode (blank canvas) has no parent → nil. Edit mode opens
+  # an existing species, so the spawned Lenies inherit that species'
+  # seed_origin (looked up via the first live representative). Result:
+  # the chain "Minimal Replicator → mutated species X → user edits X
+  # → spawns Y" keeps Y labelled as descending from Minimal Replicator.
+  defp spawn_seed_origin(%{mode: :new_seed}), do: nil
+
+  defp spawn_seed_origin(%{mode: :edit, selected_hash: hash}) when is_binary(hash) do
+    case Lenies.Species.for_hash(hash) do
+      [{_id, snap} | _] -> Map.get(snap, :seed_origin)
+      _ -> nil
+    end
+  end
+
+  defp spawn_seed_origin(_), do: nil
 
   defp apply_buffer_change(socket, new_buffer) do
     original = socket.assigns[:original_buffer] || socket.assigns.buffer

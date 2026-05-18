@@ -76,4 +76,28 @@ defmodule Lenies.SpeciesTest do
     top3 = Species.top_n(3)
     assert length(top3) == 3
   end
+
+  test "aggregate/0 surfaces seed_origin from the sample snapshot" do
+    :ets.insert(
+      :lenies,
+      {"a", %{id: "a", codeome_hash: "h1", lineage: {nil, 0}, seed_origin: "Minimal Replicator"}}
+    )
+
+    :ets.insert(
+      :lenies,
+      {"b", %{id: "b", codeome_hash: "h1", lineage: {"a", 1}, seed_origin: "Minimal Replicator"}}
+    )
+
+    :ets.insert(:lenies, {"c", %{id: "c", codeome_hash: "h2", lineage: {nil, 0}}})
+
+    species = Species.aggregate()
+    h1 = Enum.find(species, &(&1.hash == "h1"))
+    h2 = Enum.find(species, &(&1.hash == "h2"))
+
+    assert h1.seed_origin == "Minimal Replicator"
+    # `h2` was inserted without a :seed_origin key — aggregate must surface nil
+    # rather than crashing (Lenies snapshotted before this feature, or
+    # spawned via Lenie.start_link directly in a test).
+    assert h2.seed_origin == nil
+  end
 end

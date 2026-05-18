@@ -25,7 +25,8 @@ defmodule Lenies.Species do
           sample_lenie_id: binary(),
           size: non_neg_integer(),
           cost: float(),
-          max_gain: float()
+          max_gain: float(),
+          seed_origin: nil | binary()
         }
 
   @doc """
@@ -57,8 +58,13 @@ defmodule Lenies.Species do
       avg_gen =
         if Enum.empty?(gens), do: 0.0, else: Enum.sum(gens) / length(gens) * 1.0
 
-      {sample_id, _} = hd(entries)
+      {sample_id, sample_snap} = hd(entries)
       {size, cost, max_gain} = codeome_metrics(hash, eat_amount, attack_damage)
+      # seed_origin is inherited identically by every Lenie of a species
+      # (it never changes after spawn / divide). Taking the sample is
+      # enough — any divergence within a species would imply an out-of-
+      # band injection, which the rest of the simulation doesn't do.
+      seed_origin = Map.get(sample_snap, :seed_origin)
 
       %{
         hash: hash,
@@ -67,7 +73,8 @@ defmodule Lenies.Species do
         sample_lenie_id: sample_id,
         size: size,
         cost: cost,
-        max_gain: max_gain
+        max_gain: max_gain,
+        seed_origin: seed_origin
       }
     end)
     |> Enum.sort_by(& &1.population, :desc)
