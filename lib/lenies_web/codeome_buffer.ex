@@ -78,4 +78,98 @@ defmodule LeniesWeb.CodeomeBuffer do
 
     if errs == [], do: {:ok, %{len: len, non_nops: non_nops}}, else: {:error, errs}
   end
+
+  @doc """
+  Static energy budget for **one linear pass** through the codeome (each
+  opcode executed exactly once, no branches taken). Drives the editor's
+  energy mini-panel — gives a quick feel for whether a codeome can pay
+  for itself before you commit to spawning it.
+
+  * `cost` — sum of `Lenies.Codeome.Costs.cost/2` over the buffer.
+    Template-jumps (`:jmp_t`, `:jz_t`, `:jnz_t`, `:call_t`) read the
+    actual run of `:nop_0`/`:nop_1` immediately after the opcode (capped
+    at the interpreter's `template_max_len`, default 8). `:allocate` is
+    priced with `size = length(buffer)` (the typical replicator pattern,
+    where a Lenie allocates a copy of itself). `:ret` is always priced
+    with `t_len = 0` since it doesn't consume a template at runtime.
+  * `max_gain` — `n_eat × eat_amount + n_attack × attack_damage`,
+    the strict upper bound on energy yielded by a pass (assumes every
+    EAT and ATTACK succeeds — real hit rates are well below 1).
+  * `net = max_gain - cost` is signed; the UI colours it.
+
+  `eat_amount` and `attack_damage` are passed in so the function stays
+  pure and the caller controls when to re-read tuning values.
+
+  Note: this is NOT the multi-tick replication cycle cost from
+  `docs/manual/08-energy-economy.md` — that requires understanding the
+  buffer's loops. A single linear pass is a strict lower bound on
+  per-cycle cost and an over-estimate of per-cycle gain.
+  """
+  @spec economics(buffer(), number(), number()) :: %{
+          cost: float(),
+          max_gain: float(),
+          net: float(),
+          n_eat: non_neg_integer(),
+          n_attack: non_neg_integer(),
+          eat_amount: number(),
+          attack_damage: number(),
+          alloc_size: non_neg_integer()
+        }
+  def economics(buffer, eat_amount, attack_damage) do
+    cost = pass_cost(buffer)
+    n_eat = Enum.count(buffer, &(&1 == :eat))
+    n_attack = Enum.count(buffer, &(&1 == :attack))
+    max_gain = (n_eat * eat_amount + n_attack * attack_damage) * 1.0
+
+    %{
+      cost: cost,
+      max_gain: max_gain,
+      net: max_gain - cost,
+      n_eat: n_eat,
+      n_attack: n_attack,
+      eat_amount: eat_amount,
+      attack_damage: attack_damage,
+      alloc_size: length(buffer)
+    }
+  end
+
+  defp pass_cost(buffer) do
+    template_max_len = Application.get_env(:lenies, :template_max_len, 8)
+    alloc_size = length(buffer)
+    buffer_tuple = List.to_tuple(buffer)
+
+    0..(tuple_size(buffer_tuple) - 1)//1
+    |> Enum.reduce(0.0, fn idx, acc ->
+      op = elem(buffer_tuple, idx)
+
+      cost =
+        cond do
+          op in [:jmp_t, :jz_t, :jnz_t, :call_t] ->
+            Lenies.Codeome.Costs.cost(op, template_len_at(buffer_tuple, idx + 1, template_max_len))
+
+          op == :allocate ->
+            Lenies.Codeome.Costs.cost(:allocate, alloc_size)
+
+          true ->
+            Lenies.Codeome.Costs.cost(op, 0)
+        end
+
+      acc + cost
+    end)
+    |> Float.round(2)
+  end
+
+  defp template_len_at(buffer_tuple, start, max_len) do
+    size = tuple_size(buffer_tuple)
+    take_while_nops(buffer_tuple, start, min(start + max_len, size), 0)
+  end
+
+  defp take_while_nops(_buf, at, stop, count) when at >= stop, do: count
+
+  defp take_while_nops(buf, at, stop, count) do
+    case elem(buf, at) do
+      op when op in [:nop_0, :nop_1] -> take_while_nops(buf, at + 1, stop, count + 1)
+      _ -> count
+    end
+  end
 end

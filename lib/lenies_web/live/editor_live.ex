@@ -29,6 +29,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:original_buffer, buffer)
       |> assign(:dirty, false)
       |> assign(:validation, LeniesWeb.CodeomeBuffer.validate(buffer))
+      |> assign(:economics, current_economics(buffer))
       |> assign(:show_spawn_form, false)
       |> assign(:show_save_form, false)
       |> assign(:current_chapter, @default_chapter)
@@ -426,6 +427,42 @@ defmodule LeniesWeb.EditorLive do
         </section>
 
         <section class="codeome-listing-pane min-h-0">
+          <%!-- Static energy budget for one linear pass through the buffer
+                — cost is exact, max gain assumes every EAT/ATTACK hits.
+                Reflects current eat_amount / attack_damage tuning at the
+                time the buffer last changed. --%>
+          <div class="codeome-energy-panel" id="codeome-energy-panel">
+            <div class="codeome-energy-panel-head">
+              <span class="codeome-energy-panel-title">Energy / pass</span>
+              <span class="codeome-energy-panel-note">
+                {@economics.n_eat} eat × {fmt_num(@economics.eat_amount)}
+                + {@economics.n_attack} attack × {fmt_num(@economics.attack_damage)}
+                · allocate sized {@economics.alloc_size}
+              </span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-[11px]">
+              <div class="codeome-energy-stat codeome-energy-stat-cost">
+                <div class="codeome-energy-stat-label">cost</div>
+                <div class="codeome-energy-stat-value">{fmt_num(@economics.cost)}</div>
+              </div>
+              <div class="codeome-energy-stat codeome-energy-stat-gain">
+                <div class="codeome-energy-stat-label">max gain</div>
+                <div class="codeome-energy-stat-value">{fmt_num(@economics.max_gain)}</div>
+              </div>
+              <div class={[
+                "codeome-energy-stat",
+                if(@economics.net >= 0,
+                  do: "codeome-energy-stat-gain",
+                  else: "codeome-energy-stat-cost"
+                )
+              ]}>
+                <div class="codeome-energy-stat-label">net</div>
+                <div class="codeome-energy-stat-value">
+                  {if @economics.net >= 0, do: "+", else: ""}{fmt_num(@economics.net)}
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="codeome-listing-pane-title">Codeome — {length(@buffer)} ops</div>
           <div
             class="codeome-blocks"
@@ -480,6 +517,18 @@ defmodule LeniesWeb.EditorLive do
     |> assign(:buffer, new_buffer)
     |> assign(:dirty, dirty)
     |> assign(:validation, LeniesWeb.CodeomeBuffer.validate(new_buffer))
+    |> assign(:economics, current_economics(new_buffer))
+  end
+
+  # Reads `eat_amount` / `attack_damage` from Application env at the
+  # moment the buffer changes so the editor reflects whatever the user
+  # has set on the dashboard's Tuning Live sliders. No PubSub
+  # subscription on purpose: tuning rarely shifts mid-edit, and the
+  # numbers refresh on the next buffer change anyway.
+  defp current_economics(buffer) do
+    eat_amount = Application.get_env(:lenies, :eat_amount, 20)
+    attack_damage = Application.get_env(:lenies, :attack_damage, 10)
+    LeniesWeb.CodeomeBuffer.economics(buffer, eat_amount, attack_damage)
   end
 
   defp parse_clamped(str, min, max, default) when is_binary(str) do
@@ -503,6 +552,20 @@ defmodule LeniesWeb.EditorLive do
     |> Lenies.Codeome.from_list()
     |> Lenies.Codeome.hash()
     |> Lenies.SpeciesColor.hex()
+  end
+
+  # Compact numeric display for the energy panel: integers as-is,
+  # floats rounded to 1 decimal (drops the `.0` when whole).
+  defp fmt_num(n) when is_integer(n), do: Integer.to_string(n)
+
+  defp fmt_num(n) when is_float(n) do
+    rounded = Float.round(n, 1)
+
+    if rounded == trunc(rounded) do
+      Integer.to_string(trunc(rounded))
+    else
+      :erlang.float_to_binary(rounded, decimals: 1)
+    end
   end
 
   defp format_validation_error({:too_short, opts}),

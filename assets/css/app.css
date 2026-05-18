@@ -738,6 +738,73 @@
   border: 1px dashed rgba(34, 211, 238, 0.25);
 }
 
+/* Energy mini-panel above the codeome listing — three stat boxes
+   (cost / max gain / net) plus a tiny breakdown line. Compact so it
+   never steals vertical space from the codeome listing. */
+.lenies-dashboard.codeome-editor-page .codeome-energy-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  background: rgba(2, 6, 23, 0.4);
+  flex-shrink: 0;
+}
+
+.lenies-dashboard.codeome-editor-page .codeome-energy-panel-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.lenies-dashboard.codeome-editor-page .codeome-energy-panel-title {
+  color: rgb(165, 243, 252);
+  letter-spacing: 0.05em;
+}
+
+.lenies-dashboard.codeome-editor-page .codeome-energy-panel-note {
+  opacity: 0.6;
+  flex: 1;
+  text-align: right;
+}
+
+.lenies-dashboard.codeome-editor-page .codeome-energy-stat {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 6px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.lenies-dashboard.codeome-editor-page .codeome-energy-stat-cost {
+  border-color: rgba(244, 63, 94, 0.35);
+}
+
+.lenies-dashboard.codeome-editor-page .codeome-energy-stat-gain {
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.lenies-dashboard.codeome-editor-page .codeome-energy-stat-label {
+  font-size: 10px;
+  opacity: 0.65;
+}
+
+.lenies-dashboard.codeome-editor-page .codeome-energy-stat-value {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.lenies-dashboard.codeome-editor-page .codeome-energy-stat-cost .codeome-energy-stat-value {
+  color: rgb(253, 164, 175);
+}
+
+.lenies-dashboard.codeome-editor-page .codeome-energy-stat-gain .codeome-energy-stat-value {
+  color: rgb(110, 231, 183);
+}
+
 .lenies-dashboard .codeome-editor-page-header {
   display: flex;
   align-items: center;
