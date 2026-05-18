@@ -110,5 +110,35 @@ defmodule Lenies.SpeciesColorTest do
       assert SpeciesColor.override("hash-a") == "#111111"
       assert SpeciesColor.override("hash-b") == "#222222"
     end
+
+    test "hue_byte/1 follows the override's hue (so the canvas matches)" do
+      hash = "canvas-override-hash"
+      no_override_byte = SpeciesColor.hue_byte(hash)
+
+      # Pure red sits at hue 0°: byte should be 1 (the lowest of 1..255).
+      SpeciesColor.set_override(hash, "#FF0000")
+      red_byte = SpeciesColor.hue_byte(hash)
+      assert red_byte == 1
+
+      # Pure green sits at hue 120°: byte ≈ round(120/360 × 255) + 1 = 86.
+      SpeciesColor.set_override(hash, "#00FF00")
+      green_byte = SpeciesColor.hue_byte(hash)
+      assert green_byte == 86
+
+      # And the byte is different from the hash-derived default in at
+      # least one of the two cases (sanity check for non-trivial override).
+      assert red_byte != no_override_byte or green_byte != no_override_byte
+    end
+
+    test "hue_byte/1 falls back to hash-derived for greyscale overrides" do
+      hash = "grey-override-hash"
+      default = SpeciesColor.hue_byte(hash)
+
+      # Pure grey has no defined hue → override is ignored, byte falls
+      # back to the hash-derived default so the canvas still paints
+      # something instead of going to 0.
+      SpeciesColor.set_override(hash, "#808080")
+      assert SpeciesColor.hue_byte(hash) == default
+    end
   end
 end

@@ -16,14 +16,24 @@ defmodule Lenies.SpeciesColor do
   @lightness 0.55
 
   @doc """
-  Hue byte 1..255 for a species hash.
+  Hue byte 1..255 for a species hash. The value 0 is reserved on the
+  wire to mean "no species on this cell", so this function never
+  returns 0.
 
-  The value 0 is reserved on the wire to mean "no species on this cell",
-  so this function never returns 0.
+  Honors color overrides: if the user has registered a hex override for
+  this species via `set_override/2`, the returned byte is derived from
+  the override's hue (so the canvas paints that species in roughly the
+  picked colour). The canvas's HSL formula uses fixed S=0.70 / L=0.55,
+  so the override's saturation and lightness are normalised — only the
+  hue survives the 1-byte wire format. Without an override, the byte is
+  a stable hash → byte mapping via `:erlang.phash2/2`.
   """
   @spec hue_byte(binary()) :: 1..255
   def hue_byte(hash) when is_binary(hash) do
-    :erlang.phash2(hash, 255) + 1
+    case override(hash) do
+      nil -> :erlang.phash2(hash, 255) + 1
+      hex -> hex_to_hue_byte(hex) || :erlang.phash2(hash, 255) + 1
+    end
   end
 
   @doc """
@@ -85,6 +95,59 @@ defmodule Lenies.SpeciesColor do
     {r, g, b} = hsl_to_rgb(hue_deg, @saturation, @lightness)
     "#" <> byte_hex(r) <> byte_hex(g) <> byte_hex(b)
   end
+
+  # Map a user-picked "#RRGGBB" to the closest hue byte 1..255 that the
+  # canvas's byte → HSL formula can produce. Returns nil for malformed
+  # input or pure greyscale (where hue is undefined). Saturation and
+  # lightness of the picked colour are lost; only the hue survives.
+  defp hex_to_hue_byte("#" <> rgb) when byte_size(rgb) == 6 do
+    case Integer.parse(rgb, 16) do
+      {n, ""} ->
+        r = Bitwise.bsr(n, 16) |> Bitwise.band(0xFF)
+        g = Bitwise.bsr(n, 8) |> Bitwise.band(0xFF)
+        b = Bitwise.band(n, 0xFF)
+
+        case rgb_to_hue_deg(r, g, b) do
+          nil ->
+            nil
+
+          hue_deg ->
+            byte = round(hue_deg / 360 * 255) + 1
+            byte |> min(255) |> max(1)
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp hex_to_hue_byte(_), do: nil
+
+  defp rgb_to_hue_deg(r, g, b) do
+    rf = r / 255
+    gf = g / 255
+    bf = b / 255
+    cmax = max(rf, max(gf, bf))
+    cmin = min(rf, min(gf, bf))
+    delta = cmax - cmin
+
+    cond do
+      delta == 0 ->
+        nil
+
+      cmax == rf ->
+        :math.fmod((gf - bf) / delta, 6) * 60 |> wrap360()
+
+      cmax == gf ->
+        ((bf - rf) / delta + 2) * 60
+
+      true ->
+        ((rf - gf) / delta + 4) * 60
+    end
+  end
+
+  defp wrap360(deg) when deg < 0, do: deg + 360
+  defp wrap360(deg), do: deg
 
   defp hsl_to_rgb(h, s, l) do
     c = (1 - abs(2 * l - 1)) * s
