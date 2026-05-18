@@ -65,7 +65,11 @@ defmodule LeniesWeb.ControlsPanelComponent do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="grid grid-cols-[minmax(260px,320px)_1fr] gap-3 min-h-0">
+    <%!-- Controls is sized to comfortably fit its three secondary buttons
+          on one line (~380-420px); Tuning is capped at ~1100px so the
+          sliders don't sprawl across ultrawide displays. Any leftover
+          space stays on the right. --%>
+    <div class="grid grid-cols-[minmax(380px,420px)_minmax(0,1100px)] gap-3 min-h-0">
       <div class="panel p-3 flex flex-col gap-3">
         <h2 class="text-xs">▮ Controls</h2>
 
@@ -131,7 +135,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
           <.link
             id="open-codeome-editor"
             navigate={~p"/editor/new"}
-            class="px-2 py-0.5 border border-cyan-500/60 text-cyan-200 hover:bg-cyan-900/40"
+            class="px-2 py-0.5 border border-cyan-500/60 text-cyan-200 hover:bg-cyan-900/40 whitespace-nowrap"
           >
             + New Seed
           </.link>
@@ -141,7 +145,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
             type="button"
             phx-click="open_world_detail"
             phx-target={@myself}
-            class="px-2 py-0.5 border border-cyan-500/60 text-cyan-200 hover:bg-cyan-900/40"
+            class="px-2 py-0.5 border border-cyan-500/60 text-cyan-200 hover:bg-cyan-900/40 whitespace-nowrap"
             title="Open the zoomed world detail view"
           >
             ⛶ World detail
@@ -151,7 +155,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
             type="button"
             phx-click="toggle_custom_manage"
             phx-target={@myself}
-            class="px-2 py-0.5 border border-cyan-500/30 hover:bg-cyan-500/10"
+            class="px-2 py-0.5 border border-cyan-500/30 hover:bg-cyan-500/10 whitespace-nowrap"
           >
             Manage
           </button>
