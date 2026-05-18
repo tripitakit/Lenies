@@ -70,7 +70,11 @@ defmodule LeniesWeb.EditorLiveTest do
       Lenies.Lenie.start_link(
         id: "TEST-EDITOR-L1",
         codeome: codeome,
-        energy: 100.0,
+        # Generous energy so the Lenie outlives the editor mount even when
+        # earlier tests leave the BEAM scheduler under load — the editor
+        # just needs the codeome via one GenServer.call, but at energy 100
+        # MR can starve before that call lands.
+        energy: 50_000.0,
         pos: {0, 0},
         dir: :n,
         lineage: {nil, 0}
