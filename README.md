@@ -32,18 +32,22 @@ they thrive, get eaten, or quietly starve.
 
 ## What Lenies looks like
 
-Open the dashboard and you'll see a dark sci-fi console split into three
-columns. On the left, a square canvas pulses with coloured pixels — each one
-is a live Lenie, coloured by its species. In the middle, a sparkline tracks
-the population of each top species over the last few minutes, with a table
-underneath listing the most populous ones by hash. On the right, a control
-panel lets you pause the tick, sterilise the world, spawn pre-built seeds,
-or open the codeome editor to design your own.
+Open the dashboard and you'll see a dark sci-fi console with the world
+map filling the full body height on the left — a square canvas pulsing
+with coloured pixels, each one a live Lenie coloured by its species.
+The right column stacks two rows: at the top a sparkline of recent
+population history with a table beneath listing **every** active
+species sorted by population; at the bottom a control panel for
+pausing, sterilising, spawning seeds, plus a live tuning section for
+every knob in the simulation.
 
-Click any species in the table and a fourth column slides in: a disassembly
-of that species' codeome, opcode by opcode, with the population and average
-generation. From there you can spawn copies, edit a copy, or open the world
-detail modal for a full-screen zoom with per-species highlighting.
+You can scroll-zoom and click-drag-pan on the map; double-click any
+Lenie cell and the codeome editor opens with that species pre-loaded.
+Hovering a Lenie cell switches the cursor to a hand pointer as a hint
+that the cell is editable. Clicking a species row in the table opens
+the inspector to its right — a disassembly of the codeome with
+population and average generation — and dims every other species on
+the map so the selected one stands out.
 
 ---
 
@@ -93,48 +97,90 @@ ecosystem you can poke at.
 
 ## Touring the dashboard
 
-The dashboard's main controls live in the right-hand panel:
+**On the world map (left, full-height):**
 
-- **Pause / Resume** stops and restarts the environmental tick. The world
-  freezes; the canvas stops updating; useful for inspecting state at rest.
-- **Sterilize** kills every Lenie and resets the world to an empty grid.
-  A second confirm-button appears to prevent accidents.
-- **Spawn** picks a seed from the dropdown (built-in or user-saved) and
-  drops one or more copies into random free cells with a chosen starting
+- **Scroll** zooms in and out, anchored on the cursor so the cell under
+  the mouse stays put across the zoom.
+- **Click and drag** pans the view (only meaningful once zoomed past 1×;
+  at 1× the whole grid is on screen).
+- **Single click** on a cell recenters the view there.
+- **Double click** on a cell with a Lenie opens the codeome editor for
+  that species (cursor turns into a pointer over occupied cells to hint
+  at this). Empty cells are a no-op.
+- Three checkboxes under the map toggle the **Lenies / Resources /
+  Carcasses** layers independently.
+
+**On the right column, top row:**
+
+- The sparkline tracks the population of the top species over the last
+  few minutes; one coloured line per species in the current top 10.
+- The table beneath lists **every** active species (full count, scrolls
+  vertically when there are many). Click a row to open the species
+  inspector and highlight that species on the map — every other species
+  is dimmed to 30 % alpha.
+
+**On the right column, bottom row:**
+
+- **Pause / Resume** stops and restarts the environmental tick. The
+  world freezes; the canvas stops updating.
+- **Sterilize** kills every Lenie and resets the world to an empty
+  grid. A confirm button appears to prevent accidents.
+- **+ New Seed** opens the codeome editor with an empty buffer.
+- **Manage** toggles the list of user-saved seeds so you can delete
+  them.
+- **Spawn** picks a seed from the dropdown (built-in or user-saved)
+  and drops N copies into random free cells with a chosen starting
   energy.
 - **Snapshot** saves and reloads the entire world state from disk.
-- **+ New Seed** opens the codeome editor with an empty buffer (see below).
-- **⛶ World detail** opens a full-screen modal with the world zoomed to
-  viewport height and a scrollable list of every active species; clicking
-  a species in that list highlights only its cells on the canvas.
+- Under that, the **Tuning Live** section exposes runtime sliders for
+  every world parameter — radiation, eat amount, copy-error rates,
+  attack damage, the BG-mutation rate per 1000 ticks, and more.
+  Changes apply immediately to all live Lenies.
 
-Clicking a species row in the central table opens the inspector on the
-right side. It shows the species' colour swatch, its codeome disassembled
-into coloured opcode blocks (one per category), and Edit / Spawn buttons.
+The species inspector (slides in when you click a row) shows the
+species' colour swatch, the codeome disassembled into coloured opcode
+blocks (one per category), and Edit / Spawn buttons. Clicking the row
+again closes it; selecting a different row swaps the highlight.
 
 ---
 
 ## Editing and creating seeds
 
-The codeome editor is a full-screen overlay with two panes. On the left, a
-palette of all 36 opcodes grouped by category. On the right, the current
-codeome rendered as a vertical stack of coloured blocks — one block per
-opcode, in execution order. You drag a chip from the palette into the
-listing to insert; you drag the `≡` handle on a block to reorder; you
-hover a block to reveal a delete button.
+The codeome editor is a full-screen page with three panes. On the far
+left, a collapsible **Programming Manual** for in-editor reference. In
+the middle, a palette of all 36 opcodes grouped by category (drag a
+chip onto the listing to insert; double-click a chip to append at end;
+or paste a space/comma-separated text list into the input above and
+the editor tokenises it). On the right, the current codeome rendered
+as a vertical stack of coloured blocks — one block per opcode, in
+execution order. Drag the `≡` handle to reorder, click the `⨯` to
+delete.
+
+Above the listing, an **Energy / pass** mini-panel recomputes on every
+opcode add / remove / reorder. It shows:
+
+- `cost` — exact sum of per-opcode static costs for one linear pass
+  through the buffer (template-jump lengths read from the run of nops
+  following each jump; `:allocate` priced at the current buffer length
+  as a typical-replicator proxy).
+- `max gain` — strict upper bound assuming every `:eat` and `:attack`
+  hits, using the live `eat_amount` and `attack_damage` tuning values.
+- `net = max_gain - cost` colour-coded green / red.
 
 A live validation banner tells you whether the current buffer is
-acceptable: too short, too long, or with too few non-template opcodes will
-each block you from spawning or saving. When the buffer is valid you can
-**Spawn** directly into the running world or **Save** as a named user
-seed (with a colour and a default starting energy). Saved seeds persist
-across restarts and appear with a star prefix in the spawn dropdown.
+acceptable: too short, too long, or with too few non-template opcodes
+will each block you from spawning or saving. When the buffer is valid
+you can **Spawn** directly into the running world or **Save** as a
+named user seed (with a colour and a default starting energy). Saved
+seeds persist across restarts and appear with a star prefix in the
+spawn dropdown.
 
-The editor opens both from the **+ New Seed** button (empty buffer) and
-from the **Edit** button on a species inspector (pre-loaded with that
-species' current codeome). Editing a species edits a *copy* — the running
-Lenies of that species are untouched until you spawn your edited version
-back into the world.
+The editor opens both from the **+ New Seed** button (empty buffer),
+from the **Edit** button on the species inspector (pre-loaded with that
+species' current codeome), and from a **double click on a Lenie cell**
+on the dashboard map. Editing a species edits a *copy* — the running
+Lenies of that species are untouched until you spawn your edited
+version back into the world.
 
 For everything about *what* to put in those blocks — the VM, the opcodes,
 template addressing, replication, the energy budget, and a worked tour
