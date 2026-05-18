@@ -16,11 +16,14 @@ defmodule Lenies.SeedsTest do
     end
   end
 
-  test "all/0 includes minimal_replicator, carnivore, random" do
+  test "all/0 includes all five specialised seeds" do
     ids = Seeds.all() |> Enum.map(& &1.id)
     assert :minimal_replicator in ids
     assert :carnivore in ids
-    assert :random in ids
+    assert :defender in ids
+    assert :hunter in ids
+    assert :forager in ids
+    assert length(ids) == 5
   end
 
   test "get/1 returns a seed by id" do
@@ -31,17 +34,5 @@ defmodule Lenies.SeedsTest do
 
   test "get/1 returns nil for unknown id" do
     assert Seeds.get(:nonexistent) == nil
-  end
-
-  test "build_random_codeome/0 returns a Codeome of reasonable length" do
-    c = Seeds.build_random_codeome()
-    n = Codeome.size(c)
-    assert n >= 20 and n <= 200
-  end
-
-  test "build_random_codeome/0 returns different Codeomes on successive calls" do
-    c1 = Seeds.build_random_codeome()
-    c2 = Seeds.build_random_codeome()
-    refute Codeome.to_list(c1) == Codeome.to_list(c2)
   end
 end

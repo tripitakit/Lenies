@@ -5,18 +5,13 @@ defmodule Lenies.Seeds do
   Each seed has:
   - `id`: atom identifier (used in dropdown values)
   - `name`: human-readable label
-  - `codeome`: a `Lenies.Codeome.t()` (or a 0-arity function for lazy/random ones)
+  - `codeome`: a `Lenies.Codeome.t()`
   - `default_options`: keyword/map with initial energy, etc.
 
   Vedi spec §7.1 (Controllo / Seed) e §5.5 (seed predefiniti).
   """
 
-  alias Lenies.Codeome
-  alias Lenies.Codeome.Opcodes
-  alias Lenies.Codeomes.{Carnivore, MinimalReplicator}
-
-  @random_min_len 30
-  @random_max_len 120
+  alias Lenies.Codeomes.{Carnivore, Defender, Forager, Hunter, MinimalReplicator}
 
   @doc "All available seeds as a list of records."
   def all do
@@ -25,19 +20,31 @@ defmodule Lenies.Seeds do
         id: :minimal_replicator,
         name: "Minimal Replicator",
         codeome: MinimalReplicator.codeome(),
-        default_options: %{energy: 10000.0}
+        default_options: %{energy: 10_000.0}
       },
       %{
         id: :carnivore,
         name: "Carnivore",
         codeome: Carnivore.codeome(),
-        default_options: %{energy: 10000.0}
+        default_options: %{energy: 10_000.0}
       },
       %{
-        id: :random,
-        name: "Random (probabilmente sterile)",
-        codeome: build_random_codeome(),
-        default_options: %{energy: 200.0}
+        id: :defender,
+        name: "Defender",
+        codeome: Defender.codeome(),
+        default_options: %{energy: 10_000.0}
+      },
+      %{
+        id: :hunter,
+        name: "Hunter",
+        codeome: Hunter.codeome(),
+        default_options: %{energy: 10_000.0}
+      },
+      %{
+        id: :forager,
+        name: "Forager",
+        codeome: Forager.codeome(),
+        default_options: %{energy: 10_000.0}
       }
     ]
   end
@@ -45,17 +52,5 @@ defmodule Lenies.Seeds do
   @doc "Look up a seed by id. Returns nil if not found."
   def get(id) when is_atom(id) do
     Enum.find(all(), &(&1.id == id))
-  end
-
-  @doc """
-  Build a random Codeome of length between @random_min_len and @random_max_len,
-  with opcodes uniformly sampled from the whitelist.
-  """
-  def build_random_codeome do
-    len = :rand.uniform(@random_max_len - @random_min_len + 1) + @random_min_len - 1
-    whitelist = Opcodes.all()
-
-    opcodes = for _ <- 1..len, do: Enum.random(whitelist)
-    Codeome.from_list(opcodes)
   end
 end
