@@ -47,6 +47,22 @@ defmodule Lenies.Species do
     attack_damage = Application.get_env(:lenies, :attack_damage, 10)
 
     :ets.tab2list(:lenies)
+    # Filter out stale snapshots whose Lenie process is already dead.
+    # `World.lenie_died` is a CAST so there's a window where the
+    # process is gone but the :lenies record isn't deleted yet —
+    # without this filter the species table reports pop=N for a
+    # species nobody's actually running, and the inspector then
+    # truthfully reports "No live Lenie" when clicked. The snapshot's
+    # `pid` field is written on every snapshot so it's authoritative.
+    |> Enum.filter(fn {_id, snap} ->
+      case Map.get(snap, :pid) do
+        pid when is_pid(pid) -> Process.alive?(pid)
+        # Legacy / test snapshots without a `pid` key are kept (they
+        # come from direct ETS inserts in tests; the live runtime
+        # always writes pid via `maybe_write_snapshot`).
+        _ -> true
+      end
+    end)
     |> Enum.group_by(fn {_id, snap} -> snap.codeome_hash end)
     |> Enum.map(fn {hash, entries} ->
       gens =
