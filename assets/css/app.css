@@ -280,16 +280,20 @@
 
 .lenies-dashboard .dashboard-map-frame {
   position: relative;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   align-self: stretch;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   border: 1px solid var(--neon-cyan);
   box-shadow:
     0 0 0 1px rgba(34, 211, 238, 0.15) inset,
     0 0 24px rgba(34, 211, 238, 0.18);
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  /* Establish a size container so the canvas inside can size itself
+     from the FRAME's actual width/height (cqi/cqh) instead of guessing
+     viewport math. Eliminates overflow when the pane's vertical chrome
+     differs from our calc() estimate. */
+  container-type: size;
 }
 
 .lenies-dashboard .dashboard-map-frame::before,
@@ -305,13 +309,18 @@
 .lenies-dashboard .dashboard-map-frame::after  { bottom: -1px; right: -1px; border-left: none; border-top: none; }
 
 .lenies-dashboard .dashboard-map-canvas {
-  /* Explicit viewport-based square so flex/height:100% sizing edge
-     cases can't collapse the canvas (which would make cursorToBuffer
-     divide by zero and break dblclick). Subtracts the pane's vertical
-     chrome (header h2 + layer toggles + hint + paddings/gaps ≈ 9rem)
-     and the horizontal chrome (≈ 3rem of padding/border). */
-  width: min(calc(100vh - 9rem), calc(70vw - 3rem));
-  height: min(calc(100vh - 9rem), calc(70vw - 3rem));
+  /* Sized from the frame's container-query units: cqi = container
+     inline-size (width), cqh = container block-size (height). The
+     square equals whichever side is shorter, so it always fits inside
+     the frame regardless of how wide or tall the surrounding layout
+     gets. Positioned absolutely + translated to centre it inside the
+     frame without relying on flex / margins. */
+  width: min(100cqi, 100cqh);
+  height: min(100cqi, 100cqh);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   image-rendering: pixelated;
   background: #050816;
   display: block;
