@@ -111,6 +111,17 @@ const GridCanvas = {
     // permanently stuck-hidden because we never re-pushed.
     this.lastHoverRequestAt = 0;
 
+    this.flashingCells = new Map(); // key: "x,y" -> { startMs, expireAt }
+
+    this.handleEvent("fx_conjugation", ({ sender, receiver }) => {
+      const now = performance.now();
+      const durationMs = 3000;
+      const expireAt = now + durationMs;
+
+      this.flashingCells.set(`${sender.x},${sender.y}`, { startMs: now, expireAt });
+      this.flashingCells.set(`${receiver.x},${receiver.y}`, { startMs: now, expireAt });
+    });
+
     this.handleEvent("render_frame", (payload) => {
       this.lastPayload = payload;
       this.cachedLenieBytes = this.decodeBase64(payload.lenies);
@@ -613,6 +624,39 @@ const GridCanvas = {
       sx, sy, srcW, srcH,
       0, 0, this.canvas.width, this.canvas.height
     );
+
+    this.drawFlashOverlay(eff, sx, sy);
+  },
+
+  // Draw fading yellow-white rectangles over flashing cells. Called
+  // immediately after the drawImage blit so the overlay sits on top of
+  // the rendered frame. Expired entries are pruned here.
+  drawFlashOverlay(eff, sx, sy) {
+    if (this.flashingCells.size === 0) return;
+    const now = performance.now();
+    const ctx = this.ctx;
+
+    for (const [key, flash] of this.flashingCells) {
+      if (now >= flash.expireAt) {
+        this.flashingCells.delete(key);
+        continue;
+      }
+
+      const [gx, gy] = key.split(",").map(Number);
+
+      // Convert grid cell coords to display-canvas pixel coords.
+      // sx/sy are the top-left corner of the viewport in buffer space;
+      // eff is the display scale (display pixels per buffer pixel).
+      const cellPxX = (gx - sx) * eff;
+      const cellPxY = (gy - sy) * eff;
+      const cellPxW = eff;
+      const cellPxH = eff;
+
+      const progress = (now - flash.startMs) / (flash.expireAt - flash.startMs);
+      const alpha = 1 - progress; // fade from 1 to 0
+      ctx.fillStyle = `rgba(255, 255, 200, ${alpha * 0.8})`;
+      ctx.fillRect(cellPxX, cellPxY, cellPxW, cellPxH);
+    }
   },
 
   destroyed() {

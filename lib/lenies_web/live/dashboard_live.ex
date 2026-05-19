@@ -25,6 +25,7 @@ defmodule LeniesWeb.DashboardLive do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Lenies.PubSub, "world:tick")
       Phoenix.PubSub.subscribe(Lenies.PubSub, "world:control")
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "world:fx")
     end
 
     grid = Lenies.Config.grid_size()
@@ -434,6 +435,14 @@ defmodule LeniesWeb.DashboardLive do
 
   def handle_info({:inspector_dirty, dirty}, socket) do
     {:noreply, assign(socket, :inspector_dirty, dirty)}
+  end
+
+  def handle_info({:conjugation, {sender_x, sender_y}, {receiver_x, receiver_y}}, socket) do
+    {:noreply,
+     push_event(socket, "fx_conjugation", %{
+       sender: %{x: sender_x, y: sender_y},
+       receiver: %{x: receiver_x, y: receiver_y}
+     })}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
