@@ -49,6 +49,12 @@ const CLICK_DRAG_THRESHOLD_PX = 3;
 // slow dblclick doesn't trigger the recenter timer between the two
 // clicks and shift the view out from under the dblclick's cell math.
 const CLICK_RECENTER_DELAY_MS = 500;
+// Re-pull tooltip info from the server every N ms while the cursor
+// sits on the same cell. Recovery path for stale cached-occupancy: a
+// Lenie may have left the cell between render_frame ticks, in which
+// case the server's authoritative reply (`present: false`) flips the
+// tooltip + cursor back to empty within one tick of this interval.
+const HOVER_REFRESH_INTERVAL_MS = 80;
 
 const GridCanvas = {
   mounted() {
@@ -85,6 +91,15 @@ const GridCanvas = {
     this.hoveredCell = null;            // {x, y} | null
     this.lastCursorClient = null;       // {clientX, clientY}
     this.tooltipEl = this.createTooltipEl();
+    // Time-based throttle for hover-info round-trips. Cached-occupancy
+    // (the JS `cachedLenieBytes` snapshot) lags reality by ~100-500ms
+    // because it updates only on render_frame; the server's view is
+    // always fresh. So we re-ask the server every ~80ms while the
+    // cursor sits on what JS thinks is an occupied cell — that way a
+    // Lenie moving off the cell flips the tooltip + cursor back to
+    // empty within one throttle window, instead of leaving the tooltip
+    // permanently stuck-hidden because we never re-pushed.
+    this.lastHoverRequestAt = 0;
 
     this.handleEvent("render_frame", (payload) => {
       this.lastPayload = payload;
@@ -254,10 +269,13 @@ const GridCanvas = {
 
   // Hover-cursor + tooltip dispatcher. Runs on every idle mousemove.
   //   - Cursor → `pointer` over an occupied cell, `grab` otherwise.
-  //   - Tooltip → request fresh info from the server only when the
-  //     hovered cell CHANGES (not on every mousemove pixel), so the
-  //     channel isn't spammed during fast drags. The tooltip element
-  //     follows the cursor each frame regardless.
+  //   - Tooltip → push `request_lenie_hover` to the server on cell
+  //     entry AND periodically while the cursor sits on the same cell
+  //     (every ~80ms). The periodic re-push is the recovery path for
+  //     stale cached-occupancy: when a Lenie moves off the cell the JS
+  //     still thinks it's occupied, but the server's reply will say
+  //     `present: false` and we'll hide the tooltip + correct the
+  //     cached byte so the cursor flips back too.
   updateHoverCursor(e) {
     if (!this.cachedLenieBytes) return;
     this.lastCursorClient = { clientX: e.clientX, clientY: e.clientY };
@@ -280,18 +298,33 @@ const GridCanvas = {
       return;
     }
 
-    // Same cell as last mousemove → just reposition the tooltip if
-    // it's visible. New cell → ask the server for its details.
-    if (
+    const cellChanged =
       !this.hoveredCell ||
       this.hoveredCell.x !== x ||
-      this.hoveredCell.y !== y
-    ) {
+      this.hoveredCell.y !== y;
+
+    if (cellChanged) {
       this.setHoveredCell({ x, y });
-      this.pushEvent("request_lenie_hover", { x, y });
+      this.requestLenieHover(x, y, true);
     } else {
+      // Same cell as last mousemove: reposition the visible tooltip
+      // AND re-ask the server periodically so a Lenie that just left
+      // (cached-occupancy lag) is detected.
       this.positionTooltip();
+      this.requestLenieHover(x, y, false);
     }
+  },
+
+  // Time-throttled tooltip request. `force=true` (new cell) always
+  // pushes; `force=false` (same-cell repeat) pushes only if the last
+  // request was more than HOVER_REFRESH_INTERVAL_MS ago.
+  requestLenieHover(x, y, force) {
+    const now = Date.now();
+    if (!force && now - this.lastHoverRequestAt < HOVER_REFRESH_INTERVAL_MS) {
+      return;
+    }
+    this.lastHoverRequestAt = now;
+    this.pushEvent("request_lenie_hover", { x, y });
   },
 
   // Transition helper: when leaving a Lenie cell (or the canvas), hide
@@ -303,13 +336,38 @@ const GridCanvas = {
   },
 
   onTooltipInfo(info) {
-    if (!info || !info.present) {
-      this.hideTooltip();
+    if (!info) return;
+
+    // If the server's authoritative view says the cell is empty,
+    // correct the JS-side cached occupancy so the cursor flips back
+    // to `grab` on the next mousemove — otherwise the stale cached
+    // bytes would keep the cursor as `pointer` over a now-empty cell
+    // until the next render_frame refresh (~100-500ms later) and the
+    // tooltip would never re-appear because subsequent requests keep
+    // returning `present: false`.
+    if (!info.present) {
+      if (this.cachedLenieBytes) {
+        const idx = info.y * this.gridW + info.x;
+        if (idx >= 0 && idx < this.cachedLenieBytes.length) {
+          this.cachedLenieBytes[idx] = 0;
+        }
+      }
+      // If the user was hovering this cell, hide the tooltip and
+      // forget the cell so the next mousemove re-evaluates from a
+      // clean state (cursor will also pick up the corrected byte).
+      if (
+        this.hoveredCell &&
+        this.hoveredCell.x === info.x &&
+        this.hoveredCell.y === info.y
+      ) {
+        this.setHoveredCell(null);
+      }
       return;
     }
-    // Stale response — the cursor moved before the round-trip
-    // completed. Drop the result; the new cell already sent its own
-    // request.
+
+    // `present: true` — show the tooltip if the user is still hovering
+    // this cell. Stale responses (cursor moved on before the round-trip
+    // completed) are dropped silently.
     if (
       !this.hoveredCell ||
       this.hoveredCell.x !== info.x ||
@@ -317,6 +375,11 @@ const GridCanvas = {
     ) {
       return;
     }
+    // Defensive: if the tooltipEl was somehow removed (e.g., the hook
+    // was destroyed then revived without going through `mounted`),
+    // recreate it on demand so the tooltip can never be permanently
+    // hidden by a stale null reference.
+    if (!this.tooltipEl) this.tooltipEl = this.createTooltipEl();
     this.tooltipEl.innerHTML = this.renderTooltip(info);
     this.tooltipEl.style.display = "block";
     this.positionTooltip();
