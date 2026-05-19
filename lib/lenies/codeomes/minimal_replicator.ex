@@ -248,7 +248,11 @@ defmodule Lenies.Codeomes.MinimalReplicator do
     :eat,
     :move,
 
-    # ── pos 102..107: counter := counter - 1 (slot[0]) ───────────────────
+    # ── pos 102..103: try to infect a neighbor; drop the result ─────────
+    :conjugate,
+    :drop,
+
+    # ── pos 104..109: counter := counter - 1 (slot[0]) ───────────────────
     :push0,
     :load,
     :push1,
@@ -287,4 +291,44 @@ defmodule Lenies.Codeomes.MinimalReplicator do
   @doc "Returns the raw opcode list (useful for debugging)."
   @spec opcodes() :: [atom()]
   def opcodes, do: @opcodes
+
+  @plasmid_opcodes [
+    # ── pos 0..3: INTERCEPT_ANCHOR — matches host's LOOP_HEAD template ──
+    :nop_1, :nop_1, :nop_1, :nop_1,
+
+    # ── pos 4..8: build pushN mod 2 on stack ─────────────────────────────
+    :pushN, :push1, :push1, :add, :mod,
+
+    # ── pos 9..13: jz_t TURN_LEFT_BR (template [n1,n0,n0,n0]) ───────────
+    :jz_t, :nop_1, :nop_0, :nop_0, :nop_0,
+
+    # ── pos 14: turn_right (fallthrough — mod was 1) ────────────────────
+    :turn_right,
+
+    # ── pos 15..19: jmp_t back to host LOOP_HEAD (template [n0,n0,n0,n0]) ──
+    :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
+
+    # ── pos 20: separator (avoids 8-nop misread into next anchor) ───────
+    :push0,
+
+    # ── pos 21..24: TURN_LEFT_BR anchor [n0,n1,n1,n1] ───────────────────
+    :nop_0, :nop_1, :nop_1, :nop_1,
+
+    # ── pos 25: turn_left ────────────────────────────────────────────────
+    :turn_left,
+
+    # ── pos 26..30: jmp_t back to host LOOP_HEAD ─────────────────────────
+    :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0
+  ]
+
+  @doc """
+  The Twitch plasmid: 31 opcodes that intercept the host's end-of-forage
+  `jmp_t LOOP_HEAD` and inject a random L/R turn before bouncing back.
+
+  Anchor at pos 0..3 (`[n1,n1,n1,n1]`) matches any host whose LOOP_HEAD
+  uses the same pattern (i.e., any MR-derived codeome). The forward
+  template search finds this appended anchor before wrapping to position 0.
+  """
+  @spec plasmid() :: [atom()]
+  def plasmid, do: @plasmid_opcodes
 end
