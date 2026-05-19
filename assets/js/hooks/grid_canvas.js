@@ -44,11 +44,14 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 32;
 const ZOOM_STEP = 1.2;
 const CLICK_DRAG_THRESHOLD_PX = 3;
-// Window in which a second click can promote to a dblclick. Must exceed
-// most browsers' dblclick threshold (≈500 ms on macOS / Windows) so a
-// slow dblclick doesn't trigger the recenter timer between the two
-// clicks and shift the view out from under the dblclick's cell math.
-const CLICK_RECENTER_DELAY_MS = 500;
+// Window in which the next click on the same cell counts as the second
+// click of a dblclick. Decoupled from the browser's `e.detail`
+// reporting (which varies by OS — Linux/X11 ≈ 200 ms, macOS / Windows
+// ≈ 500 ms) by tracking the previous click's timestamp + cell
+// ourselves. The deferred recenter from the first click uses the same
+// window so a slow dblclick never has the recenter fire between the
+// two clicks.
+const DBLCLICK_WINDOW_MS = 800;
 // Re-pull tooltip info from the server every N ms while the cursor
 // sits on the same cell. Recovery path for stale cached-occupancy: a
 // Lenie may have left the cell between render_frame ticks, in which
@@ -82,6 +85,13 @@ const GridCanvas = {
     // dblclick can cancel it before it shifts the view out from under
     // the dblclick handler's cursor-to-cell math.
     this.pendingClickTimer = null;
+    // Manual dblclick tracking — see DBLCLICK_WINDOW_MS comment. The
+    // browser's `e.detail`-based pairing is unreliable across OSes;
+    // we time and locate clicks ourselves so the second click on the
+    // same cell within DBLCLICK_WINDOW_MS fires the edit-Lenie
+    // navigation deterministically.
+    this.lastClickAt = 0;
+    this.lastClickCell = null;
 
     // Cache of the decoded lenies layer for cursor-hover lookups, so
     // mousemove doesn't pay the base64 decode cost every event.
@@ -186,32 +196,50 @@ const GridCanvas = {
       this.isDragging = false;
       this.canvas.style.cursor = "grab";
       if (!wasClick) return;
-      // Second click of a click pair: trigger the edit-Lenie navigation
-      // directly from mouseup. We don't wait for the browser's dblclick
-      // event because its position-tolerance threshold can drop it on
-      // small movement between the two clicks. e.detail counts
-      // consecutive clicks at roughly the same spot inside the OS
-      // dblclick window.
-      if (e.detail >= 2) {
+
+      const { bufX, bufY } = this.cursorToBuffer(e);
+      const x = Math.floor(bufX);
+      const y = Math.floor(bufY);
+      const now = Date.now();
+
+      // Second click of a manual dblclick — same cell as the previous
+      // click and within the DBLCLICK_WINDOW_MS budget. Fire the edit
+      // navigation and reset state so the THIRD click in a triple
+      // doesn't accidentally count as another dblclick.
+      const isDblclick =
+        this.lastClickCell &&
+        this.lastClickCell.x === x &&
+        this.lastClickCell.y === y &&
+        now - this.lastClickAt < DBLCLICK_WINDOW_MS;
+
+      if (isDblclick) {
         if (this.pendingClickTimer) {
           clearTimeout(this.pendingClickTimer);
           this.pendingClickTimer = null;
         }
+        this.lastClickAt = 0;
+        this.lastClickCell = null;
         this.fireEditAtCursor(e);
         return;
       }
-      // Defer the recenter: if a dblclick (or second mouseup) follows,
-      // it cancels the timer before centerX/Y change, so the second
-      // click still resolves to the originally-clicked cell.
-      const { bufX, bufY } = this.cursorToBuffer(e);
+
+      // First click of a potential dblclick. Remember when + where so
+      // the next click can promote to a dblclick. Schedule the deferred
+      // recenter to fire after the dblclick window closes — if it
+      // wasn't a dblclick after all, the recenter fires; if it WAS,
+      // the second click cancels the timer (and the navigation wins).
+      this.lastClickAt = now;
+      this.lastClickCell = { x, y };
       if (this.pendingClickTimer) clearTimeout(this.pendingClickTimer);
       this.pendingClickTimer = setTimeout(() => {
         this.pendingClickTimer = null;
+        this.lastClickAt = 0;
+        this.lastClickCell = null;
         this.centerX = bufX;
         this.centerY = bufY;
         this.clampCenter();
         this.requestDraw();
-      }, CLICK_RECENTER_DELAY_MS);
+      }, DBLCLICK_WINDOW_MS);
     };
 
     this.onMouseLeave = () => {
@@ -220,17 +248,28 @@ const GridCanvas = {
       // Cursor left the canvas entirely — drop hover state so a
       // re-entry on the same cell triggers a fresh tooltip request.
       this.setHoveredCell(null);
+      // Abort any in-flight dblclick sequence — the user moved away,
+      // a click after they come back shouldn't pair with the previous
+      // one.
+      this.lastClickAt = 0;
+      this.lastClickCell = null;
     };
 
     this.onDoubleClick = (e) => {
-      // The dblclick event is now a secondary trigger; the primary path
-      // is onMouseUp's e.detail >= 2 branch. We still preventDefault
-      // here so browsers don't fall back to a select-word gesture.
+      // Browser-native dblclick — fires only when the OS dblclick
+      // threshold matches AND the cursor barely moved. The PRIMARY
+      // dblclick path is now the manual tracking in onMouseUp, but
+      // this stays as a safety net (idempotent navigation) and
+      // preventDefault so browsers don't fall back to a select-word
+      // gesture on cell text… not that there's any text here, but
+      // it costs nothing.
       e.preventDefault();
       if (this.pendingClickTimer) {
         clearTimeout(this.pendingClickTimer);
         this.pendingClickTimer = null;
       }
+      this.lastClickAt = 0;
+      this.lastClickCell = null;
       this.fireEditAtCursor(e);
     };
 
@@ -588,6 +627,8 @@ const GridCanvas = {
     this.tooltipEl = null;
     this.hoveredCell = null;
     this.lastCursorClient = null;
+    this.lastClickAt = 0;
+    this.lastClickCell = null;
     this.lastPayload = null;
     this.cachedLenieBytes = null;
   },
