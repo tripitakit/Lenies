@@ -472,17 +472,27 @@ sparse ones.
 
 ## 7. Panoramic comparison table
 
+### Teaching codeomes (chapters 3-7)
+
 | Codeome | Ops | Non-nops | Key idiom introduced | Replicates? | Sustainable? | Notes |
 |---|---|---|---|---|---|---|
 | Walker (ch 03) | 16 | 14 | Loop via anchor + template | No | No | Baseline moving agent |
-| Forager (ch 04) | 30 | 10 | Conditional branch on sense | No | Maybe | First eating loop |
+| Teaching Forager (ch 04) | 30 | 10 | Conditional branch on sense | No | Maybe | First eating loop |
 | Counter-walker (ch 05) | ~40 | ~14 | Slot-based counter loop | No | No | Introduces slots |
 | Turning forager (ch 05) | ~55 | ~18 | Fair-coin random branch | No | Maybe | First random behaviour |
 | Subroutine forager (ch 06) | 44 | 12 | `call_t` / `ret` procedures | No | Maybe | First modular codeome |
 | Mini-replicator (ch 07) | ~44 | many | allocate / write_child / divide | Yes (once) | No | Proof-of-concept division |
 | Sustainable replicator (ch 07) | ~95 | many | Forage cycle between divides | Yes | Yes | K=64, no abort guard |
+
+### Shipped seeds (`lib/lenies/codeomes/*.ex`)
+
+| Codeome | Ops | Non-nops | Key idiom introduced | Replicates? | Sustainable? | Notes |
+|---|---|---|---|---|---|---|
 | **MinimalReplicator** | **121** | **many** | Alloc-failure guard + dual anchor | **Yes** | **Yes (~2160)** | Production reference |
-| **Carnivore** | **122** | **many** | Behavioural mutation via `:attack` | **Yes** | **Density-dependent** | One-opcode patch |
+| **Carnivore** | **122** | **many** | Behavioural mutation via `:attack` | **Yes** | **Density-dependent** | One-opcode patch on MR |
+| **Defender** | **93** | **many** | `defend` per iter, K=32, deterministic post-divide turn | **Yes** | **Yes (~+50 margin)** | Drops random-turn machinery to fit K=32 |
+| **Forager** (shipped) | **139** | **many** | 3-way `pushN mod 3` random walk every step | **Yes** | **Yes (~+1786)** | Distinct from the chapter-4 teaching Forager |
+| **Hunter** | **164** | **many** | L/R alternation via slot parity + lock-on attack | **Yes** | **Yes (~+315)** | sense_front + attack with no move/turn on prey |
 
 ---
 
@@ -491,5 +501,12 @@ sparse ones.
 Every recurring idiom — anchors, slot counters, doubling chains, dual-purpose
 anchors, ring-wrap separators, copy loops, attack injection — has appeared in
 the context of a real, running, tuned codeome. The arc is complete.
+
+The three specialized shipped seeds (Defender, Hunter, Forager) demonstrate
+how these patterns combine into distinctive behaviors: K-tuning for clustering,
+slot-parity for deterministic alternation, sense+branch for prey detection
+with lock-on. See the README's "Built-in seeds" section for short behavioral
+descriptions, and `lib/lenies/codeomes/{defender,hunter,forager}.ex` for the
+line-by-line source comments.
 
 → Next: Chapter 10 collects the recurring idioms as a quick-reference cookbook. ([10-cookbook.md](10-cookbook.md))
