@@ -90,6 +90,61 @@ defmodule Lenies.Codeomes.HunterTest do
              "#{length(snaps)} Lenies alive"
   end
 
+  test "hunter damages a stationary prey directly in front within 10 seconds" do
+    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+
+    # Fill the grid with resource so Hunter has energy to advance.
+    for x <- 0..254, y <- 0..254 do
+      [{key, cell}] = :ets.lookup(:cells, {x, y})
+      :ets.insert(:cells, {key, %{cell | resource: 200}})
+    end
+
+    # Place Hunter at (128, 128) facing east; prey at (129, 128).
+    [{key_h, cell_h}] = :ets.lookup(:cells, {128, 128})
+    :ets.insert(:cells, {key_h, %{cell_h | lenie_id: "HUN-ORIGIN"}})
+
+    [{key_p, cell_p}] = :ets.lookup(:cells, {129, 128})
+    :ets.insert(:cells, {key_p, %{cell_p | lenie_id: "PREY"}})
+
+    {:ok, hunter_pid} =
+      Lenie.start_link(
+        id: "HUN-ORIGIN",
+        codeome: Hunter.codeome(),
+        energy: 10_000.0,
+        pos: {128, 128},
+        dir: :e,
+        lineage: {nil, 0}
+      )
+
+    # The prey is a Minimal Replicator — it will try to move, but as long
+    # as Hunter is one step away, sense_front will report `-1` on Hunter's
+    # next iter and the attack will land at least once.
+    {:ok, prey_pid} =
+      Lenie.start_link(
+        id: "PREY",
+        codeome: Lenies.Codeomes.MinimalReplicator.codeome(),
+        energy: 5_000.0,
+        pos: {129, 128},
+        dir: :w,
+        lineage: {nil, 0}
+      )
+
+    Process.unlink(hunter_pid)
+    Process.unlink(prey_pid)
+
+    deadline = System.monotonic_time(:millisecond) + 10_000
+
+    damaged = poll_until(deadline, fn ->
+      case :ets.lookup(:lenies, "PREY") do
+        [{_, %{energy: e}}] when e < 5_000.0 -> {:done, true}
+        _ -> :continue
+      end
+    end)
+
+    assert damaged == true,
+           "expected prey energy to drop below 5_000 within 10s — Hunter never landed an attack"
+  end
+
   defp max_generation(snaps) do
     snaps
     |> Enum.map(fn {_id, snap} -> snap.lineage |> elem(1) end)
