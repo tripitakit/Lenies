@@ -425,7 +425,7 @@ defmodule Lenies.World do
   end
 
   defp do_action({:allocate, size, {x, y}, dir, parent_id}, state) do
-    bounds = Application.get_env(:lenies, :codeome_length_bounds, {5, 500})
+    bounds = Application.get_env(:lenies, :codeome_length_bounds, {5, 1000})
     {min_size, max_size} = bounds
 
     cond do
@@ -748,9 +748,7 @@ defmodule Lenies.World do
   end
 
   defp mutate_plasmids(plasmids) when is_list(plasmids) do
-    sub_rate = Application.get_env(:lenies, :copy_substitution_rate, 0.005)
-    ins_rate = Application.get_env(:lenies, :copy_insert_rate, 0.0)
-    del_rate = Application.get_env(:lenies, :copy_delete_rate, 0.0)
+    %{substitution: sub_rate, insert: ins_rate, delete: del_rate} = current_copy_rates()
 
     Enum.map(plasmids, fn %Lenies.Plasmid{opcodes: ops} = p ->
       %{p | opcodes: Lenies.Mutator.copy_mutate_list(ops, sub_rate, ins_rate, del_rate)}
