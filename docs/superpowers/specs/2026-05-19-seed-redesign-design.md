@@ -50,8 +50,17 @@ against MR for inspection.
 
 ### Behavior
 Replicates often (K=32). Each forage iteration: `defend`, `eat`, `move`.
-Cluster forms because of frequent replication + post-divide random turn
-spreading children in different directions.
+Cluster forms because of frequent replication + post-divide deterministic
+`turn_left` rotating descendants through the four cardinal directions.
+
+> **Implementation note (revised from initial spec)**: the original
+> design called for a random post-divide turn (`pushN mod 2`-based
+> branch). During implementation we dropped this in favor of an
+> unconditional `turn_left` because (a) the random branch cost ~26
+> extra opcodes which pushed E_ss below sustainability at K=32, and
+> (b) the deterministic rotation still produces visible clustering —
+> each generation rotates 90° CCW relative to its parent, so
+> descendants spread through all four cardinals in 4 generations.
 
 ### Forage body (pseudocode)
 ```
@@ -65,8 +74,9 @@ FORAGE_LOOP_HEAD:
 
 ### Parameters
 - **K = 32** (vs MR's 128). Replicate every ~32 forage steps.
-- Post-divide turn: **random** (preserve MR's `pushN mod 2`-based 50/50
-  turn_left/turn_right) — children must diverge to form a cluster.
+- Post-divide turn: **deterministic `turn_left`** (see implementation
+  note above). Drops `TURN_LEFT_ANCHOR` and `SKIP_TURN_ANCHOR` from
+  MR's set, freeing 2 anchor patterns.
 - No `sense_front` in forage (not needed; saves per-iter cost).
 - No in-forage zigzag (saves codeome size, makes K=32 sustainable).
 
@@ -83,9 +93,9 @@ logic and no sense_front.
 - E_ss = 2 × K × gain − C = 2 × 32 × 11 − 591 = +113 → **sustainable**.
 
 ### Distinctive feel
-Short straight runs ~32 cells, branching every 32 steps because the random
-post-divide turn sends each child in a different direction. Defender + child
-+ grandchild form a fractal-tree cluster. Defended against incoming attacks
+Short straight runs ~32 cells terminated by `divide` + deterministic
+90° CCW turn. Descendants spiral outward through the four cardinals,
+forming a clustered rotating pattern. Defended against incoming attacks
 (attackers take penalty when attacking a defending Lenie).
 
 ## Hunter — "Stalker"
