@@ -31,7 +31,8 @@ defmodule Lenies.Lenie do
     # follow-up is scheduled. Set to true on `:world_paused` (broadcast
     # by Lenies.World on pause) and back to false on `:world_resumed`,
     # at which point we re-arm the metabolize loop.
-    paused?: false
+    paused?: false,
+    plasmids: []
   ]
 
   # ----- Public API -----
@@ -75,6 +76,7 @@ defmodule Lenies.Lenie do
     # spawn_child pass the current flag down; direct `Lenie.start_link`
     # callers (tests) default to false.
     paused? = Keyword.get(opts, :paused?, false)
+    plasmids = Keyword.get(opts, :plasmids, [])
 
     # Subscribe to world:control so future pause/resume broadcasts
     # gate the metabolize loop.
@@ -89,7 +91,8 @@ defmodule Lenies.Lenie do
       lineage: lineage,
       seed_origin: seed_origin,
       batch_count: 0,
-      paused?: paused?
+      paused?: paused?,
+      plasmids: plasmids
     }
 
     maybe_write_snapshot(state)
@@ -238,7 +241,8 @@ defmodule Lenies.Lenie do
         ip: state.interp.ip,
         codeome_hash: Lenies.Codeome.hash(state.codeome),
         lineage: state.lineage,
-        seed_origin: state.seed_origin
+        seed_origin: state.seed_origin,
+        plasmids: state.plasmids
       }
 
       existing =

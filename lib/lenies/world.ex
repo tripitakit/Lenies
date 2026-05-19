@@ -167,6 +167,7 @@ defmodule Lenies.World do
         dir = Keyword.get(opts, :dir, :n)
         lineage = Keyword.get(opts, :lineage, {nil, 0})
         seed_origin = Keyword.get(opts, :seed_origin)
+        plasmids = Keyword.get(opts, :plasmids, [])
 
         child_opts = [
           id: lenie_id,
@@ -178,7 +179,8 @@ defmodule Lenies.World do
           seed_origin: seed_origin,
           # Inherit the world's current pause flag so a Lenie spawned
           # while the world is paused stays dormant until resume.
-          paused?: state.paused?
+          paused?: state.paused?,
+          plasmids: plasmids
         ]
 
         {:ok, _pid} =
@@ -568,6 +570,9 @@ defmodule Lenies.World do
     # seed keep their lineage label across replications + mutations.
     parent_seed_origin = Map.get(parent_record, :seed_origin)
 
+    parent_plasmids = Map.get(parent_record, :plasmids, [])
+    child_plasmids = mutate_plasmids(parent_plasmids)
+
     child_opts = [
       id: child_id,
       codeome: child_codeome,
@@ -576,7 +581,8 @@ defmodule Lenies.World do
       dir: parent_record.dir,
       lineage: {parent_id, parent_generation + 1},
       seed_origin: parent_seed_origin,
-      paused?: state.paused?
+      paused?: state.paused?,
+      plasmids: child_plasmids
     ]
 
     {:ok, _child_pid} =
@@ -739,5 +745,15 @@ defmodule Lenies.World do
     # Drop the last element of tail to keep size constant
     new_tail = [op | tail] |> Enum.take(length(tail))
     (head ++ new_tail) |> List.to_tuple()
+  end
+
+  defp mutate_plasmids(plasmids) when is_list(plasmids) do
+    sub_rate = Application.get_env(:lenies, :copy_substitution_rate, 0.005)
+    ins_rate = Application.get_env(:lenies, :copy_insert_rate, 0.0)
+    del_rate = Application.get_env(:lenies, :copy_delete_rate, 0.0)
+
+    Enum.map(plasmids, fn %Lenies.Plasmid{opcodes: ops} = p ->
+      %{p | opcodes: Lenies.Mutator.copy_mutate_list(ops, sub_rate, ins_rate, del_rate)}
+    end)
   end
 end
