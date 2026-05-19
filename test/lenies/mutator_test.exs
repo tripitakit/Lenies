@@ -56,4 +56,40 @@ defmodule Lenies.MutatorTest do
       assert Lenies.Codeome.size(mutated) == 5
     end
   end
+
+  describe "background_mutation_list/1" do
+    test "single substitution on a non-empty list" do
+      original = [:eat, :move, :turn_left, :turn_right]
+      mutated = Mutator.background_mutation_list(original)
+      assert length(mutated) == 4
+      diff_count = Enum.zip(original, mutated) |> Enum.count(fn {a, b} -> a != b end)
+      assert diff_count <= 1
+    end
+
+    test "empty list is returned unchanged" do
+      assert Mutator.background_mutation_list([]) == []
+    end
+  end
+
+  describe "copy_mutate_list/4" do
+    test "rate 0.0 reproduces the input exactly" do
+      original = [:eat, :move, :turn_left]
+      assert Mutator.copy_mutate_list(original, 0.0, 0.0, 0.0) == original
+    end
+
+    test "rate 1.0 substitution changes every opcode" do
+      # With sub=1.0, every opcode is replaced by a random one from the
+      # whitelist. The replacement might match by chance, but for 100
+      # opcodes it's overwhelmingly unlikely all 100 match.
+      original = List.duplicate(:eat, 100)
+      mutated = Mutator.copy_mutate_list(original, 1.0, 0.0, 0.0)
+      assert length(mutated) == 100
+      refute mutated == original
+    end
+
+    test "rate 1.0 delete returns empty list" do
+      original = List.duplicate(:eat, 20)
+      assert Mutator.copy_mutate_list(original, 0.0, 0.0, 1.0) == []
+    end
+  end
 end

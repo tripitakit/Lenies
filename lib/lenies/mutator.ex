@@ -57,4 +57,42 @@ defmodule Lenies.Mutator do
       Codeome.from_list(list)
     end
   end
+
+  @doc """
+  Apply a single random substitution to a plain opcode list. Returns the
+  list unchanged if empty.
+  """
+  @spec background_mutation_list([atom()]) :: [atom()]
+  def background_mutation_list([]), do: []
+
+  def background_mutation_list(opcodes) when is_list(opcodes) do
+    n = length(opcodes)
+    pos = :rand.uniform(n) - 1
+    new_op = random_opcode()
+    List.replace_at(opcodes, pos, new_op)
+  end
+
+  @doc """
+  Apply per-opcode copy mutations to a list. For each opcode, rolls
+  substitution → insert → delete dice in that order; the first hit
+  determines the outcome (same convention as `copy_outcome/1`). Insertions
+  add a random opcode immediately after the current one; deletions drop
+  the current opcode.
+
+  Returns the mutated list.
+  """
+  @spec copy_mutate_list([atom()], float(), float(), float()) :: [atom()]
+  def copy_mutate_list(opcodes, sub_rate, ins_rate, del_rate)
+      when is_list(opcodes) and is_float(sub_rate) and is_float(ins_rate) and is_float(del_rate) do
+    rates = %{substitution: sub_rate, insert: ins_rate, delete: del_rate}
+
+    Enum.flat_map(opcodes, fn op ->
+      case copy_outcome(rates) do
+        :write -> [op]
+        :substitute -> [random_opcode()]
+        :insert -> [op, random_opcode()]
+        :delete -> []
+      end
+    end)
+  end
 end
