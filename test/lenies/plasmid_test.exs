@@ -7,8 +7,11 @@ defmodule Lenies.PlasmidTest do
     assert %Plasmid{opcodes: [:eat, :move, :turn_left]} = p
   end
 
-  test "size/1 returns the opcode count" do
+  test "size/1 returns the opcode count for a populated plasmid" do
     assert Plasmid.size(Plasmid.new([:eat, :move])) == 2
+  end
+
+  test "size/1 returns 0 for an empty plasmid" do
     assert Plasmid.size(Plasmid.new([])) == 0
   end
 
@@ -18,5 +21,12 @@ defmodule Lenies.PlasmidTest do
     assert Plasmid.valid_length?(64)
     refute Plasmid.valid_length?(65)
     refute Plasmid.valid_length?(-1)
+  end
+
+  test "valid_length?/1 returns false for non-integer inputs" do
+    refute Plasmid.valid_length?(:not_an_int)
+    refute Plasmid.valid_length?("64")
+    refute Plasmid.valid_length?(64.0)
+    refute Plasmid.valid_length?(nil)
   end
 end

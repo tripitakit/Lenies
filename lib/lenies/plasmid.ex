@@ -14,9 +14,16 @@ defmodule Lenies.Plasmid do
 
   defstruct opcodes: []
 
-  @type t :: %__MODULE__{opcodes: [atom()]}
+  @type t :: %__MODULE__{opcodes: [Lenies.Codeome.opcode()]}
 
-  @spec new([atom()]) :: t()
+  @doc """
+  Raw (unchecked) constructor. Accepts any list of opcodes, including
+  empty or oversized lists. The `:make_plasmid` opcode dispatch is
+  responsible for calling `valid_length?/1` before calling this; other
+  callers (e.g. tests, snapshot restore) may legitimately need to
+  construct off-boundary plasmids.
+  """
+  @spec new([Lenies.Codeome.opcode()]) :: t()
   def new(opcodes) when is_list(opcodes), do: %__MODULE__{opcodes: opcodes}
 
   @spec size(t()) :: non_neg_integer()
@@ -27,6 +34,7 @@ defmodule Lenies.Plasmid do
   def valid_length?(len) when is_integer(len), do: len >= 1 and len <= @max_length
   def valid_length?(_), do: false
 
+  @doc "The hard cap on plasmid opcode count (#{@max_length})."
   @spec max_length() :: pos_integer()
   def max_length, do: @max_length
 end
