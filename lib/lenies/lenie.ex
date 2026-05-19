@@ -20,7 +20,19 @@ defmodule Lenies.Lenie do
   alias Lenies.{Codeome, Interpreter, World}
   alias Lenies.Interpreter.State
 
-  defstruct [:id, :codeome, :interp, :lineage, :seed_origin, batch_count: 0]
+  defstruct [
+    :id,
+    :codeome,
+    :interp,
+    :lineage,
+    :seed_origin,
+    batch_count: 0,
+    # When true, in-flight :metabolize messages are dropped and no
+    # follow-up is scheduled. Set to true on `:world_paused` (broadcast
+    # by Lenies.World on pause) and back to false on `:world_resumed`,
+    # at which point we re-arm the metabolize loop.
+    paused?: false
+  ]
 
   # ----- Public API -----
 
@@ -57,18 +69,32 @@ defmodule Lenies.Lenie do
 
     interp = State.new(energy: energy, pos: pos, dir: dir)
 
+    # Pause state must come via spawn opts — calling `World.paused?()`
+    # here would deadlock (we're typically inside World's
+    # handle_call({:spawn_lenie, ...}) callback). World.spawn_lenie /
+    # spawn_child pass the current flag down; direct `Lenie.start_link`
+    # callers (tests) default to false.
+    paused? = Keyword.get(opts, :paused?, false)
+
+    # Subscribe to world:control so future pause/resume broadcasts
+    # gate the metabolize loop.
+    if Process.whereis(Lenies.PubSub) do
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "world:control")
+    end
+
     state = %__MODULE__{
       id: id,
       codeome: codeome,
       interp: interp,
       lineage: lineage,
       seed_origin: seed_origin,
-      batch_count: 0
+      batch_count: 0,
+      paused?: paused?
     }
 
     maybe_write_snapshot(state)
     cache_codeome_by_hash(state.codeome)
-    schedule_metabolize()
+    unless paused?, do: schedule_metabolize()
     {:ok, state}
   end
 
@@ -113,6 +139,12 @@ defmodule Lenies.Lenie do
   end
 
   @impl true
+  def handle_info(:metabolize, %{paused?: true} = state) do
+    # Discard the timer that fired in flight when the world paused —
+    # the next :world_resumed will re-schedule us.
+    {:noreply, state}
+  end
+
   def handle_info(:metabolize, state) do
     batch = Application.get_env(:lenies, :interpreter_steps_per_batch, 10)
 
@@ -132,6 +164,19 @@ defmodule Lenies.Lenie do
         {:stop, reason, state}
     end
   end
+
+  def handle_info(:world_paused, state) do
+    {:noreply, %{state | paused?: true}}
+  end
+
+  def handle_info(:world_resumed, %{paused?: true} = state) do
+    schedule_metabolize()
+    {:noreply, %{state | paused?: false}}
+  end
+
+  # Already running — broadcast may arrive at a Lenie that was never
+  # paused (e.g. spawned post-resume); leave the metabolize loop alone.
+  def handle_info(:world_resumed, state), do: {:noreply, state}
 
   def handle_info(:sterilize, state), do: {:stop, :sterilized, state}
 

@@ -133,12 +133,18 @@ defmodule Lenies.World do
 
   def handle_call(:pause, _from, state) do
     if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
+    # Broadcast pause/resume on world:control so each Lenie can suspend
+    # its metabolize loop too — otherwise the environmental tick stops
+    # but the Lenies keep moving in the background and the canvas
+    # silently goes out of sync with reality.
+    Phoenix.PubSub.broadcast(Lenies.PubSub, "world:control", :world_paused)
     {:reply, :ok, %{state | paused?: true, tick_ref: nil}}
   end
 
   def handle_call(:resume, _from, state) do
     new_state = %{state | paused?: false}
     new_state = maybe_schedule_tick(new_state)
+    Phoenix.PubSub.broadcast(Lenies.PubSub, "world:control", :world_resumed)
     {:reply, :ok, new_state}
   end
 
@@ -169,7 +175,10 @@ defmodule Lenies.World do
           pos: pos,
           dir: dir,
           lineage: lineage,
-          seed_origin: seed_origin
+          seed_origin: seed_origin,
+          # Inherit the world's current pause flag so a Lenie spawned
+          # while the world is paused stays dormant until resume.
+          paused?: state.paused?
         ]
 
         {:ok, _pid} =
@@ -566,7 +575,8 @@ defmodule Lenies.World do
       pos: slot.target_cell,
       dir: parent_record.dir,
       lineage: {parent_id, parent_generation + 1},
-      seed_origin: parent_seed_origin
+      seed_origin: parent_seed_origin,
+      paused?: state.paused?
     ]
 
     {:ok, _child_pid} =
