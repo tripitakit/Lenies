@@ -150,6 +150,59 @@ defmodule Lenies.SeedPlasmidTest do
            "expected vanilla MR to receive the Twitch plasmid within 15s"
   end
 
+  test "two MR-Twitch Lenies facing each other both survive (no deadlock crash)" do
+    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+
+    for x <- 0..254, y <- 0..254 do
+      [{key, cell}] = :ets.lookup(:cells, {x, y})
+      :ets.insert(:cells, {key, %{cell | resource: 200}})
+    end
+
+    [{key1, c1}] = :ets.lookup(:cells, {128, 128})
+    :ets.insert(:cells, {key1, %{c1 | lenie_id: "A"}})
+    [{key2, c2}] = :ets.lookup(:cells, {129, 128})
+    :ets.insert(:cells, {key2, %{c2 | lenie_id: "B"}})
+
+    plasmid = Plasmid.new(MinimalReplicator.plasmid())
+
+    {:ok, a_pid} =
+      Lenie.start_link(
+        id: "A",
+        codeome: MinimalReplicator.codeome(),
+        energy: 10_000.0,
+        pos: {128, 128},
+        dir: :e,
+        lineage: {nil, 0},
+        plasmids: [plasmid]
+      )
+
+    {:ok, b_pid} =
+      Lenie.start_link(
+        id: "B",
+        codeome: MinimalReplicator.codeome(),
+        energy: 10_000.0,
+        pos: {129, 128},
+        dir: :w,
+        lineage: {nil, 0},
+        plasmids: [plasmid]
+      )
+
+    Process.unlink(a_pid)
+    Process.unlink(b_pid)
+
+    # Let them try to conjugate each other for a bit. Without the fix,
+    # both die after one 5s GenServer.call timeout (or earlier if they
+    # bump into other deadlocks). With the fix, the 50ms call returns
+    # :exit cleanly, the donor pays base cost, both keep running.
+    Process.sleep(2_500)
+
+    assert Process.alive?(a_pid),
+           "Lenie A died — likely from the symmetric-donor deadlock crash"
+
+    assert Process.alive?(b_pid),
+           "Lenie B died — likely from the symmetric-donor deadlock crash"
+  end
+
   defp poll_until(deadline, fun) do
     now = System.monotonic_time(:millisecond)
 

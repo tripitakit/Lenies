@@ -50,9 +50,10 @@ defmodule Lenies.Lenie do
   buffer. Returns `:ok` on success, `{:error, :too_large}` if appending
   would exceed `codeome_length_bounds`.
   """
-  @spec receive_plasmid(pid(), [atom()]) :: :ok | {:error, :too_large}
-  def receive_plasmid(pid, plasmid_opcodes) when is_pid(pid) and is_list(plasmid_opcodes) do
-    GenServer.call(pid, {:receive_plasmid, plasmid_opcodes})
+  @spec receive_plasmid(pid(), [atom()], timeout()) :: :ok | {:error, :too_large}
+  def receive_plasmid(pid, plasmid_opcodes, timeout \\ 5_000)
+      when is_pid(pid) and is_list(plasmid_opcodes) do
+    GenServer.call(pid, {:receive_plasmid, plasmid_opcodes}, timeout)
   end
 
   # ----- Server -----
@@ -449,18 +450,30 @@ defmodule Lenies.Lenie do
     {:ok, new_interp}
   end
 
-  # Known footgun: if two donors target each other simultaneously (A
-  # facing east at {x,y}, B facing west at {x+1,y}) the synchronous
-  # GenServer.call cross-fires deadlock until the 5s default timeout
-  # fires and both processes crash with {:timeout, ...}. Lenies are
-  # restart: :temporary so there's no restart loop, but the conjugation
-  # never completes. Acceptable for the MVP — densities required for
-  # this to be common are unrealistic. Fix paths if needed:
-  # GenServer.cast + reply-by-message, or Task.yield with short deadline.
+  # Symmetric-donor case: A facing east at {x,y}, B facing west at
+  # {x+1,y} both call receive_plasmid on each other in the same iter.
+  # We use a 50ms timeout + catch :exit so the donor survives the
+  # deadlock (recipient is busy → conjugate fails, donor stays alive
+  # and pays only the base cost). 50ms is generous for any non-deadlock
+  # GenServer.call (microseconds in-process); 5_000ms (default) used to
+  # kill both Lenies in dense MR-Twitch populations where :conjugate
+  # fires every forage iter.
   defp attempt_transfer(interp, donor_id, recipient_pid, recipient_id, plasmid_opcodes) do
     plasmid_size = length(plasmid_opcodes)
 
-    case Lenies.Lenie.receive_plasmid(recipient_pid, plasmid_opcodes) do
+    result =
+      try do
+        Lenies.Lenie.receive_plasmid(recipient_pid, plasmid_opcodes, 50)
+      catch
+        # Recipient is busy (most often a symmetric-donor deadlock with us
+        # both calling receive_plasmid on each other simultaneously). 50ms
+        # is generous for any non-deadlock call (microseconds in-process).
+        # Treat as a normal failure: donor stays alive, no broadcast, no
+        # state change in either Lenie, donor pays only the base cost.
+        :exit, _reason -> :timeout
+      end
+
+    case result do
       :ok ->
         plasmid_hash =
           :erlang.phash2(plasmid_opcodes, 16_777_216)
@@ -492,6 +505,9 @@ defmodule Lenies.Lenie do
         {:ok, new_interp}
 
       {:error, :too_large} ->
+        conjugate_failure(interp, 0)
+
+      :timeout ->
         conjugate_failure(interp, 0)
     end
   end
