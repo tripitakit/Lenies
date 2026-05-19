@@ -230,4 +230,41 @@ defmodule Lenies.ConjugationTest do
 
     assert_receive {:conjugation, {128, 128}, {129, 128}}, 1000
   end
+
+  test "background_mutate also touches the plasmid buffer (after multiple cycles)" do
+    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+
+    [{key, cell}] = :ets.lookup(:cells, {128, 128})
+    :ets.insert(:cells, {key, %{cell | lenie_id: "BG"}})
+
+    original_ops = List.duplicate(:eat, 30)
+    original_plasmid = Plasmid.new(original_ops)
+
+    {:ok, pid} =
+      Lenie.start_link(
+        id: "BG",
+        codeome: Codeome.from_list([:nop_0, :nop_0, :nop_0]),
+        energy: 5_000.0,
+        pos: {128, 128},
+        dir: :n,
+        lineage: {nil, 0},
+        plasmids: [original_plasmid]
+      )
+
+    Process.unlink(pid)
+
+    # Trigger background mutation 50 times. Each fires a single random
+    # substitution. With 50 substitutions on a 30-opcode buffer of all
+    # :eat, the probability that all 50 picks land on :eat is
+    # (1/36)^50 ≈ 0 — so we expect to see at least one different opcode.
+    for _ <- 1..50, do: send(pid, :background_mutate)
+    Process.sleep(200)
+
+    snapshot = :sys.get_state(pid)
+    [%Plasmid{opcodes: new_ops}] = snapshot.plasmids
+
+    assert length(new_ops) == 30
+    diff = Enum.zip(original_ops, new_ops) |> Enum.count(fn {a, b} -> a != b end)
+    assert diff > 0, "expected at least one opcode to differ after 50 background mutations; got diff=#{diff}"
+  end
 end

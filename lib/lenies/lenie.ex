@@ -224,7 +224,15 @@ defmodule Lenies.Lenie do
   def handle_info(:background_mutate, state) do
     new_codeome = Lenies.Mutator.background_mutation(state.codeome)
     cache_codeome_by_hash(new_codeome)
-    {:noreply, %{state | codeome: new_codeome}}
+
+    new_plasmids =
+      Enum.map(state.plasmids, fn %Lenies.Plasmid{opcodes: ops} = p ->
+        %{p | opcodes: Lenies.Mutator.background_mutation_list(ops)}
+      end)
+
+    new_interp = %{state.interp | plasmids: new_plasmids}
+
+    {:noreply, %{state | codeome: new_codeome, plasmids: new_plasmids, interp: new_interp}}
   end
 
   def handle_info({:take_damage, amount}, state) do
