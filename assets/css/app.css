@@ -376,7 +376,8 @@
 /* ----- Conjugation event log (next to "World" header) ----- */
 .conjugation-log {
   display: flex;
-  flex-direction: row;
+  flex-direction: row-reverse;
+  justify-content: flex-end;
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -392,9 +393,6 @@
   padding: 2px 7px;
   background: rgba(253, 224, 71, 0.06);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 32ch;
 }
 
 .conjugation-log-line-visible {
