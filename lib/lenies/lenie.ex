@@ -153,6 +153,7 @@ defmodule Lenies.Lenie do
     {:reply, snapshot, state}
   end
 
+  @impl true
   def handle_call({:receive_plasmid, plasmid_opcodes}, _from, state) do
     current_size = Lenies.Codeome.size(state.codeome)
     new_size = current_size + length(plasmid_opcodes)
@@ -410,10 +411,16 @@ defmodule Lenies.Lenie do
     end
   end
 
-  defp front_cell({x, y}, :n), do: {x, rem(y - 1 + 256, 256)}
-  defp front_cell({x, y}, :s), do: {x, rem(y + 1, 256)}
-  defp front_cell({x, y}, :e), do: {rem(x + 1, 256), y}
-  defp front_cell({x, y}, :w), do: {rem(x - 1 + 256, 256), y}
+  defp front_cell({x, y}, dir) do
+    {w, h} = Lenies.Config.grid_size()
+
+    case dir do
+      :n -> {x, Integer.mod(y - 1, h)}
+      :s -> {x, Integer.mod(y + 1, h)}
+      :e -> {Integer.mod(x + 1, w), y}
+      :w -> {Integer.mod(x - 1, w), y}
+    end
+  end
 
   defp conjugate_failure(interp, plasmid_size) do
     new_interp =
