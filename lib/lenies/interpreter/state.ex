@@ -21,7 +21,8 @@ defmodule Lenies.Interpreter.State do
           energy: float(),
           age: non_neg_integer(),
           pos: {non_neg_integer(), non_neg_integer()},
-          call_stack: [non_neg_integer()]
+          call_stack: [non_neg_integer()],
+          plasmids: [Lenies.Plasmid.t()]
         }
 
   @stack_max 16
@@ -35,7 +36,8 @@ defmodule Lenies.Interpreter.State do
             energy: 0.0,
             age: 0,
             pos: {0, 0},
-            call_stack: []
+            call_stack: [],
+            plasmids: []
 
   def new(opts) do
     %__MODULE__{

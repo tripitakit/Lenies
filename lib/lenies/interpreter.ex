@@ -342,6 +342,44 @@ defmodule Lenies.Interpreter do
     end
   end
 
+  defp dispatch(:make_plasmid, state, codeome, size) do
+    {length, s1} = State.pop(state)
+    {start_addr, s2} = State.pop(s1)
+
+    if Lenies.Plasmid.valid_length?(length) do
+      ops = for i <- 0..(length - 1), do: Codeome.at(codeome, start_addr + i)
+      new_plasmid = Lenies.Plasmid.new(ops)
+      cost = Costs.cost(:make_plasmid, length)
+
+      new_state =
+        s2
+        |> State.push(1)
+        |> Map.put(:plasmids, [new_plasmid])
+        |> State.apply_cost(cost)
+        |> State.advance_ip(size, 1)
+
+      if new_state.energy <= 0 do
+        {:halt, :starvation, new_state}
+      else
+        {:cont, new_state}
+      end
+    else
+      cost = Costs.cost(:make_plasmid, 0)
+
+      new_state =
+        s2
+        |> State.push(0)
+        |> State.apply_cost(cost)
+        |> State.advance_ip(size, 1)
+
+      if new_state.energy <= 0 do
+        {:halt, :starvation, new_state}
+      else
+        {:cont, new_state}
+      end
+    end
+  end
+
   # unknown opcodes → treated as :nop_0
   defp dispatch(_unknown, state, _c, size), do: advance_and_charge(:nop_0, state, size, 1)
 

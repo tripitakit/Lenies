@@ -77,6 +77,7 @@ defmodule Lenies.Lenie do
     # callers (tests) default to false.
     paused? = Keyword.get(opts, :paused?, false)
     plasmids = Keyword.get(opts, :plasmids, [])
+    interp = %{interp | plasmids: plasmids}
 
     # Subscribe to world:control so future pause/resume broadcasts
     # gate the metabolize loop.
@@ -220,7 +221,13 @@ defmodule Lenies.Lenie do
   defp age_and_continue(state, new_interp) do
     new_interp = %{new_interp | age: new_interp.age + 1}
     new_batch_count = state.batch_count + 1
-    new_state = %{state | interp: new_interp, batch_count: new_batch_count}
+
+    new_state = %{
+      state
+      | interp: new_interp,
+        batch_count: new_batch_count,
+        plasmids: new_interp.plasmids
+    }
 
     maybe_write_snapshot(new_state)
     schedule_metabolize()

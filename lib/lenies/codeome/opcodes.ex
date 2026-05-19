@@ -56,7 +56,10 @@ defmodule Lenies.Codeome.Opcodes do
     :divide,
     # Memoria locale
     :store,
-    :load
+    :load,
+    # Plasmid / horizontal gene transfer
+    :make_plasmid,
+    :conjugate
   ]
 
   @encoding @opcodes |> Enum.with_index() |> Enum.into(%{})

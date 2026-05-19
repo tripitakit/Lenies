@@ -52,6 +52,23 @@ defmodule Lenies.Codeome.Costs do
   def cost(:write_child, _), do: 1.0
   def cost(:divide, _), do: 10.0
 
+  # Plasmid creation: 2.0 base + 0.05 per opcode copied.
+  # The `template_len` parameter is repurposed by the interpreter to carry
+  # the actual length argument (top of stack at dispatch time).
+  def cost(:make_plasmid, length) when is_integer(length) and length > 0 do
+    Float.round(2.0 + 0.05 * length, 10)
+  end
+
+  def cost(:make_plasmid, _), do: 2.0
+
+  # Conjugation: 4.0 base + 0.05 per opcode transferred. Same parameter
+  # repurposing.
+  def cost(:conjugate, plasmid_size) when is_integer(plasmid_size) and plasmid_size > 0 do
+    Float.round(4.0 + 0.05 * plasmid_size, 10)
+  end
+
+  def cost(:conjugate, _), do: 4.0
+
   # Unknown opcode → treated as :nop_0
   def cost(_, _), do: 0.1
 end
