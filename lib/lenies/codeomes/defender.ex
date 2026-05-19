@@ -5,7 +5,7 @@ defmodule Lenies.Codeomes.Defender do
   `turn_left` instead of a random branch. Cluster shape emerges from the
   short forage runs (~32 cells before each replication) combined with the
   deterministic 90° turn after every divide — descendants spiral outward
-  in a fractal pattern.
+  in a rotating pattern.
 
   ## Forage body
 
@@ -35,11 +35,12 @@ defmodule Lenies.Codeomes.Defender do
   ## Energy
 
   - Codeome length: 93 opcodes
-  - Replication cost ≈ 526 energy (copy 93 × ~5.4 + setup + divide)
+  - Replication cost ≈ 660 energy (copy 93 × ~6.8 + setup + divide ≈ 29)
   - Per-iter forage cost ≈ 8.9 energy (defend 2.0 + eat 2.0 + move 2.0 +
     counter ~1.5 + load+jz_t+jmp_t ~1.4)
   - Eat gain at default `eat_amount: 20` ≈ +11.1 per iter
-  - Steady state at K=32: E_ss = 2 × 32 × 11.1 - 526 ≈ +184 (sustainable).
+  - Steady state at K=32: E_ss ≈ 2 × 32 × 11.1 − 660 ≈ +50 (sustainable
+    but tight margin; further reducing K would push toward starvation).
   """
 
   alias Lenies.Codeome
