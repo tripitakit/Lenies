@@ -30,4 +30,27 @@ defmodule Lenies.Codeomes.Carnivore do
   defp inject_attack([op | rest], acc) do
     inject_attack(rest, [op | acc])
   end
+
+  @plasmid_opcodes [
+    # ── pos 0..3: INTERCEPT_ANCHOR — matches host's LOOP_HEAD template ──
+    :nop_1, :nop_1, :nop_1, :nop_1,
+
+    # ── pos 4..5: extra step + extra eat ─────────────────────────────────
+    :move, :eat,
+
+    # ── pos 6..10: jmp_t back to host LOOP_HEAD (template [n0,n0,n0,n0]) ──
+    :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0
+  ]
+
+  @doc """
+  The Sprint plasmid: 11 opcodes that intercept the host's end-of-forage
+  `jmp_t LOOP_HEAD` and inject an extra `:move, :eat` pair before
+  bouncing back. The host effectively covers two cells (and eats two)
+  per forage iter instead of one.
+
+  Anchor at pos 0..3 matches any MR-derived codeome's LOOP_HEAD via the
+  template forward search.
+  """
+  @spec plasmid() :: [atom()]
+  def plasmid, do: @plasmid_opcodes
 end
