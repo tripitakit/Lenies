@@ -439,6 +439,14 @@ defmodule Lenies.Lenie do
     {:ok, new_interp}
   end
 
+  # Known footgun: if two donors target each other simultaneously (A
+  # facing east at {x,y}, B facing west at {x+1,y}) the synchronous
+  # GenServer.call cross-fires deadlock until the 5s default timeout
+  # fires and both processes crash with {:timeout, ...}. Lenies are
+  # restart: :temporary so there's no restart loop, but the conjugation
+  # never completes. Acceptable for the MVP — densities required for
+  # this to be common are unrealistic. Fix paths if needed:
+  # GenServer.cast + reply-by-message, or Task.yield with short deadline.
   defp attempt_transfer(interp, recipient_pid, plasmid_opcodes) do
     plasmid_size = length(plasmid_opcodes)
 
