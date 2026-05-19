@@ -7,8 +7,9 @@ defmodule Lenies.Codeomes.Hunter do
     once, do NOT move, do NOT turn. Next iteration faces the same cell;
     if prey is still there, attack again. This "lock-on" amplifies kill
     probability without explicit pursuit logic.
-  - Otherwise, `eat` + `move`, then alternate `turn_left`/`turn_right`
-    via slot[3] parity. The alternation produces a deterministic
+  - Otherwise, `eat` + `move`, then alternate `turn_right`/`turn_left`
+    via slot[3] parity (first turn after init is `turn_right` because
+    counter+1 mod 2 = 1 ≠ 0, then `turn_left` on the next iter). The alternation produces a deterministic
     diagonal staircase advance (face east → step east → turn south →
     step south → turn east → step east → …) covering both axes.
 
@@ -61,8 +62,8 @@ defmodule Lenies.Codeomes.Hunter do
   - Phase 2 (4 ops): dup [32,32]; dup [32,32,32]; add → [32,64];
     add → [96]
 
-  Same total opcode count as K=128 (15 ops) — no efficiency cost
-  vs matching the spec's K=96.
+  Same total opcode count as a straight K=128 doubling chain (15 ops)
+  — no overhead from hitting K=96 exactly.
 
   ## Energy
 

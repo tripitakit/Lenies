@@ -2,7 +2,7 @@ defmodule Lenies.Codeomes.HunterTest do
   use ExUnit.Case, async: false
 
   alias Lenies.{Lenie, World}
-  alias Lenies.Codeomes.Hunter
+  alias Lenies.Codeomes.{Hunter, MinimalReplicator}
   alias Lenies.World.Tables
 
   @moduletag timeout: 60_000
@@ -116,13 +116,15 @@ defmodule Lenies.Codeomes.HunterTest do
         lineage: {nil, 0}
       )
 
-    # The prey is a Minimal Replicator — it will try to move, but as long
-    # as Hunter is one step away, sense_front will report `-1` on Hunter's
-    # next iter and the attack will land at least once.
+    # The prey is a Minimal Replicator facing west — so its first move
+    # attempt targets Hunter's cell at (128, 128), which is occupied,
+    # so the move fails and prey stays at (129, 128) within Hunter's
+    # sense_front range. Hunter's first forage opcode is sense_front; if
+    # prey is still adjacent on Hunter's next iter, the attack lands.
     {:ok, prey_pid} =
       Lenie.start_link(
         id: "PREY",
-        codeome: Lenies.Codeomes.MinimalReplicator.codeome(),
+        codeome: MinimalReplicator.codeome(),
         energy: 5_000.0,
         pos: {129, 128},
         dir: :w,
@@ -141,6 +143,9 @@ defmodule Lenies.Codeomes.HunterTest do
       end
     end)
 
+    # On timeout `poll_until` returns the result of `max_generation/1`
+    # (an integer) rather than `false` — the assert below still fails
+    # correctly because an integer is not == true.
     assert damaged == true,
            "expected prey energy to drop below 5_000 within 10s — Hunter never landed an attack"
   end
