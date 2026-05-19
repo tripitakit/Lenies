@@ -54,16 +54,18 @@ defmodule Lenies.Codeomes.Forager do
   ## Energy
 
   - Codeome length: 139 opcodes
-  - Replication cost ≈ 968 energy (copy 138 × ~6.8 + setup + divide ≈ 29)
+  - Replication cost ≈ 974 energy (copy 139 × ~6.8 + setup + divide ≈ 29)
   - Per-iter forage cost ≈ 9.22 energy (average across the 3 paths)
   - Eat gain at default eat_amount=20 ≈ +10.78 per iter
-  - Steady state at K=128: E_ss ≈ 2 × 128 × 10.78 - 968 ≈ +1792.
+  - Steady state at K=128: E_ss ≈ 2 × 128 × 10.78 − 974 ≈ +1786 (sustainable).
 
   ## Separators
 
-  Two `:push0` separators sit between a `jmp_t` template (4 nops) and
-  the following anchor (4 nops) to prevent the template-extractor from
-  reading 8 consecutive nops.
+  Three `:push0` separators prevent the template-extractor from
+  reading 8 consecutive nops. Two sit between a `jmp_t` template
+  (4 nops) and the following anchor (4 nops); the third sits at the
+  end of the codeome to break the wrap-around from the final `jmp_t`
+  template into LOOP_HEAD.
   """
 
   alias Lenies.Codeome
@@ -166,7 +168,7 @@ defmodule Lenies.Codeomes.Forager do
     # ── pos 116..119: NO_TURN_BR anchor [n0, n0, n0, n1] ─────────────────
     :nop_0, :nop_0, :nop_0, :nop_1,
 
-    # ── pos 120: drop the duplicated 0 ───────────────────────────────────
+    # ── pos 120: drop remaining val (= 0) ────────────────────────────────
     :drop,
 
     # ── pos 121..125: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ───
