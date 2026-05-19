@@ -66,7 +66,7 @@ defmodule Lenies.Codeomes.Hunter do
 
   ## Energy
 
-  - Codeome length: ~164 opcodes
+  - Codeome length: 164 opcodes
   - Replication cost ≈ 164 × 6.8 + 29 ≈ 1144 energy
   - Per-iter normal-path cost ≈ 12.4 energy (sense+test 1.2 + eat+move 4.0 +
     alternation overhead ~5.2 + counter/jmp ~2.0)
