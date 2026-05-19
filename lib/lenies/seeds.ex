@@ -7,6 +7,8 @@ defmodule Lenies.Seeds do
   - `name`: human-readable label
   - `codeome`: a `Lenies.Codeome.t()`
   - `default_options`: keyword/map with initial energy, etc.
+  - `plasmid`: optional `[opcode]` payload carried in the seed's plasmid_buffer
+    (currently only `:minimal_replicator` and `:carnivore` set it).
 
   Vedi spec §7.1 (Controllo / Seed) e §5.5 (seed predefiniti).
   """
@@ -20,12 +22,14 @@ defmodule Lenies.Seeds do
         id: :minimal_replicator,
         name: "Minimal Replicator",
         codeome: MinimalReplicator.codeome(),
+        plasmid: MinimalReplicator.plasmid(),
         default_options: %{energy: 10_000.0}
       },
       %{
         id: :carnivore,
         name: "Carnivore",
         codeome: Carnivore.codeome(),
+        plasmid: Carnivore.plasmid(),
         default_options: %{energy: 10_000.0}
       },
       %{

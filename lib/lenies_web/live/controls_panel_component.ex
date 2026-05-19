@@ -349,16 +349,27 @@ defmodule LeniesWeb.ControlsPanelComponent do
     count = String.to_integer(count_str) |> max(1) |> min(50)
 
     case Lenies.Seeds.get(seed_id) do
-      %{codeome: codeome, default_options: opts, name: seed_name} ->
+      %{codeome: codeome, default_options: opts, name: seed_name} = seed ->
         energy = Map.get(opts, :energy, 500.0)
         dirs = [:n, :s, :e, :w]
+        plasmid_opcodes = Map.get(seed, :plasmid)
+
+        plasmid_opt =
+          if is_list(plasmid_opcodes) and plasmid_opcodes != [] do
+            [plasmids: [Lenies.Plasmid.new(plasmid_opcodes)]]
+          else
+            []
+          end
 
         for _ <- 1..count do
-          Lenies.World.spawn_lenie(codeome,
-            energy: energy,
-            dir: Enum.random(dirs),
-            seed_origin: seed_name
-          )
+          spawn_opts =
+            [
+              energy: energy,
+              dir: Enum.random(dirs),
+              seed_origin: seed_name
+            ] ++ plasmid_opt
+
+          Lenies.World.spawn_lenie(codeome, spawn_opts)
         end
 
       nil ->
