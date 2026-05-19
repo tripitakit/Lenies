@@ -342,6 +342,9 @@ defmodule Lenies.Interpreter do
     end
   end
 
+  # Stack on entry: [..., start_addr, length] with `length` on top. The pop
+  # order below mirrors that — `length` first, then `start_addr` — so that
+  # the producing program writes them push(start_addr); push(length); make_plasmid.
   defp dispatch(:make_plasmid, state, codeome, size) do
     {length, s1} = State.pop(state)
     {start_addr, s2} = State.pop(s1)
@@ -351,32 +354,21 @@ defmodule Lenies.Interpreter do
       new_plasmid = Lenies.Plasmid.new(ops)
       cost = Costs.cost(:make_plasmid, length)
 
-      new_state =
-        s2
-        |> State.push(1)
-        |> Map.put(:plasmids, [new_plasmid])
-        |> State.apply_cost(cost)
-        |> State.advance_ip(size, 1)
+      new_state = %{s2 | plasmids: [new_plasmid]}
 
-      if new_state.energy <= 0 do
-        {:halt, :starvation, new_state}
-      else
-        {:cont, new_state}
-      end
+      new_state
+      |> State.push(1)
+      |> State.apply_cost(cost)
+      |> State.advance_ip(size, 1)
+      |> halt_if_dead()
     else
       cost = Costs.cost(:make_plasmid, 0)
 
-      new_state =
-        s2
-        |> State.push(0)
-        |> State.apply_cost(cost)
-        |> State.advance_ip(size, 1)
-
-      if new_state.energy <= 0 do
-        {:halt, :starvation, new_state}
-      else
-        {:cont, new_state}
-      end
+      s2
+      |> State.push(0)
+      |> State.apply_cost(cost)
+      |> State.advance_ip(size, 1)
+      |> halt_if_dead()
     end
   end
 

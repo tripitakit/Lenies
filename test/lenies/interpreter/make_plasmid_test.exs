@@ -47,7 +47,7 @@ defmodule Lenies.Interpreter.MakePlasmidTest do
     assert_in_delta new_state.energy, 100.0 - 2.0, 0.001
   end
 
-  test ":make_plasmid with length=65 pushes 0" do
+  test ":make_plasmid with length=65 pushes 0 and pays base cost" do
     codeome = Codeome.from_list([:eat, :move, :make_plasmid])
 
     state =
@@ -60,9 +60,10 @@ defmodule Lenies.Interpreter.MakePlasmidTest do
 
     assert [0 | _] = new_state.stack
     assert new_state.plasmids == []
+    assert_in_delta new_state.energy, 100.0 - 2.0, 0.001
   end
 
-  test ":make_plasmid wraps start_addr toroidally" do
+  test ":make_plasmid wraps start_addr toroidally (start_addr at exact size)" do
     codeome = Codeome.from_list([:eat, :move, :turn_left, :make_plasmid])
 
     state =
@@ -76,12 +77,32 @@ defmodule Lenies.Interpreter.MakePlasmidTest do
     assert [%Plasmid{opcodes: [:eat, :move]}] = new_state.plasmids
   end
 
+  test ":make_plasmid toroidal wrap reads across the codeome seam" do
+    # 4-op codeome; start_addr=3, length=3 should read indices 3, 0, 1
+    # (wrapping from end to beginning).
+    codeome = Codeome.from_list([:eat, :move, :turn_left, :defend, :make_plasmid])
+
+    state =
+      State.new(energy: 100.0, pos: {0, 0}, dir: :n)
+      |> State.push(3)
+      |> State.push(3)
+      |> Map.put(:ip, 4)
+
+    new_state = run_one(state, codeome)
+
+    assert [%Plasmid{opcodes: [:defend, :make_plasmid, :eat]}] = new_state.plasmids
+  end
+
   test ":make_plasmid replaces an existing plasmid" do
     codeome = Codeome.from_list([:eat, :move, :make_plasmid])
 
     state =
-      State.new(energy: 100.0, pos: {0, 0}, dir: :n)
-      |> Map.put(:plasmids, [Plasmid.new([:turn_left, :turn_right])])
+      State.new(
+        energy: 100.0,
+        pos: {0, 0},
+        dir: :n,
+        plasmids: [Plasmid.new([:turn_left, :turn_right])]
+      )
       |> State.push(0)
       |> State.push(2)
       |> Map.put(:ip, 2)

@@ -2,9 +2,14 @@ defmodule Lenies.Codeome.Costs do
   @moduledoc """
   Energy costs for opcodes. See spec §4.3.
 
-  `cost/2` accepts `template_len` for jump opcodes (`:jmp_t`, etc.)
-  which pay `0.2 + 0.05 * template_len`. For all other opcodes the
-  parameter is ignored.
+  `cost/2` accepts a context-dependent second parameter:
+  - For jump opcodes (`:jmp_t`, etc.) it is `template_len`; cost is
+    `0.2 + 0.05 * template_len`.
+  - For `:make_plasmid` it is the `length` argument popped from the
+    stack; cost is `2.0 + 0.05 * length`.
+  - For `:conjugate` it is the donor's `plasmid_size`; cost is
+    `4.0 + 0.05 * plasmid_size`.
+  - For all other opcodes the parameter is ignored.
   """
 
   @doc "Energy cost for a single execution of the opcode."

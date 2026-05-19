@@ -11,6 +11,10 @@ defmodule Lenies.Interpreter.State do
   - `age`: incremented by 1 on each batch of K instructions (metabolic tick)
   - `pos`: position `{x, y}` on the grid
   - `call_stack`: IP history for `:call_t` / `:ret`
+  - `plasmids`: list of `%Lenies.Plasmid{}` (MVP holds 0 or 1; forward-
+    compatible with multi-plasmid). Mutated by `:make_plasmid` and
+    `:conjugate`; the host Lenie process mirrors this into its own
+    `state.plasmids` field via `age_and_continue/2`.
   """
 
   @type t :: %__MODULE__{
@@ -48,7 +52,8 @@ defmodule Lenies.Interpreter.State do
       energy: Keyword.get(opts, :energy, 0.0) * 1.0,
       age: Keyword.get(opts, :age, 0),
       pos: Keyword.get(opts, :pos, {0, 0}),
-      call_stack: Keyword.get(opts, :call_stack, [])
+      call_stack: Keyword.get(opts, :call_stack, []),
+      plasmids: Keyword.get(opts, :plasmids, [])
     }
   end
 
