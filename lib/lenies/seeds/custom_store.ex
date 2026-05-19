@@ -121,6 +121,14 @@ defmodule Lenies.Seeds.CustomStore do
   end
 
   defp load_from_disk do
+    # Force-load Codeome.Opcodes so the opcode atoms (:nop_0, :eat, …)
+    # are registered in the BEAM atom table before decode_seed/1 calls
+    # String.to_existing_atom/1. Without this, the supervisor may start
+    # CustomStore before any reference to the Opcodes module loads it,
+    # and decoding would raise ArgumentError and silently drop every
+    # seed in user_seeds.json.
+    Code.ensure_loaded!(Lenies.Codeome.Opcodes)
+
     path = file_path()
 
     case File.read(path) do
