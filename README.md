@@ -203,21 +203,26 @@ Five seeds come pre-loaded in the spawn dropdown:
   `:eat`. Demonstrates predation; thrives in dense populations, starves
   in sparse ones. Source:
   [lib/lenies/codeomes/carnivore.ex](lib/lenies/codeomes/carnivore.ex).
-- **Defender** — pacifist herbivore with a pseudo-random walk: every 5
-  forage steps the Lenie fires a random turn, making it hard to track
-  for a directional predator. Net forage gain is ~5% lower than the
-  Minimal Replicator. Source:
+- **Defender** — defensive herbivore that builds tight clusters. K=32
+  forage budget (vs MR's 128) means it replicates every ~32 cells; the
+  deterministic post-divide `turn_left` spirals descendants outward into
+  a rotating pattern. Forage body is `defend; eat; move` — each iteration
+  applies the defense flag, so attackers pay the defense penalty for
+  every hit on a Defender. Source:
   [lib/lenies/codeomes/defender.ex](lib/lenies/codeomes/defender.ex).
-- **Hunter** — reactive predator. Each forage iteration checks
-  `sense_front` and attacks if it sees a Lenie; every 8 iterations a
-  360° sweep rotates four times left, sensing in each direction and
-  attacking the first prey detected. More efficient than the Carnivore
-  on sparse worlds where blind attacks waste energy. Source:
+- **Hunter** — predator with a diagonal staircase advance and a lock-on
+  attack. Each forage step alternates `turn_right` / `turn_left` via a
+  slot[3] parity counter, producing a diagonal walk that covers both
+  axes. When `sense_front` returns `-1` (Lenie ahead), the Hunter
+  attacks without moving or turning — next iteration faces the same
+  cell, so consecutive attacks land on the same prey until it dies or
+  moves. Source:
   [lib/lenies/codeomes/hunter.ex](lib/lenies/codeomes/hunter.ex).
-- **Forager** — adaptive herbivore. Counts consecutive empty
-  `sense_front` sightings; on the 5th, fires a random turn and resets
-  the counter. Walks away from exhausted patches and tends to settle
-  in hotspots. Source:
+- **Forager** — wandering herbivore. Each step: `eat`, `move`, then a
+  3-way random branch via `pushN mod 3` — 33% no turn, 33% `turn_left`,
+  33% `turn_right`. The direction performs a random walk on cardinal
+  directions; the position drifts as a 2D random walk that fills space
+  rather than tracing straight lines. Source:
   [lib/lenies/codeomes/forager.ex](lib/lenies/codeomes/forager.ex).
 
 ---
