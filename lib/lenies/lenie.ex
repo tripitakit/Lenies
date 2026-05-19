@@ -182,6 +182,7 @@ defmodule Lenies.Lenie do
 
   def handle_info(:background_mutate, state) do
     new_codeome = Lenies.Mutator.background_mutation(state.codeome)
+    cache_codeome_by_hash(new_codeome)
     {:noreply, %{state | codeome: new_codeome}}
   end
 
