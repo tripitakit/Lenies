@@ -254,12 +254,14 @@ defmodule Lenies.ConjugationTest do
     Process.unlink(pid)
 
     # Trigger background mutation 50 times. Each fires a single random
-    # substitution. With 50 substitutions on a 30-opcode buffer of all
-    # :eat, the probability that all 50 picks land on :eat is
-    # (1/36)^50 ≈ 0 — so we expect to see at least one different opcode.
+    # substitution. With 50 substitutions on a 38-opcode whitelist (size
+    # of @opcodes), the probability that all 50 picks land on :eat is
+    # (1/38)^50 ≈ 0 — so we expect to see at least one different opcode.
     for _ <- 1..50, do: send(pid, :background_mutate)
-    Process.sleep(200)
 
+    # :sys.get_state below is itself a synchronous mailbox barrier — by
+    # the time it returns, all 50 :background_mutate messages have been
+    # processed (FIFO mailbox). No explicit sleep needed.
     snapshot = :sys.get_state(pid)
     [%Plasmid{opcodes: new_ops}] = snapshot.plasmids
 
