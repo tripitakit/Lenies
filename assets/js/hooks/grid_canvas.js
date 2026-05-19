@@ -118,8 +118,22 @@ const GridCanvas = {
       const durationMs = 3000;
       const expireAt = now + durationMs;
 
-      this.flashingCells.set(`${sender.x},${sender.y}`, { startMs: now, expireAt });
-      this.flashingCells.set(`${receiver.x},${receiver.y}`, { startMs: now, expireAt });
+      const senderKey = `${sender.x},${sender.y}`;
+      const receiverKey = `${receiver.x},${receiver.y}`;
+
+      this.flashingCells.set(senderKey, { startMs: now, expireAt });
+      this.flashingCells.set(receiverKey, { startMs: now, expireAt });
+
+      // Fallback cleanup: drawFlashOverlay prunes expired entries during
+      // renderFrame, but if the simulation pauses or the tab backgrounds,
+      // no renders fire and entries pile up. setTimeout ensures the map
+      // never holds entries past their wall-clock expiry.
+      setTimeout(() => {
+        const s = this.flashingCells && this.flashingCells.get(senderKey);
+        if (s && s.expireAt <= performance.now()) this.flashingCells.delete(senderKey);
+        const r = this.flashingCells && this.flashingCells.get(receiverKey);
+        if (r && r.expireAt <= performance.now()) this.flashingCells.delete(receiverKey);
+      }, durationMs + 50);
     });
 
     this.handleEvent("render_frame", (payload) => {
@@ -675,6 +689,7 @@ const GridCanvas = {
     this.lastClickCell = null;
     this.lastPayload = null;
     this.cachedLenieBytes = null;
+    if (this.flashingCells) this.flashingCells.clear();
   },
 };
 
