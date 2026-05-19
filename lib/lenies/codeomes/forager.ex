@@ -1,72 +1,75 @@
 defmodule Lenies.Codeomes.Forager do
   @moduledoc """
-  Adaptive herbivore that abandons resource-empty patches. Each forage
-  iteration the seed checks `sense_front`; if the cell directly in front
-  is empty (the wire format pushes 0), a slot[3] counter increments. On
-  the 5th consecutive empty sighting, the seed fires a random
-  turn_left or turn_right and resets the counter. Non-empty sightings
-  reset the counter immediately.
+  Wandering herbivore. Each forage iteration: eat, move, then a 3-way
+  random branch via `pushN mod 3` — 33% no turn, 33% turn_left, 33%
+  turn_right. The direction performs a random walk on {N, E, S, W},
+  so the position drifts as a 2D random walk and fills space rather
+  than tracing straight lines.
 
-  ## VM-side relaxation
-
-  The spec specified "low energy = sense_front < 20" but the Lenies VM
-  has no less-than opcode — emulating `< 20` would cost ~16 energy per
-  forage iteration. The implementation uses **T = 0** (count only
-  truly empty cells via `jz_t` on the sense_front result). Behaviour
-  is qualitatively the same — the seed walks away from exhausted
-  patches — just at the absolute exhaustion point rather than a soft
-  20-unit threshold.
-
-  Like Hunter, Forager replaces MR's post-divide random turn with a
-  deterministic `turn_left` so the three new in-forage anchors fit in
-  the 4-bit template namespace.
-
-  ## Anchors added vs MinimalReplicator
-
-  | Label               | Anchor           | Jump template     |
-  |---------------------|------------------|-------------------|
-  | EMPTY_ANCHOR        | [n0,n0,n0,n1]    | [n1,n1,n1,n0]     |
-  | DO_TURN_ANCHOR      | [n0,n1,n1,n1]    | [n1,n0,n0,n0]     |
-  | TURN_LEFT_BR_ANCHOR | [n0,n1,n0,n0]    | [n1,n0,n1,n1]     |
-
-  ## Forage loop structure (decrement-first, K = 128)
+  ## Forage body
 
   ```
   FORAGE_LOOP_HEAD:
     decrement slot[0]; if 0 → jz_t LOOP_HEAD (exit)
-    sense_front
-    dup; jz_t EMPTY              ; pops the dup, jumps if value == 0
-    drop                          ; non-empty: drop the remaining value
-    eat; move
-    slot[3] := 0                  ; reset low-energy counter
+    eat
+    move
+    pushN; mod 3                  ; val ∈ {0, 1, 2}
+    dup; jz_t NO_TURN_BR          ; pops dup; if val == 0
+    push1; sub                    ; val=1 → 0; val=2 → 1
+    jz_t TURN_LEFT_BR             ; pops; if was 1
+    ; val was 2
+    turn_right
     jmp_t FORAGE_LOOP_HEAD
-  EMPTY:
-    drop                          ; drop the leftover value (= 0)
-    eat; move                     ; eat is a no-op cost-wise (still pays 2)
-    counter := slot[3] + 1
-    if (counter mod 5) != 0:
-      slot[3] := counter; jmp_t FORAGE_LOOP_HEAD
-    else:                                          (DO_TURN)
-      slot[3] := 0
-      if (pushN mod 2) == 0:                       (jz_t TURN_LEFT_BR)
-        turn_right
-      else:                                        (TURN_LEFT_BR)
-        turn_left
-      jmp_t FORAGE_LOOP_HEAD
+
+  NO_TURN_BR:
+    drop                          ; drop the duplicated 0
+    jmp_t FORAGE_LOOP_HEAD
+
+  TURN_LEFT_BR:
+    turn_left
+    jmp_t FORAGE_LOOP_HEAD
   ```
 
-  ## Separators `push0`
+  ## Anchors
 
-  The template-extractor reads up to `template_max_len` (default 8) consecutive
-  nops. Three sites in this codeome have a `jmp_t` template (4 nops) immediately
-  before an anchor (4 nops), totalling 8 consecutive nops. A `:push0` is inserted
-  between each pair to prevent mis-extraction.
+  | Label             | Anchor             | Jump template      |
+  |-------------------|--------------------|--------------------|
+  | LOOP_HEAD         | [n1, n1, n1, n1]   | [n0, n0, n0, n0]   |
+  | COPY_LOOP_HEAD    | [n1, n0, n0, n1]   | [n0, n1, n1, n0]   |
+  | ABORT_TARGET      | [n1, n1, n0, n0]   | [n0, n0, n1, n1]   |
+  | FORAGE_LOOP_HEAD  | [n0, n1, n0, n1]   | [n1, n0, n1, n0]   |
+  | NO_TURN_BR        | [n0, n0, n0, n1]   | [n1, n1, n1, n0]   |
+  | TURN_LEFT_BR      | [n0, n1, n1, n1]   | [n1, n0, n0, n0]   |
+
+  The deterministic post-divide `turn_left` (vs MR's random branch)
+  drops `TURN_LEFT_ANCHOR` and `SKIP_TURN_ANCHOR`, freeing the
+  pattern budget for the two new in-forage anchors.
+
+  ## `pushN mod 3` bias
+
+  `pushN` returns 0..255. 256 mod 3 = 1, so values 0 and 1 appear 86
+  times in a perfect sample while value 2 appears 84 times. Relative
+  bias ≈ 2.4%. Behaviorally negligible.
+
+  ## Energy
+
+  - Codeome length: 139 opcodes
+  - Replication cost ≈ 968 energy (copy 138 × ~6.8 + setup + divide ≈ 29)
+  - Per-iter forage cost ≈ 9.22 energy (average across the 3 paths)
+  - Eat gain at default eat_amount=20 ≈ +10.78 per iter
+  - Steady state at K=128: E_ss ≈ 2 × 128 × 10.78 - 968 ≈ +1792.
+
+  ## Separators
+
+  Two `:push0` separators sit between a `jmp_t` template (4 nops) and
+  the following anchor (4 nops) to prevent the template-extractor from
+  reading 8 consecutive nops.
   """
 
   alias Lenies.Codeome
 
   @opcodes [
-    # ── pos 0..3: LOOP_HEAD anchor ───────────────────────────────────────
+    # ── pos 0..3: LOOP_HEAD anchor [n1, n1, n1, n1] ──────────────────────
     :nop_1, :nop_1, :nop_1, :nop_1,
 
     # ── pos 4..6: get_size; store slot[0] ────────────────────────────────
@@ -75,13 +78,13 @@ defmodule Lenies.Codeomes.Forager do
     # ── pos 7..9: allocate(N) ────────────────────────────────────────────
     :push0, :load, :allocate,
 
-    # ── pos 10..14: jz_t ABORT_TARGET ────────────────────────────────────
+    # ── pos 10..14: jz_t ABORT_TARGET (template [n0,n0,n1,n1]) ──────────
     :jz_t, :nop_0, :nop_0, :nop_1, :nop_1,
 
     # ── pos 15..17: init slot[1] = 0 ─────────────────────────────────────
     :push0, :push1, :store,
 
-    # ── pos 18..21: COPY_LOOP_HEAD anchor ────────────────────────────────
+    # ── pos 18..21: COPY_LOOP_HEAD anchor [n1, n0, n0, n1] ───────────────
     :nop_1, :nop_0, :nop_0, :nop_1,
 
     # ── pos 22..29: copy body ────────────────────────────────────────────
@@ -91,111 +94,97 @@ defmodule Lenies.Codeomes.Forager do
     # ── pos 30..35: increment slot[1] ────────────────────────────────────
     :push1, :load, :push1, :add, :push1, :store,
 
-    # ── pos 36..40: loop condition ───────────────────────────────────────
+    # ── pos 36..40: loop condition (N - (counter+1) != 0?) ──────────────
     :push0, :load, :push1, :load, :sub,
 
-    # ── pos 41..45: jnz_t COPY_LOOP_HEAD ─────────────────────────────────
+    # ── pos 41..45: jnz_t COPY_LOOP_HEAD (template [n0,n1,n1,n0]) ───────
     :jnz_t, :nop_0, :nop_1, :nop_1, :nop_0,
 
     # ── pos 46: divide ───────────────────────────────────────────────────
     :divide,
 
-    # ── pos 47..50: ABORT_TARGET anchor ──────────────────────────────────
+    # ── pos 47..50: ABORT_TARGET anchor [n1, n1, n0, n0] ─────────────────
+    # Landing pad for both jz_t (allocate failed) and post-divide fall-through.
     :nop_1, :nop_1, :nop_0, :nop_0,
 
-    # ── pos 51: post-divide deterministic turn ──────────────────────────
+    # ── pos 51: deterministic post-divide turn ───────────────────────────
     :turn_left,
 
-    # ── pos 52..65: build K=128 (push1 + 7 doublings) ───────────────────
+    # ── pos 52..65: build K=128 (push1 + 7×(dup,add)) ────────────────────
     :push1, :dup, :add, :dup, :add, :dup, :add,
     :dup, :add, :dup, :add, :dup, :add, :dup, :add,
 
-    # ── K+1 = 129 (decrement-first loop overshoots by 1) ─────────────────
+    # ── pos 66..67: K+1 = 129 (decrement-first loop overshoots by 1) ────
     :push1, :add,
 
-    # ── store K+1 in slot[0] ─────────────────────────────────────────────
+    # ── pos 68..69: store K+1 in slot[0] ─────────────────────────────────
     :push0, :store,
 
-    # ── init slot[3] := 0 ────────────────────────────────────────────────
-    # Stack trace: push0[0]; push1[0,1]; push1[0,1,1]; push1[0,1,1,1];
-    # add[0,1,2]; add[0,3]; store → slot[3] := 0. (7 opcodes, two adds.)
-    :push0, :push1, :push1, :push1, :add, :add, :store,
-
-    # ── FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ─────────────────────────
+    # ── pos 70..73: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ─────────────
     :nop_0, :nop_1, :nop_0, :nop_1,
 
-    # ── decrement slot[0]; load result for exit check ────────────────────
+    # ── pos 74..79: decrement slot[0] ────────────────────────────────────
     :push0, :load, :push1, :sub, :push0, :store,
+
+    # ── pos 80..81: load slot[0] for exit check ──────────────────────────
     :push0, :load,
 
-    # ── jz_t LOOP_HEAD (exit forage when counter is 0) ───────────────────
+    # ── pos 82..86: jz_t LOOP_HEAD (template [n0,n0,n0,n0]) — exit forage ─
     :jz_t, :nop_0, :nop_0, :nop_0, :nop_0,
 
-    # ── sense_front; dup; jz_t EMPTY_ANCHOR ──────────────────────────────
-    :sense_front,
+    # ── pos 87..88: forage body — eat, move ──────────────────────────────
+    :eat, :move,
+
+    # ── pos 89..95: pushN; build 3; mod (pushN mod 3) ────────────────────
+    # pushN [r]; push1 [r,1]; push1 [r,1,1]; push1 [r,1,1,1]; add [r,1,2];
+    # add [r,3]; mod [r mod 3].
+    :pushN, :push1, :push1, :push1, :add, :add, :mod,
+
+    # ── pos 96: dup the result ───────────────────────────────────────────
     :dup,
+
+    # ── pos 97..101: jz_t NO_TURN_BR (template [n1,n1,n1,n0]) ───────────
+    # Pops top dup. If 0 → jump to NO_TURN_BR. Else stack still has [val].
     :jz_t, :nop_1, :nop_1, :nop_1, :nop_0,
 
-    # ── (non-empty path) drop remaining value; eat; move; reset slot[3] ──
-    :drop,
-    :eat, :move,
-    # NOTE: plan had :push1,:push1,:push1,:add,:store — fixed to two adds to actually build slot 3.
-    :push0, :push1, :push1, :push1, :add, :add, :store,    # slot[3] := 0
-    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,                # template for FORAGE_LOOP_HEAD
-    # NOTE: :push0 separator prevents 8-consecutive-nop template extraction (same role as MR pos 67 and pos 120).
-    :push0,
+    # ── pos 102..103: val - 1 (val was 1 or 2) ───────────────────────────
+    :push1, :sub,
 
-    # ── EMPTY_ANCHOR [n0,n0,n0,n1] ──────────────────────────────────────
-    :nop_0, :nop_0, :nop_0, :nop_1,
-
-    # ── (empty path) drop leftover 0; eat; move ──────────────────────────
-    :drop,
-    :eat, :move,
-
-    # ── increment slot[3]; check mod 5 ───────────────────────────────────
-    # NOTE: plan had :push1,:push1,:push1,:add,:load — fixed to two adds to actually build slot 3.
-    :push1, :push1, :push1, :add, :add, :load,             # build slot idx 3, load
-    :push1, :add,                                           # counter + 1
-    :dup,                                                   # [counter+1, counter+1]
-    # build 5 = push1(1); dup+add(2); dup+add(4); push1+add(5)
-    :push1, :dup, :add, :dup, :add, :push1, :add,
-    :mod,
-
-    # ── jz_t DO_TURN_ANCHOR — if (counter+1) mod 5 == 0 ─────────────────
+    # ── pos 104..108: jz_t TURN_LEFT_BR (template [n1,n0,n0,n0]) ────────
+    # Pops top. If 0 (val was 1) → jump. Else (val was 2) fall through.
     :jz_t, :nop_1, :nop_0, :nop_0, :nop_0,
 
-    # ── (mod != 0) store counter+1 to slot[3]; jmp_t FORAGE_LOOP_HEAD ───
-    # NOTE: plan had :push1,:push1,:push1,:add,:store — fixed to two adds to actually build slot 3.
-    :push1, :push1, :push1, :add, :add, :store,            # build slot idx 3, store
-    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,               # template for FORAGE_LOOP_HEAD
-    # NOTE: :push0 separator prevents 8-consecutive-nop template extraction (same role as MR pos 67 and pos 120).
+    # ── pos 109: turn_right (val was 2) ──────────────────────────────────
+    :turn_right,
+
+    # ── pos 110..114: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ───
+    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+
+    # ── pos 115: separator (prevents 8-consecutive-nop misread) ──────────
     :push0,
 
-    # ── DO_TURN_ANCHOR [n0,n1,n1,n1] ────────────────────────────────────
+    # ── pos 116..119: NO_TURN_BR anchor [n0, n0, n0, n1] ─────────────────
+    :nop_0, :nop_0, :nop_0, :nop_1,
+
+    # ── pos 120: drop the duplicated 0 ───────────────────────────────────
+    :drop,
+
+    # ── pos 121..125: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ───
+    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+
+    # ── pos 126: separator ───────────────────────────────────────────────
+    :push0,
+
+    # ── pos 127..130: TURN_LEFT_BR anchor [n0, n1, n1, n1] ──────────────
     :nop_0, :nop_1, :nop_1, :nop_1,
 
-    # ── (mod == 0) drop counter+1; reset slot[3] := 0 ───────────────────
-    :drop,
-    :push0, :push1, :push1, :push1, :add, :add, :store,   # slot[3] := 0
-
-    # ── random turn: pushN mod 2; jz_t TURN_LEFT_BR_ANCHOR ───────────────
-    :pushN, :push1, :push1, :add, :mod,
-    :jz_t, :nop_1, :nop_0, :nop_1, :nop_1,                # template for TURN_LEFT_BR
-
-    # ── turn_right path ──────────────────────────────────────────────────
-    :turn_right,
-    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,               # template for FORAGE_LOOP_HEAD
-    # NOTE: :push0 separator prevents 8-consecutive-nop template extraction (same role as MR pos 67 and pos 120).
-    :push0,
-
-    # ── TURN_LEFT_BR_ANCHOR [n0,n1,n0,n0] ───────────────────────────────
-    :nop_0, :nop_1, :nop_0, :nop_0,
-
-    # ── turn_left path ───────────────────────────────────────────────────
+    # ── pos 131: turn_left ───────────────────────────────────────────────
     :turn_left,
-    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,               # template for FORAGE_LOOP_HEAD
 
-    # ── separator (final wrap protection) ───────────────────────────────
+    # ── pos 132..136: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ───
+    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+
+    # ── pos 137: separator (final wrap protection) ───────────────────────
     :push0
   ]
 
