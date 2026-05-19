@@ -91,5 +91,11 @@ defmodule Lenies.MutatorTest do
       original = List.duplicate(:eat, 20)
       assert Mutator.copy_mutate_list(original, 0.0, 0.0, 1.0) == []
     end
+
+    test "rate 1.0 insert doubles the list length" do
+      original = List.duplicate(:eat, 5)
+      mutated = Mutator.copy_mutate_list(original, 0.0, 1.0, 0.0)
+      assert length(mutated) == 10
+    end
   end
 end

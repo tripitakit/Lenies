@@ -41,26 +41,10 @@ defmodule Lenies.Mutator do
   end
 
   @doc """
-  Apply a single point mutation (random substitution) to the Codeome.
-  Used for background mutation.
-  """
-  @spec background_mutation(Codeome.t()) :: Codeome.t()
-  def background_mutation(%Codeome{} = c) do
-    n = Codeome.size(c)
-
-    if n == 0 do
-      c
-    else
-      pos = :rand.uniform(n) - 1
-      new_op = random_opcode()
-      list = Codeome.to_list(c) |> List.replace_at(pos, new_op)
-      Codeome.from_list(list)
-    end
-  end
-
-  @doc """
   Apply a single random substitution to a plain opcode list. Returns the
-  list unchanged if empty.
+  list unchanged if empty. Plasmids store opcodes as plain lists so this
+  variant avoids a Codeome round-trip; `background_mutation/1` delegates
+  here for the Codeome case.
   """
   @spec background_mutation_list([atom()]) :: [atom()]
   def background_mutation_list([]), do: []
@@ -70,6 +54,18 @@ defmodule Lenies.Mutator do
     pos = :rand.uniform(n) - 1
     new_op = random_opcode()
     List.replace_at(opcodes, pos, new_op)
+  end
+
+  @doc """
+  Apply a single point mutation (random substitution) to the Codeome.
+  Used for background mutation. Delegates to `background_mutation_list/1`.
+  """
+  @spec background_mutation(Codeome.t()) :: Codeome.t()
+  def background_mutation(%Codeome{} = c) do
+    c
+    |> Codeome.to_list()
+    |> background_mutation_list()
+    |> Codeome.from_list()
   end
 
   @doc """
