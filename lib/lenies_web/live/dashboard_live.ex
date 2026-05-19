@@ -453,17 +453,13 @@ defmodule LeniesWeb.DashboardLive do
      push_event(socket, "fx_conjugation", %{
        sender: %{x: sender_x, y: sender_y},
        receiver: %{x: receiver_x, y: receiver_y},
-       donor_id: short_id(info.donor_id),
-       recipient_id: short_id(info.recipient_id),
+       donor_seed: info.donor_seed,
+       recipient_seed: info.recipient_seed,
        plasmid_label: plasmid_label(info.plasmid_hash)
      })}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
-
-  # Show the first 4 chars of an id (full ids are long random strings).
-  defp short_id(id) when is_binary(id), do: String.slice(id, 0, 4)
-  defp short_id(_), do: "????"
 
   # Recognise the two shipped seed plasmids by their phash2; fall back to
   # the hex hash for unknown payloads.

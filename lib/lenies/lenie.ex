@@ -430,6 +430,16 @@ defmodule Lenies.Lenie do
     end
   end
 
+  # Read the seed_origin of a Lenie from the :lenies ETS snapshot. Lenies
+  # spawned directly via start_link (tests) without a seed_origin opt
+  # snapshot as nil; fall back to "?" for the dashboard display.
+  defp lookup_seed_origin(lenie_id) do
+    case :ets.lookup(:lenies, lenie_id) do
+      [{_, snap}] -> Map.get(snap, :seed_origin) || "?"
+      [] -> "?"
+    end
+  end
+
   defp conjugate_failure(interp, plasmid_size) do
     new_interp =
       interp
@@ -463,7 +473,9 @@ defmodule Lenies.Lenie do
           {:conjugation,
            %{
              donor_id: donor_id,
+             donor_seed: lookup_seed_origin(donor_id),
              recipient_id: recipient_id,
+             recipient_seed: lookup_seed_origin(recipient_id),
              plasmid_hash: plasmid_hash,
              sender_pos: interp.pos,
              receiver_pos: front_cell(interp.pos, interp.dir)

@@ -113,7 +113,7 @@ const GridCanvas = {
 
     this.flashingCells = new Map(); // key: "x,y" -> { startMs, expireAt }
 
-    this.handleEvent("fx_conjugation", ({ sender, receiver, donor_id, recipient_id, plasmid_label }) => {
+    this.handleEvent("fx_conjugation", ({ sender, receiver, donor_seed, recipient_seed, plasmid_label }) => {
       const now = performance.now();
       const durationMs = 3000;
       const expireAt = now + durationMs;
@@ -135,8 +135,7 @@ const GridCanvas = {
         if (r && r.expireAt <= performance.now()) this.flashingCells.delete(receiverKey);
       }, durationMs + 50);
 
-      this.playConjugationBeep();
-      this.appendConjugationLog(plasmid_label, donor_id, recipient_id);
+      this.appendConjugationLog(plasmid_label, donor_seed, recipient_seed);
     });
 
     this.handleEvent("render_frame", (payload) => {
@@ -676,47 +675,19 @@ const GridCanvas = {
     }
   },
 
-  // Short Web Audio API blip on every conjugation. A 660Hz sine, 60ms,
-  // low volume. The AudioContext is created lazily on the first
-  // conjugation event so the browser doesn't complain about autoplay
-  // policies during page load.
-  playConjugationBeep() {
-    try {
-      if (!this.audioCtx) {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return;
-        this.audioCtx = new AC();
-      }
-      const ctx = this.audioCtx;
-      if (ctx.state === "suspended") ctx.resume();
-
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = 660;
-      gain.gain.value = 0.08;
-      osc.connect(gain).connect(ctx.destination);
-      const now = ctx.currentTime;
-      osc.start(now);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
-      osc.stop(now + 0.07);
-    } catch (_e) {
-      // Audio is best-effort; never break the canvas hook on audio errors.
-    }
-  },
-
   // Append a one-line event to the conjugation log next to the World
-  // header. Keeps the last 4 entries; older lines fade out via CSS.
-  appendConjugationLog(plasmidLabel, donorId, recipientId) {
+  // header. Each event is its own bordered box. Keeps the last 3 boxes
+  // visible; older entries fade out and are removed via CSS + timers.
+  appendConjugationLog(plasmidLabel, donorSeed, recipientSeed) {
     const log = document.getElementById("conjugation-log");
     if (!log) return;
 
     const line = document.createElement("div");
     line.className = "conjugation-log-line";
-    line.textContent = `${plasmidLabel} : ${donorId} > ${recipientId}`;
+    line.textContent = `${plasmidLabel} : ${donorSeed} > ${recipientSeed}`;
     log.appendChild(line);
 
-    while (log.childElementCount > 4) {
+    while (log.childElementCount > 3) {
       log.removeChild(log.firstElementChild);
     }
 
