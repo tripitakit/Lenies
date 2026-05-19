@@ -355,6 +355,19 @@ defmodule LeniesWeb.DashboardLive do
     end
   end
 
+  # Mousemove on the world map fires this event whenever the hovered
+  # buffer cell changes (the JS hook debounces by tracked cell). The
+  # response carries seed_origin / age / energy for the Lenie at that
+  # cell, or `present: false` if the cell is empty — the JS then shows
+  # or hides the tooltip accordingly. The requested {x, y} are echoed
+  # back so a stale response (cursor already moved to another cell) can
+  # be discarded on the client.
+  def handle_event("request_lenie_hover", %{"x" => x, "y" => y}, socket)
+      when is_integer(x) and is_integer(y) do
+    payload = lenie_hover_payload(x, y)
+    {:noreply, push_event(socket, "lenie_hover_info", payload)}
+  end
+
   defp lookup_lenie_at_cell(x, y) do
     with [{_, %{lenie_id: id}}] when is_binary(id) <- :ets.lookup(:cells, {x, y}),
          [{^id, lenie_meta}] <- :ets.lookup(:lenies, id),
@@ -362,6 +375,23 @@ defmodule LeniesWeb.DashboardLive do
       {:ok, hash}
     else
       _ -> :error
+    end
+  end
+
+  defp lenie_hover_payload(x, y) do
+    with [{_, %{lenie_id: id}}] when is_binary(id) <- :ets.lookup(:cells, {x, y}),
+         [{^id, snap}] <- :ets.lookup(:lenies, id) do
+      %{
+        x: x,
+        y: y,
+        present: true,
+        seed_origin: Map.get(snap, :seed_origin),
+        age: Map.get(snap, :age, 0),
+        energy: trunc(Map.get(snap, :energy, 0.0)),
+        codeome_hash: Map.get(snap, :codeome_hash)
+      }
+    else
+      _ -> %{x: x, y: y, present: false}
     end
   end
 

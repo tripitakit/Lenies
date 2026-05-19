@@ -338,6 +338,41 @@
   user-select: none;
 }
 
+/* Lenie hover tooltip — appended directly to <body> by the GridCanvas
+   hook so its position is decoupled from the canvas's transformed
+   container, then positioned at cursor.clientX/Y + offset. Pointer
+   events disabled so the tooltip never steals hover from the cell
+   underneath. */
+.lenie-tooltip {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  display: none;
+  font-family: ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: #e2e8f0;
+  background: rgba(2, 6, 23, 0.92);
+  border: 1px solid rgba(34, 211, 238, 0.45);
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.18);
+  padding: 4px 8px;
+  min-width: 140px;
+  user-select: none;
+}
+
+.lenie-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  line-height: 1.35;
+}
+
+.lenie-tooltip-label {
+  color: #67e8f9;
+  opacity: 0.7;
+  text-transform: lowercase;
+}
+
 /* ----- Lenies dashboard: codeome opcode category colors ----- */
 .lenies-dashboard .op-template     { color: #64748b; }
 .lenies-dashboard .op-stack        { color: #fbbf24; }

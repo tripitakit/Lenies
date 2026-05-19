@@ -81,11 +81,21 @@ const GridCanvas = {
     // mousemove doesn't pay the base64 decode cost every event.
     this.cachedLenieBytes = null;
 
+    // Hover-tooltip state — see updateHoverCursor / onTooltipInfo.
+    this.hoveredCell = null;            // {x, y} | null
+    this.lastCursorClient = null;       // {clientX, clientY}
+    this.tooltipEl = this.createTooltipEl();
+
     this.handleEvent("render_frame", (payload) => {
       this.lastPayload = payload;
       this.cachedLenieBytes = this.decodeBase64(payload.lenies);
       this.renderFrame();
     });
+
+    // Server pushes hover info in response to our request_lenie_hover
+    // event. Discard stale responses — the cursor may have moved to a
+    // different cell while the round-trip was in flight.
+    this.handleEvent("lenie_hover_info", (info) => this.onTooltipInfo(info));
 
     this.attachInteractionHandlers();
 
@@ -192,6 +202,9 @@ const GridCanvas = {
     this.onMouseLeave = () => {
       this.isDragging = false;
       this.canvas.style.cursor = "grab";
+      // Cursor left the canvas entirely — drop hover state so a
+      // re-entry on the same cell triggers a fresh tooltip request.
+      this.setHoveredCell(null);
     };
 
     this.onDoubleClick = (e) => {
@@ -239,20 +252,118 @@ const GridCanvas = {
     this.pushEvent("select_lenie_at_cell", { x, y });
   },
 
-  // Hover-cursor selector: `pointer` when the cell under the cursor
-  // holds a Lenie (dblclick-to-edit hint), `grab` otherwise. Skipped
-  // entirely when no frame has been rendered yet (lookup table absent).
+  // Hover-cursor + tooltip dispatcher. Runs on every idle mousemove.
+  //   - Cursor → `pointer` over an occupied cell, `grab` otherwise.
+  //   - Tooltip → request fresh info from the server only when the
+  //     hovered cell CHANGES (not on every mousemove pixel), so the
+  //     channel isn't spammed during fast drags. The tooltip element
+  //     follows the cursor each frame regardless.
   updateHoverCursor(e) {
     if (!this.cachedLenieBytes) return;
+    this.lastCursorClient = { clientX: e.clientX, clientY: e.clientY };
+
     const { bufX, bufY } = this.cursorToBuffer(e);
     const x = Math.floor(bufX);
     const y = Math.floor(bufY);
+
     if (x < 0 || y < 0 || x >= this.gridW || y >= this.gridH) {
       this.canvas.style.cursor = "grab";
+      this.setHoveredCell(null);
       return;
     }
+
     const occupied = this.cachedLenieBytes[y * this.gridW + x] > 0;
     this.canvas.style.cursor = occupied ? "pointer" : "grab";
+
+    if (!occupied) {
+      this.setHoveredCell(null);
+      return;
+    }
+
+    // Same cell as last mousemove → just reposition the tooltip if
+    // it's visible. New cell → ask the server for its details.
+    if (
+      !this.hoveredCell ||
+      this.hoveredCell.x !== x ||
+      this.hoveredCell.y !== y
+    ) {
+      this.setHoveredCell({ x, y });
+      this.pushEvent("request_lenie_hover", { x, y });
+    } else {
+      this.positionTooltip();
+    }
+  },
+
+  // Transition helper: when leaving a Lenie cell (or the canvas), hide
+  // the tooltip and forget the cell so the next entry triggers a fresh
+  // request even if it's the same coord we left from.
+  setHoveredCell(cell) {
+    this.hoveredCell = cell;
+    if (!cell) this.hideTooltip();
+  },
+
+  onTooltipInfo(info) {
+    if (!info || !info.present) {
+      this.hideTooltip();
+      return;
+    }
+    // Stale response — the cursor moved before the round-trip
+    // completed. Drop the result; the new cell already sent its own
+    // request.
+    if (
+      !this.hoveredCell ||
+      this.hoveredCell.x !== info.x ||
+      this.hoveredCell.y !== info.y
+    ) {
+      return;
+    }
+    this.tooltipEl.innerHTML = this.renderTooltip(info);
+    this.tooltipEl.style.display = "block";
+    this.positionTooltip();
+  },
+
+  hideTooltip() {
+    if (this.tooltipEl) this.tooltipEl.style.display = "none";
+  },
+
+  positionTooltip() {
+    if (!this.tooltipEl || !this.lastCursorClient) return;
+    if (this.tooltipEl.style.display === "none") return;
+    // 14px right + 14px below the cursor keeps the tooltip clear of
+    // the cursor's hit-area without flickering when it lands on the
+    // edge of the cell.
+    const x = this.lastCursorClient.clientX + 14;
+    const y = this.lastCursorClient.clientY + 14;
+    this.tooltipEl.style.left = `${x}px`;
+    this.tooltipEl.style.top = `${y}px`;
+  },
+
+  // Render the tooltip's body. `seed_origin` may be null (Lenies spawned
+  // before seed_origin tracking, or by direct Lenie.start_link without
+  // a seed_origin opt) — show "—" in that case.
+  renderTooltip(info) {
+    const seed = info.seed_origin ? this.escapeHtml(info.seed_origin) : "—";
+    return (
+      `<div class="lenie-tooltip-row"><span class="lenie-tooltip-label">origin</span><span>${seed}</span></div>` +
+      `<div class="lenie-tooltip-row"><span class="lenie-tooltip-label">age</span><span>${info.age}</span></div>` +
+      `<div class="lenie-tooltip-row"><span class="lenie-tooltip-label">energy</span><span>${info.energy}</span></div>`
+    );
+  },
+
+  escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  },
+
+  createTooltipEl() {
+    const el = document.createElement("div");
+    el.className = "lenie-tooltip";
+    el.style.display = "none";
+    document.body.appendChild(el);
+    return el;
   },
 
   // Display pixels per buffer cell at current zoom.
@@ -408,6 +519,12 @@ const GridCanvas = {
       clearTimeout(this.pendingClickTimer);
       this.pendingClickTimer = null;
     }
+    if (this.tooltipEl && this.tooltipEl.parentNode) {
+      this.tooltipEl.parentNode.removeChild(this.tooltipEl);
+    }
+    this.tooltipEl = null;
+    this.hoveredCell = null;
+    this.lastCursorClient = null;
     this.lastPayload = null;
     this.cachedLenieBytes = null;
   },
