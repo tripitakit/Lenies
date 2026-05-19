@@ -131,7 +131,15 @@ defmodule LeniesWeb.DashboardLive do
 
       <div class="flex-1 flex gap-3 min-h-0">
         <section class="panel p-3 flex flex-col gap-2 min-h-0 shrink-0 dashboard-map-pane">
-          <h2 class="text-xs">▮ World</h2>
+          <div class="flex items-center gap-3">
+            <h2 class="text-xs shrink-0">▮ World</h2>
+            <div
+              id="conjugation-log"
+              phx-update="ignore"
+              class="conjugation-log flex-1 text-[10px] font-mono leading-tight overflow-hidden whitespace-nowrap"
+            >
+            </div>
+          </div>
           <%!-- phx-update="ignore" keeps morphdom from patching the canvas
                 BITMAP; the element's own attributes (data-show-*,
                 data-highlight-hue) are still morphed on every render so
@@ -437,15 +445,38 @@ defmodule LeniesWeb.DashboardLive do
     {:noreply, assign(socket, :inspector_dirty, dirty)}
   end
 
-  def handle_info({:conjugation, {sender_x, sender_y}, {receiver_x, receiver_y}}, socket) do
+  def handle_info({:conjugation, %{} = info}, socket) do
+    {sender_x, sender_y} = info.sender_pos
+    {receiver_x, receiver_y} = info.receiver_pos
+
     {:noreply,
      push_event(socket, "fx_conjugation", %{
        sender: %{x: sender_x, y: sender_y},
-       receiver: %{x: receiver_x, y: receiver_y}
+       receiver: %{x: receiver_x, y: receiver_y},
+       donor_id: short_id(info.donor_id),
+       recipient_id: short_id(info.recipient_id),
+       plasmid_label: plasmid_label(info.plasmid_hash)
      })}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
+
+  # Show the first 4 chars of an id (full ids are long random strings).
+  defp short_id(id) when is_binary(id), do: String.slice(id, 0, 4)
+  defp short_id(_), do: "????"
+
+  # Recognise the two shipped seed plasmids by their phash2; fall back to
+  # the hex hash for unknown payloads.
+  @twitch_hash :erlang.phash2(Lenies.Codeomes.MinimalReplicator.plasmid(), 16_777_216)
+               |> Integer.to_string(16)
+               |> String.pad_leading(6, "0")
+  @sprint_hash :erlang.phash2(Lenies.Codeomes.Carnivore.plasmid(), 16_777_216)
+               |> Integer.to_string(16)
+               |> String.pad_leading(6, "0")
+
+  defp plasmid_label(@twitch_hash), do: "Twitch"
+  defp plasmid_label(@sprint_hash), do: "Sprint"
+  defp plasmid_label(hash) when is_binary(hash), do: hash
 
   # Format large counters (resources / carcasses) so the user can read
   # them at a glance: thousand-separated below 1k, then k/M/B suffixes

@@ -373,6 +373,32 @@
   text-transform: lowercase;
 }
 
+/* ----- Conjugation event log (next to "World" header) ----- */
+.conjugation-log {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.conjugation-log-line {
+  color: #fde047;
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  flex: 0 0 auto;
+  text-shadow: 0 0 4px rgba(253, 224, 71, 0.4);
+}
+
+.conjugation-log-line-visible {
+  opacity: 0.95;
+}
+
+.conjugation-log-line-fading {
+  opacity: 0;
+  transition: opacity 900ms ease-in-out;
+}
+
 /* ----- Lenies dashboard: codeome opcode category colors ----- */
 .lenies-dashboard .op-template     { color: #64748b; }
 .lenies-dashboard .op-stack        { color: #fbbf24; }

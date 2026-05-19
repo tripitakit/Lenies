@@ -228,7 +228,7 @@ defmodule Lenies.ConjugationTest do
     Process.unlink(donor_pid)
     Process.unlink(recipient_pid)
 
-    assert_receive {:conjugation, {128, 128}, {129, 128}}, 1000
+    assert_receive {:conjugation, %{sender_pos: {128, 128}, receiver_pos: {129, 128}}}, 1000
   end
 
   test "background_mutate also touches the plasmid buffer (after multiple cycles)" do

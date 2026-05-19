@@ -392,7 +392,7 @@ defmodule Lenies.Lenie do
     end
   end
 
-  defp apply_world_action({:conjugate, pos, dir, plasmid_opcodes}, _id, interp) do
+  defp apply_world_action({:conjugate, pos, dir, plasmid_opcodes}, donor_id, interp) do
     cond do
       plasmid_opcodes == [] ->
         conjugate_failure(interp, 0)
@@ -407,7 +407,7 @@ defmodule Lenies.Lenie do
           [{_, %{lenie_id: recipient_id}}] when is_binary(recipient_id) ->
             case Lenies.Registry.whereis(recipient_id) do
               recipient_pid when is_pid(recipient_pid) ->
-                attempt_transfer(interp, recipient_pid, plasmid_opcodes)
+                attempt_transfer(interp, donor_id, recipient_pid, recipient_id, plasmid_opcodes)
 
               nil ->
                 conjugate_failure(interp, 0)
@@ -447,15 +447,27 @@ defmodule Lenies.Lenie do
   # never completes. Acceptable for the MVP — densities required for
   # this to be common are unrealistic. Fix paths if needed:
   # GenServer.cast + reply-by-message, or Task.yield with short deadline.
-  defp attempt_transfer(interp, recipient_pid, plasmid_opcodes) do
+  defp attempt_transfer(interp, donor_id, recipient_pid, recipient_id, plasmid_opcodes) do
     plasmid_size = length(plasmid_opcodes)
 
     case Lenies.Lenie.receive_plasmid(recipient_pid, plasmid_opcodes) do
       :ok ->
+        plasmid_hash =
+          :erlang.phash2(plasmid_opcodes, 16_777_216)
+          |> Integer.to_string(16)
+          |> String.pad_leading(6, "0")
+
         Phoenix.PubSub.broadcast(
           Lenies.PubSub,
           "world:fx",
-          {:conjugation, interp.pos, front_cell(interp.pos, interp.dir)}
+          {:conjugation,
+           %{
+             donor_id: donor_id,
+             recipient_id: recipient_id,
+             plasmid_hash: plasmid_hash,
+             sender_pos: interp.pos,
+             receiver_pos: front_cell(interp.pos, interp.dir)
+           }}
         )
 
         new_interp =
