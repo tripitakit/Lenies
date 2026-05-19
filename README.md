@@ -277,3 +277,16 @@ docs/superpowers/specs/      — design specs for the major subsystems
 - All subsystem specs and implementation plans live in
   [docs/superpowers/](docs/superpowers/) — every feature in the dashboard
   was brainstormed, specced, planned, and shipped with a paper trail.
+
+---
+
+## A note on the name
+
+"Lenies" is a tribute to Peter Watts' *Rifters* trilogy (*Starfish*, *Maelstrom*,
+*βehemoth*). The books feature a primitive, pre-cellular form of life — a
+biological echo of the kind of minimal, replicator-driven evolution this
+project simulates digitally. The name itself nods to **Lenie Clarke**, the
+trilogy's protagonist: a deep-sea rifter who, in the second and third books,
+ends up entangled with the propagation of that ancient self-replicating life.
+Watts' organisms are biological and ours are bytecode, but both are small,
+hungry, and shaped by the energy economy of their environment.
