@@ -77,13 +77,18 @@ defmodule Lenies.Codeomes.MinimalReplicator do
 
   ## Energy balance (with default `eat_amount` = 20)
 
-  - Codeome length: 121 opcodes → copy loop body cost ~6/iter × 121 ≈ 726
-  - Allocate(121) + setup + divide ≈ ~33
-  - Total replication cost: ~759
-  - Forage per cycle: 4 ops (cost 6.1) + counter ops (~2.5) = 8.6. Eat gain = 20.
-    Net: +11.4 per iter. × 128 ≈ +1459 per gen
-  - E_new = (E_old − 759) / 2 + 1459 = E_old/2 + 1080. Steady state ≈ 2160.
-    Sustainable as long as traversed cells have at least ~20 resource units.
+  - Codeome length: 123 opcodes (121 + 2 for in-forage `:conjugate, :drop`)
+    → copy loop body cost ~6.8/iter × 123 ≈ 836
+  - Allocate(123) + setup + divide ≈ ~33
+  - Plasmid replication tax: 0.5 × 31 (Twitch plasmid) ≈ 15.5
+  - Total replication cost: ~885
+  - Forage per cycle: sense+drop+eat+move (~5.6) + conjugate+drop (~4.1) +
+    counter ops (~2.5) + plasmid intercept (~1.8 when it fires) ≈ 13.4
+  - Eat gain at default `eat_amount` = 20. Net: ~+6.6 per iter × 128 ≈ +845/gen
+  - Steady state ≈ 2 × 128 × 6.6 − 885 ≈ +805. Sustainable.
+
+  See [`docs/superpowers/specs/2026-05-19-seed-plasmids-design.md`] for the
+  Twitch plasmid layout and the full cost derivation.
   """
 
   alias Lenies.Codeome
@@ -260,25 +265,25 @@ defmodule Lenies.Codeomes.MinimalReplicator do
     :push0,
     :store,
 
-    # ── pos 108..109: load counter for check ─────────────────────────────
+    # ── pos 110..111: load counter for check ─────────────────────────────
     :push0,
     :load,
 
-    # ── pos 110..114: jnz_t → back to FORAGE_LOOP_HEAD if counter != 0 ───
+    # ── pos 112..116: jnz_t → back to FORAGE_LOOP_HEAD if counter != 0 ───
     :jnz_t,
     :nop_1,
     :nop_0,
     :nop_1,
     :nop_0,
 
-    # ── pos 115..119: jmp_t → back to LOOP_HEAD to retry replication ─────
+    # ── pos 117..121: jmp_t → back to LOOP_HEAD to retry replication ─────
     :jmp_t,
     :nop_0,
     :nop_0,
     :nop_0,
     :nop_0,
 
-    # ── pos 120: separator (dead code, never executed) ───────────────────
+    # ── pos 122: separator (dead code, never executed) ───────────────────
     # Without this, the final jmp_t's template extraction would read
     # 4 nops of the template + 4 nops of LOOP_HEAD across the wrap (8 nops
     # total). Forcing a non-nop at the wrap stops extraction at 4.
