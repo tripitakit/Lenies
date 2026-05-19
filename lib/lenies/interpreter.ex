@@ -342,6 +342,18 @@ defmodule Lenies.Interpreter do
     end
   end
 
+  defp dispatch(:conjugate, state, _codeome, size) do
+    plasmid_opcodes =
+      case state.plasmids do
+        [%Lenies.Plasmid{opcodes: ops} | _] -> ops
+        _ -> []
+      end
+
+    # IP advances; cost is applied by apply_world_action based on outcome.
+    new_state = %{state | ip: rem(state.ip + 1, size)}
+    {:wait_world, {:conjugate, state.pos, state.dir, plasmid_opcodes}, new_state}
+  end
+
   # Stack on entry: [..., start_addr, length] with `length` on top. The pop
   # order below mirrors that — `length` first, then `start_addr` — so that
   # the producing program writes them push(start_addr); push(length); make_plasmid.

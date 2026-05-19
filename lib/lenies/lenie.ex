@@ -44,6 +44,17 @@ defmodule Lenies.Lenie do
   @doc "Returns a snapshot of the internal state (for inspection/test)."
   def inspect_state(pid), do: GenServer.call(pid, :inspect_state)
 
+  @doc """
+  Synchronous call invoked by another Lenie's `:conjugate` opcode. Appends
+  the plasmid opcodes to this Lenie's codeome and replaces its plasmid
+  buffer. Returns `:ok` on success, `{:error, :too_large}` if appending
+  would exceed `codeome_length_bounds`.
+  """
+  @spec receive_plasmid(pid(), [atom()]) :: :ok | {:error, :too_large}
+  def receive_plasmid(pid, plasmid_opcodes) when is_pid(pid) and is_list(plasmid_opcodes) do
+    GenServer.call(pid, {:receive_plasmid, plasmid_opcodes})
+  end
+
   # ----- Server -----
 
   @impl true
@@ -140,6 +151,31 @@ defmodule Lenies.Lenie do
     }
 
     {:reply, snapshot, state}
+  end
+
+  def handle_call({:receive_plasmid, plasmid_opcodes}, _from, state) do
+    current_size = Lenies.Codeome.size(state.codeome)
+    new_size = current_size + length(plasmid_opcodes)
+    {_min, max} = Application.get_env(:lenies, :codeome_length_bounds, {3, 1000})
+
+    if new_size > max do
+      {:reply, {:error, :too_large}, state}
+    else
+      new_codeome =
+        state.codeome
+        |> Lenies.Codeome.to_list()
+        |> Kernel.++(plasmid_opcodes)
+        |> Lenies.Codeome.from_list()
+
+      new_plasmid = Lenies.Plasmid.new(plasmid_opcodes)
+      new_plasmids = [new_plasmid]
+      new_interp = %{state.interp | plasmids: new_plasmids}
+      new_state = %{state | codeome: new_codeome, plasmids: new_plasmids, interp: new_interp}
+
+      cache_codeome_by_hash(new_codeome)
+
+      {:reply, :ok, new_state}
+    end
   end
 
   @impl true
@@ -311,7 +347,14 @@ defmodule Lenies.Lenie do
   defp apply_world_action({:divide, _new_energy, _pos, _dir}, id, interp) do
     case World.action({:divide, interp.energy, interp.pos, interp.dir, id}) do
       {:ok, {:divided, _child_id, energy_given}} ->
-        {:ok, %{interp | energy: interp.energy - energy_given}}
+        plasmid_size =
+          case interp.plasmids do
+            [%Lenies.Plasmid{opcodes: ops} | _] -> length(ops)
+            _ -> 0
+          end
+
+        tax = 0.5 * plasmid_size
+        {:ok, %{interp | energy: interp.energy - energy_given - tax}}
 
       {:ok, _failure} ->
         # Failed: stillborn, target_blocked, no_slot — energy already deducted by opcode cost
@@ -337,6 +380,72 @@ defmodule Lenies.Lenie do
     case World.action({:defend, id}) do
       {:ok, :defending} -> {:ok, interp}
       {:ok, :no_lenie} -> {:ok, interp}
+    end
+  end
+
+  defp apply_world_action({:conjugate, pos, dir, plasmid_opcodes}, _id, interp) do
+    cond do
+      plasmid_opcodes == [] ->
+        conjugate_failure(interp, 0)
+
+      true ->
+        target_pos = front_cell(pos, dir)
+
+        case :ets.lookup(:cells, target_pos) do
+          [{_, %{lenie_id: nil}}] ->
+            conjugate_failure(interp, 0)
+
+          [{_, %{lenie_id: recipient_id}}] when is_binary(recipient_id) ->
+            case Lenies.Registry.whereis(recipient_id) do
+              recipient_pid when is_pid(recipient_pid) ->
+                attempt_transfer(interp, recipient_pid, plasmid_opcodes)
+
+              nil ->
+                conjugate_failure(interp, 0)
+            end
+
+          _ ->
+            conjugate_failure(interp, 0)
+        end
+    end
+  end
+
+  defp front_cell({x, y}, :n), do: {x, rem(y - 1 + 256, 256)}
+  defp front_cell({x, y}, :s), do: {x, rem(y + 1, 256)}
+  defp front_cell({x, y}, :e), do: {rem(x + 1, 256), y}
+  defp front_cell({x, y}, :w), do: {rem(x - 1 + 256, 256), y}
+
+  defp conjugate_failure(interp, plasmid_size) do
+    new_interp =
+      interp
+      |> Lenies.Interpreter.State.push(0)
+      |> Lenies.Interpreter.State.apply_cost(Lenies.Codeome.Costs.cost(:conjugate, plasmid_size))
+
+    {:ok, new_interp}
+  end
+
+  defp attempt_transfer(interp, recipient_pid, plasmid_opcodes) do
+    plasmid_size = length(plasmid_opcodes)
+
+    case Lenies.Lenie.receive_plasmid(recipient_pid, plasmid_opcodes) do
+      :ok ->
+        Phoenix.PubSub.broadcast(
+          Lenies.PubSub,
+          "world:fx",
+          {:conjugation, interp.pos, front_cell(interp.pos, interp.dir)}
+        )
+
+        new_interp =
+          interp
+          |> Lenies.Interpreter.State.push(1)
+          |> Lenies.Interpreter.State.apply_cost(
+            Lenies.Codeome.Costs.cost(:conjugate, plasmid_size)
+          )
+
+        {:ok, new_interp}
+
+      {:error, :too_large} ->
+        conjugate_failure(interp, 0)
     end
   end
 end
