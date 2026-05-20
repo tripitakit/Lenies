@@ -226,7 +226,42 @@ set too low — 10000 is safe.
 
 ---
 
-## 8. What's Next
+## 8. Editor Ergonomics
+
+The drag-and-drop walkthrough above covers the basics. The editor also supports a richer
+set of interactions for editing larger codeomes.
+
+**Selecting blocks**
+Click a cell in the listing to select it (highlighted in blue). Shift-click a second cell
+to extend the selection to a contiguous range. Press **Esc** to clear the selection.
+
+**Clipboard operations**
+With one or more cells selected, use the toolbar above the listing or keyboard shortcuts:
+
+| Action    | Shortcut         |
+|-----------|------------------|
+| Copy      | Ctrl/Cmd+C       |
+| Cut       | Ctrl/Cmd+X       |
+| Paste     | Ctrl/Cmd+V       |
+| Duplicate | Ctrl/Cmd+D       |
+| Delete    | Del              |
+
+The clipboard is per editor session — it does not persist after you close the modal.
+
+**Undo / Redo**
+Every edit (drag, paste, delete, …) is recorded in a local history. Use **Ctrl/Cmd+Z** to
+undo and **Ctrl/Cmd+Shift+Z** (or **Ctrl+Y**) to redo, or press the ← / → buttons in the
+toolbar.
+
+**Snippets**
+Select a range of cells, then click **Save as snippet** in the toolbar. Give the snippet a
+name; it appears in the **Snippets** section at the bottom of the opcode palette and can be
+dragged into any codeome just like a single opcode. Snippets are stored in your browser's
+local storage, so they persist across sessions and page reloads.
+
+---
+
+## 9. What's Next
 
 The Walker works, but we waved our hands at the most interesting part: how does `jmp_t`
 actually find `:nop_0` from `:nop_1`, and what happens when there are two possible matches,
