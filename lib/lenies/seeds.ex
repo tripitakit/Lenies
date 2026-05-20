@@ -20,14 +20,14 @@ defmodule Lenies.Seeds do
     [
       %{
         id: :minimal_replicator,
-        name: "Minimal Replicator",
+        name: "Minimal Replicator (Twitch)",
         codeome: MinimalReplicator.codeome(),
         plasmid: MinimalReplicator.plasmid(),
         default_options: %{energy: 10_000.0}
       },
       %{
         id: :carnivore,
-        name: "Carnivore",
+        name: "Carnivore (Sprint)",
         codeome: Carnivore.codeome(),
         plasmid: Carnivore.plasmid(),
         default_options: %{energy: 10_000.0}
