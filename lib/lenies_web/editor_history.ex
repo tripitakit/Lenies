@@ -37,6 +37,6 @@ defmodule LeniesWeb.EditorHistory do
   def redo(%__MODULE__{future: []}, _current), do: :none
 
   def redo(%__MODULE__{future: [next | rest]} = h, current) do
-    {next, %{h | past: [current | h.past], future: rest}}
+    {next, %{h | past: Enum.take([current | h.past], h.max), future: rest}}
   end
 end

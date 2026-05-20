@@ -40,6 +40,15 @@ defmodule LeniesWeb.EditorHistoryTest do
     assert EditorHistory.redo(EditorHistory.new(50), [:a]) == :none
   end
 
+  test "record stacks onto a non-empty past (most-recent-first)" do
+    h =
+      EditorHistory.new(50)
+      |> EditorHistory.record([:a])
+      |> EditorHistory.record([:b])
+
+    assert h.past == [[:b], [:a]]
+  end
+
   test "record drops oldest past beyond max depth" do
     h =
       Enum.reduce(1..5, EditorHistory.new(3), fn n, acc ->
