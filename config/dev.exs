@@ -59,6 +59,11 @@ config :lenies, dev_routes: true
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 
+# Keep the iex/dev console quiet: suppress :debug/:info/:notice noise
+# (Phoenix request logs, LiveView lifecycle debug) while still surfacing
+# warnings and errors.
+config :logger, level: :warning
+
 # Set a higher stacktrace during development. Avoid configuring such
 # in production as building large stacktraces may be expensive.
 config :phoenix, :stacktrace_depth, 20
