@@ -7,6 +7,7 @@ const isTextTarget = (el) =>
   !!el &&
   (el.tagName === "INPUT" ||
     el.tagName === "TEXTAREA" ||
+    el.tagName === "SELECT" ||
     el.isContentEditable);
 
 const EditorKeyboard = {
@@ -14,6 +15,9 @@ const EditorKeyboard = {
     this.onClick = (e) => {
       // Ignore clicks that start on the drag handle (reorder, not select).
       if (e.target.closest(".codeome-drag-handle")) return;
+      // The per-block action buttons (e.g. the ⨯ delete button) carry their
+      // own phx-click — clicking them must not also fire select_block.
+      if (e.target.closest(".codeome-action-btn")) return;
       const block = e.target.closest(".codeome-block-editable");
       if (!block || !this.el.contains(block)) return;
       const idx = parseInt(block.dataset.idx, 10);
@@ -37,6 +41,16 @@ const EditorKeyboard = {
       else if (key === "delete" || key === "backspace") event = "delete_selection";
       else if (key === "escape") event = "clear_selection";
 
+      // Don't hijack copy/cut when the user has a native text selection
+      // (e.g. selecting text in the manual pane) — let the browser handle it.
+      if (
+        (event === "copy_selection" || event === "cut_selection") &&
+        window.getSelection &&
+        window.getSelection().toString() !== ""
+      ) {
+        return;
+      }
+
       if (event) {
         e.preventDefault();
         this.pushEvent(event, {});
@@ -44,6 +58,9 @@ const EditorKeyboard = {
     };
 
     this.el.addEventListener("click", this.onClick);
+    // keydown binds to `document` (not this.el) so shortcuts work without
+    // focusing the grid; removed in destroyed(). Assumes a single
+    // EditorKeyboard instance is mounted at a time.
     document.addEventListener("keydown", this.onKeydown);
   },
 
