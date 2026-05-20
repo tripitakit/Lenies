@@ -167,4 +167,35 @@ defmodule LeniesWeb.EditorLiveTest do
     assert html =~ "Codeome — 0 ops"
     refute html =~ "palette-text-input-error"
   end
+
+  describe "block selection" do
+    defp seeded_editor(conn) do
+      {:ok, view, _} = live(conn, "/editor/new")
+      render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add move eat"})
+      view
+    end
+
+    test "click selects a single block and highlights it", %{conn: conn} do
+      view = seeded_editor(conn)
+      html = render_hook(view, "select_block", %{"index" => 2, "shift" => false})
+      assert html =~ ~r/codeome-block-editable[^"]*codeome-block-selected[^>]*data-idx="2"/ or
+               html =~ ~r/data-idx="2"[^>]*codeome-block-selected/
+    end
+
+    test "shift-click extends a range from the anchor", %{conn: conn} do
+      view = seeded_editor(conn)
+      render_hook(view, "select_block", %{"index" => 1, "shift" => false})
+      html = render_hook(view, "select_block", %{"index" => 3, "shift" => true})
+      assert html =~ ~s(data-idx="1")
+      selected_count = Regex.scan(~r/codeome-block-selected/, html) |> length()
+      assert selected_count == 3
+    end
+
+    test "clear_selection removes all highlights", %{conn: conn} do
+      view = seeded_editor(conn)
+      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+      html = render_hook(view, "clear_selection", %{})
+      refute html =~ "codeome-block-selected"
+    end
+  end
 end

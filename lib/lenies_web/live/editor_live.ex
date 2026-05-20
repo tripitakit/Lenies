@@ -35,6 +35,8 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:manual_collapsed?, false)
       |> assign(:text_input_value, "")
       |> assign(:text_input_error, nil)
+      |> assign(:selection, nil)
+      |> assign(:sel_anchor, nil)
 
     {:ok, socket}
   end
@@ -221,6 +223,29 @@ defmodule LeniesWeb.EditorLive do
         msg = "unknown: " <> Enum.join(invalid, ", ")
         {:noreply, assign(socket, text_input_value: text, text_input_error: msg)}
     end
+  end
+
+  def handle_event("select_block", %{"index" => index, "shift" => shift}, socket) do
+    index = to_int(index)
+    len = length(socket.assigns.buffer)
+
+    if index < 0 or index >= len do
+      {:noreply, socket}
+    else
+      {selection, anchor} =
+        if shift in [true, "true"] and is_integer(socket.assigns.sel_anchor) do
+          a = socket.assigns.sel_anchor
+          {{min(a, index), max(a, index)}, a}
+        else
+          {{index, index}, index}
+        end
+
+      {:noreply, assign(socket, selection: selection, sel_anchor: anchor)}
+    end
+  end
+
+  def handle_event("clear_selection", _params, socket) do
+    {:noreply, assign(socket, selection: nil, sel_anchor: nil)}
   end
 
   @impl true
@@ -467,7 +492,11 @@ defmodule LeniesWeb.EditorLive do
           >
             <%= for {opcode, idx} <- Enum.with_index(@buffer) do %>
               <div
-                class={"codeome-block codeome-block-editable op op-" <> Atom.to_string(Disassembler.opcode_class(opcode))}
+                class={[
+                  "codeome-block codeome-block-editable op op-" <>
+                    Atom.to_string(Disassembler.opcode_class(opcode)),
+                  selected?(@selection, idx) && "codeome-block-selected"
+                ]}
                 data-idx={idx}
               >
                 <span class="codeome-drag-handle" title="Drag to reorder">≡</span>
@@ -514,6 +543,9 @@ defmodule LeniesWeb.EditorLive do
 
   defp spawn_seed_origin(_), do: nil
 
+  defp selected?(nil, _idx), do: false
+  defp selected?({lo, hi}, idx), do: idx >= lo and idx <= hi
+
   defp apply_buffer_change(socket, new_buffer) do
     original = socket.assigns[:original_buffer] || socket.assigns.buffer
     dirty = new_buffer != original
@@ -535,6 +567,9 @@ defmodule LeniesWeb.EditorLive do
     attack_damage = Application.get_env(:lenies, :attack_damage, 10)
     LeniesWeb.CodeomeBuffer.economics(buffer, eat_amount, attack_damage)
   end
+
+  defp to_int(n) when is_integer(n), do: n
+  defp to_int(n) when is_binary(n), do: String.to_integer(n)
 
   defp parse_clamped(str, min, max, default) when is_binary(str) do
     case Integer.parse(str) do
