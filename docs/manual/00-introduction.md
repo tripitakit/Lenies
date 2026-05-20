@@ -66,9 +66,10 @@ simulator computes a species ID by hashing the opcode sequence with
 `:erlang.phash2` — the same sequence always produces the same ID, a
 fingerprint that lets the world track lineages across time.
 
-The 36 opcodes are grouped into categories you will learn gradually:
+The 38 opcodes are grouped into categories you will learn gradually:
 template/nop bits, stack manipulation, arithmetic, control flow, sensing,
-movement, eating, predation, self-inspection, replication, and memory slots.
+movement, eating, predation, self-inspection, replication, memory slots,
+and horizontal transfer (plasmid conjugation, Chapter 11).
 Chapter 2 ([02-opcode-reference.md](02-opcode-reference.md)) is the complete
 reference; for now, just know the whitelist exists and any unknown atom is
 silently treated as a no-op.

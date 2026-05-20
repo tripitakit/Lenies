@@ -35,8 +35,11 @@ An empty stack is safe: popping it returns `0` without crashing.
 | Self-inspection | 3 | Read own instruction pointer or codeome |
 | Replication | 3 | Allocate child buffer, write opcodes, divide |
 | Memory | 2 | Slot store / load |
+| Horizontal transfer | 2 | Carve a plasmid, conjugate it to a neighbour |
 
-**Total: 36 opcodes.** Verified against `@opcodes` in `opcodes.ex`.
+**Total: 38 opcodes.** Verified against `@opcodes` in `opcodes.ex`. The two
+horizontal-transfer opcodes (`make_plasmid`, `conjugate`) are covered in depth
+in [Chapter 11](11-conjugation-and-plasmids.md).
 
 ---
 
@@ -371,6 +374,33 @@ slots return `0`.
 
 ---
 
+### Horizontal transfer
+
+### `make_plasmid`
+
+**Stack:** `( start_addr length -- 1|0 )`
+**Cost:** `2.0 + 0.05 × length` on success, `2.0` on a validation failure.
+**Description:** Carves `codeome[start_addr .. start_addr+length-1]` (with
+toroidal wrap, like every codeome read) into this creature's *plasmid buffer*,
+replacing any plasmid already held. `length` must be in `[1, 64]`; an invalid
+length pushes `0` and leaves the buffer untouched. On success pushes `1`. The
+plasmid buffer is not executed — it is the payload that `conjugate` transfers.
+Pure VM operation (no world round-trip). See Chapter 11.
+
+### `conjugate`
+
+**Stack:** `( -- 1|0 )`
+**Cost:** `4.0 + 0.05 × plasmid_size` on success, `4.0` on any failure path.
+**Description:** Transfers this creature's plasmid buffer to the Lenie in the
+cell directly ahead: the plasmid opcodes are appended to the recipient's
+codeome and become its plasmid buffer too (so it can re-conjugate). Pushes `1`
+on success, `0` if there is no plasmid, no Lenie ahead, the recipient is full
+(would exceed the codeome length bound), or the recipient is busy. The transfer
+uses a short timeout and is deadlock-safe; re-sending the same plasmid to an
+already-carrying recipient is a no-op. See Chapter 11.
+
+---
+
 ## 4. World-Yielding Opcodes Summary
 
 Every opcode that returns `{:wait_world, action, state}` from the interpreter,
@@ -386,9 +416,12 @@ and the exact action shape emitted (from `dispatch/4` in `interpreter.ex`):
 | `allocate` | `{:allocate, req_size, pos, dir}` |
 | `write_child` | `{:write_child, opcode_int, child_addr}` |
 | `divide` | `{:divide, energy, pos, dir}` |
+| `conjugate` | `{:conjugate, pos, dir, plasmid_opcodes}` |
 
 `pos` and `dir` are the values at the moment the opcode fires (before IP
-advance). `energy` in `divide` is post-cost remaining energy.
+advance). `energy` in `divide` is post-cost remaining energy. `make_plasmid`
+is *not* in this table — it is a pure VM opcode that completes in-process
+without a world round-trip.
 
 ---
 
