@@ -610,6 +610,106 @@
   overflow: hidden;
 }
 
+.lenies-dashboard .codeome-block-selected {
+  outline: 1px solid #67e8f9;
+  background: rgba(103, 232, 249, 0.12);
+}
+
+.lenies-dashboard .codeome-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.lenies-dashboard .codeome-tool-btn {
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  color: #cbd5e1;
+}
+
+.lenies-dashboard .codeome-tool-btn:hover:not(:disabled) {
+  border-color: #67e8f9;
+  color: #a5f3fc;
+}
+
+.lenies-dashboard .codeome-tool-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.lenies-dashboard .codeome-toolbar-sep {
+  width: 1px;
+  align-self: stretch;
+  background: rgba(148, 163, 184, 0.25);
+  margin: 0 2px;
+}
+
+.lenies-dashboard .codeome-snippets {
+  margin-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  padding-top: 6px;
+}
+
+.lenies-dashboard .codeome-snippets-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.lenies-dashboard .codeome-snippets-empty {
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.lenies-dashboard .codeome-snippet-form {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.lenies-dashboard .codeome-snippets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lenies-dashboard .codeome-snippet-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lenies-dashboard .codeome-snippet-insert {
+  flex: 1;
+  text-align: left;
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  color: #ddd6fe;
+}
+
+.lenies-dashboard .codeome-snippet-insert:hover {
+  border-color: #a78bfa;
+  background: rgba(167, 139, 250, 0.12);
+}
+
+.lenies-dashboard .codeome-snippet-del {
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #94a3b8;
+}
+
+.lenies-dashboard .codeome-snippet-del:hover {
+  border-color: #f87171;
+  color: #fca5a5;
+}
+
 /* ----- Codeome editor page ----- */
 /* Flex column so the optional spawn/save forms can slot between the
    header and the editor-grid without breaking the layout: header is

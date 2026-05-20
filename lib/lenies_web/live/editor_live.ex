@@ -573,7 +573,11 @@ defmodule LeniesWeb.EditorLive do
         </form>
       <% end %>
 
-      <div class={["editor-grid", @manual_collapsed? && "manual-collapsed"]}>
+      <div
+        id="editor-grid"
+        phx-hook="EditorKeyboard"
+        class={["editor-grid", @manual_collapsed? && "manual-collapsed"]}
+      >
         <.live_component
           module={LeniesWeb.ManualPaneComponent}
           id="manual-pane"
