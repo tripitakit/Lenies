@@ -321,6 +321,17 @@ defmodule LeniesWeb.EditorLiveTest do
       html_redo = render_hook(view, "redo", %{})
       assert html_redo =~ "●dirty"
     end
+
+    test "paste is undoable", %{conn: conn} do
+      view = seeded_editor3(conn)
+      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+      render_hook(view, "copy_selection", %{})
+      pasted = render_hook(view, "paste_clipboard", %{})
+      assert names(pasted) == ["PUSH0", "PUSH0", "PUSH1", "ADD"]
+
+      undone = render_hook(view, "undo", %{})
+      assert names(undone) == ["PUSH0", "PUSH1", "ADD"]
+    end
   end
 
   describe "snippet library" do
