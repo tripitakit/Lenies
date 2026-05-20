@@ -175,7 +175,7 @@ defmodule LeniesWeb.EditorLive do
     case socket.assigns.validation do
       {:ok, _} ->
         seed = %{
-          id: slug(name),
+          id: Lenies.Slug.slugify(name),
           name: name,
           color_hex: color,
           energy_default: parse_clamped(energy_str, 1, 1_000_000, 10_000) * 1.0,
@@ -544,13 +544,6 @@ defmodule LeniesWeb.EditorLive do
   end
 
   defp parse_clamped(_, _, _, default), do: default
-
-  defp slug(name) do
-    name
-    |> String.downcase()
-    |> String.replace(~r/[^a-z0-9]+/, "-")
-    |> String.trim("-")
-  end
 
   defp suggested_color(buffer) do
     buffer
