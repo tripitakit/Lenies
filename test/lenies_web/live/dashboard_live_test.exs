@@ -489,4 +489,52 @@ defmodule LeniesWeb.DashboardLiveTest do
       refute render(view) =~ "★ Delete Me"
     end
   end
+
+  describe "species table sorting" do
+    defp row_pos(html, hash), do: html |> :binary.match("species-row-#{hash}") |> elem(0)
+
+    test "defaults to population descending", %{conn: conn} do
+      # POPHI: 3 lenies, POPLO: 1 lenie
+      :ets.insert(:lenies, {"H1", %{id: "H1", codeome_hash: "POPHI", lineage: {nil, 0}}})
+      :ets.insert(:lenies, {"H2", %{id: "H2", codeome_hash: "POPHI", lineage: {nil, 0}}})
+      :ets.insert(:lenies, {"H3", %{id: "H3", codeome_hash: "POPHI", lineage: {nil, 0}}})
+      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "POPLO", lineage: {nil, 0}}})
+
+      {:ok, _view, html} = live(conn, "/")
+
+      assert row_pos(html, "POPHI") < row_pos(html, "POPLO")
+    end
+
+    test "clicking the Pop header toggles to ascending order", %{conn: conn} do
+      :ets.insert(:lenies, {"H1", %{id: "H1", codeome_hash: "POPHI", lineage: {nil, 0}}})
+      :ets.insert(:lenies, {"H2", %{id: "H2", codeome_hash: "POPHI", lineage: {nil, 0}}})
+      :ets.insert(:lenies, {"H3", %{id: "H3", codeome_hash: "POPHI", lineage: {nil, 0}}})
+      :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "POPLO", lineage: {nil, 0}}})
+
+      {:ok, view, _} = live(conn, "/")
+
+      html =
+        view
+        |> element("th[phx-click='sort_species'][phx-value-col='population']")
+        |> render_click()
+
+      assert row_pos(html, "POPLO") < row_pos(html, "POPHI")
+      assert html =~ "Pop ▲"
+    end
+
+    test "sorting by generation descending puts the oldest lineage first", %{conn: conn} do
+      :ets.insert(:lenies, {"Y1", %{id: "Y1", codeome_hash: "YOUNG", lineage: {nil, 1}}})
+      :ets.insert(:lenies, {"O1", %{id: "O1", codeome_hash: "OLDGEN", lineage: {nil, 9}}})
+
+      {:ok, view, _} = live(conn, "/")
+
+      html =
+        view
+        |> element("th[phx-click='sort_species'][phx-value-col='avg_generation']")
+        |> render_click()
+
+      assert row_pos(html, "OLDGEN") < row_pos(html, "YOUNG")
+      assert html =~ "Gen ▼"
+    end
+  end
 end

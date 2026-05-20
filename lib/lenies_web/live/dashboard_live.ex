@@ -20,6 +20,17 @@ defmodule LeniesWeb.DashboardLive do
   alias Lenies.SpeciesColor
   alias LeniesWeb.GridRenderer
 
+  # Whitelist of clickable species-table columns -> the sort key. Guards
+  # `handle_event("sort_species", ...)` against arbitrary input.
+  @sortable_columns %{
+    "seed" => :seed,
+    "size" => :size,
+    "cost" => :cost,
+    "gain" => :gain,
+    "population" => :population,
+    "avg_generation" => :avg_generation
+  }
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -44,6 +55,8 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:selected_hash, nil)
       |> assign(:selected_species_record, nil)
       |> assign(:inspector_dirty, false)
+      |> assign(:sort_by, :population)
+      |> assign(:sort_dir, :desc)
 
     # Push an initial frame as soon as the websocket is connected so the
     # canvas isn't black between mount and the next throttled tick
@@ -240,30 +253,57 @@ defmodule LeniesWeb.DashboardLive do
                       <tr>
                         <th class="text-left py-1">Hash</th>
                         <th
-                          class="text-left py-1"
-                          title="Seed of origin — bare seed name when the species' codeome still matches the pristine seed; prefixed with 'evolved from' once mutations have drifted it"
+                          class="text-left py-1 cursor-pointer select-none hover:text-cyan-200"
+                          phx-click="sort_species"
+                          phx-value-col="seed"
+                          title="Seed of origin — bare seed name when the species' codeome still matches the pristine seed; prefixed with 'evolved from' once mutations have drifted it. Click to sort."
                         >
-                          Seed
-                        </th>
-                        <th class="text-right py-1" title="Codeome length (opcodes)">Codeome size</th>
-                        <th
-                          class="text-right py-1"
-                          title="Static energy cost for one linear pass through the codeome"
-                        >
-                          Cost
+                          Seed{sort_arrow(@sort_by, @sort_dir, :seed)}
                         </th>
                         <th
-                          class="text-right py-1"
-                          title="Max energy gain for one linear pass (all eat/attack succeed)"
+                          class="text-right py-1 cursor-pointer select-none hover:text-cyan-200"
+                          phx-click="sort_species"
+                          phx-value-col="size"
+                          title="Codeome length (opcodes). Click to sort."
                         >
-                          Gain
+                          Codeome size{sort_arrow(@sort_by, @sort_dir, :size)}
                         </th>
-                        <th class="text-right py-1">Pop</th>
-                        <th class="text-right py-1">Gen</th>
+                        <th
+                          class="text-right py-1 cursor-pointer select-none hover:text-cyan-200"
+                          phx-click="sort_species"
+                          phx-value-col="cost"
+                          title="Static energy cost for one linear pass through the codeome. Click to sort."
+                        >
+                          Cost{sort_arrow(@sort_by, @sort_dir, :cost)}
+                        </th>
+                        <th
+                          class="text-right py-1 cursor-pointer select-none hover:text-cyan-200"
+                          phx-click="sort_species"
+                          phx-value-col="gain"
+                          title="Max energy gain for one linear pass (all eat/attack succeed). Click to sort."
+                        >
+                          Gain{sort_arrow(@sort_by, @sort_dir, :gain)}
+                        </th>
+                        <th
+                          class="text-right py-1 cursor-pointer select-none hover:text-cyan-200"
+                          phx-click="sort_species"
+                          phx-value-col="population"
+                          title="Population. Click to sort."
+                        >
+                          Pop{sort_arrow(@sort_by, @sort_dir, :population)}
+                        </th>
+                        <th
+                          class="text-right py-1 cursor-pointer select-none hover:text-cyan-200"
+                          phx-click="sort_species"
+                          phx-value-col="avg_generation"
+                          title="Average generation. Click to sort."
+                        >
+                          Gen{sort_arrow(@sort_by, @sort_dir, :avg_generation)}
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      <%= for sp <- @all_species do %>
+                      <%= for sp <- sort_species(@all_species, @sort_by, @sort_dir) do %>
                         <tr
                           class={[
                             "hover:bg-cyan-500/10 cursor-pointer",
@@ -354,6 +394,23 @@ defmodule LeniesWeb.DashboardLive do
     layer_atom = String.to_existing_atom(layer)
     new_visible = Map.update!(socket.assigns.layers_visible, layer_atom, &(!&1))
     {:noreply, assign(socket, :layers_visible, new_visible)}
+  end
+
+  def handle_event("sort_species", %{"col" => col}, socket) do
+    case Map.fetch(@sortable_columns, col) do
+      {:ok, new_by} ->
+        {by, dir} =
+          if socket.assigns.sort_by == new_by do
+            {new_by, toggle_dir(socket.assigns.sort_dir)}
+          else
+            {new_by, default_sort_dir(new_by)}
+          end
+
+        {:noreply, assign(socket, sort_by: by, sort_dir: dir)}
+
+      :error ->
+        {:noreply, socket}
+    end
   end
 
   # Pushed by the GridCanvas hook on dblclick. We resolve the cell to a
@@ -536,6 +593,35 @@ defmodule LeniesWeb.DashboardLive do
   end
 
   defp format_seed_origin(_), do: "—"
+
+  # Order the species rows by the active column/direction. `Enum.sort_by/3`
+  # handles both numeric keys and the (downcased) seed-name string via term
+  # ordering. Applied in render so the per-tick data refresh stays unaware
+  # of sort state.
+  defp sort_species(species, sort_by, sort_dir) do
+    Enum.sort_by(species, sort_key_fun(sort_by), sort_dir)
+  end
+
+  defp sort_key_fun(:seed), do: fn sp -> sp |> format_seed_origin() |> String.downcase() end
+  defp sort_key_fun(:size), do: & &1.size
+  defp sort_key_fun(:cost), do: & &1.cost
+  defp sort_key_fun(:gain), do: & &1.max_gain
+  defp sort_key_fun(:population), do: & &1.population
+  defp sort_key_fun(:avg_generation), do: & &1.avg_generation
+
+  # Sort indicator next to the active column header.
+  defp sort_arrow(active, :asc, active), do: " ▲"
+  defp sort_arrow(active, :desc, active), do: " ▼"
+  defp sort_arrow(_by, _dir, _col), do: ""
+
+  defp toggle_dir(:asc), do: :desc
+  defp toggle_dir(:desc), do: :asc
+
+  # Seed is alphabetical (asc) by default; numeric columns lead with the
+  # largest value (desc), which is what a user scanning for the dominant /
+  # most-expensive species expects.
+  defp default_sort_dir(:seed), do: :asc
+  defp default_sort_dir(_), do: :desc
 
   # Compact energy display for the species table: integer when whole,
   # one decimal otherwise. Avoids `0.0` clutter for codeomes with no
