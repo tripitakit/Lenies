@@ -320,16 +320,29 @@ defmodule Lenies.Codeomes.MinimalReplicator do
     :turn_left,
 
     # ── pos 26..30: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ──────
-    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0
+    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+
+    # ── pos 31: trailing separator (CRITICAL) ───────────────────────────
+    # The plasmid is appended at the end of the host's codeome ring, so
+    # this final jmp_t template is immediately followed — across the wrap
+    # — by the host's LOOP_HEAD anchor (`[n1,n1,n1,n1]` at pos 0..3), also
+    # nops. Without a non-nop separator here the template extractor reads
+    # 8 consecutive nops instead of 4, computes the wrong complement, and
+    # the jmp lands in the replication setup (pos 4) instead of
+    # FORAGE_LOOP_HEAD — the host then loops through replication, never
+    # forages, and starves in place. This push0 breaks the nop run.
+    :push0
   ]
 
   @doc """
-  The Twitch plasmid: 31 opcodes that intercept the host's per-iteration
+  The Twitch plasmid: 32 opcodes that intercept the host's per-iteration
   `jnz_t FORAGE_LOOP_HEAD` and inject a random L/R turn before bouncing back.
 
   Anchor at pos 0..3 (`[n0,n1,n0,n1]`) matches the FORAGE_LOOP_HEAD pattern
   in any MR-derived codeome. The intercept fires every forage iteration
   (via the host's `jnz_t FORAGE_LOOP_HEAD`), producing visible movement.
+  The trailing `:push0` (pos 31) is a mandatory separator — see the inline
+  comment — without it the bounce-back jmp mis-resolves across the ring wrap.
   """
   @spec plasmid() :: [atom()]
   def plasmid, do: @plasmid_opcodes

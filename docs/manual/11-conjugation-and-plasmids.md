@@ -168,9 +168,25 @@ The behaviour fires once per forage step — frequent, and therefore *visible*.
 > the per-iteration FORAGE_LOOP_HEAD is the whole fix. Pick the jump that fires
 > at the frequency you want your trait to express.
 
-One discipline rule: the plasmid must be **stack-neutral**. The host's forage
-loop keeps values on the stack between steps; if your plasmid leaves junk
-behind, it corrupts the host's arithmetic. Push and pop in balance.
+Two discipline rules make or break a plasmid:
+
+**1. Stack neutrality.** The host's forage loop keeps values on the stack
+between steps; if your plasmid leaves junk behind, it corrupts the host's
+arithmetic. Push and pop in balance.
+
+**2. A trailing separator (this one is easy to forget and fatal).** The plasmid
+is appended at the very end of the host's codeome ring, so its final `jmp_t`
+template is immediately followed — across the wrap back to position 0 — by the
+host's LOOP_HEAD anchor, which is *also* nops (`[1,1,1,1]`). The template
+extractor reads a run of nops up to 8 long; with no break between your final
+template and LOOP_HEAD it reads 8 nops instead of 4, computes the wrong
+complement, and the bounce-back jump lands in the host's replication setup
+instead of FORAGE_LOOP_HEAD. The host then loops through replication forever,
+never forages, and starves in place — it looks frozen. **Always end a plasmid
+with a single non-nop opcode** (a `:push0` is conventional, exactly as the
+Minimal Replicator does at the end of its own codeome). That one byte breaks
+the nop run across the wrap and is never executed (the preceding `jmp_t` jumps
+past it).
 
 ---
 
@@ -178,7 +194,7 @@ behind, it corrupts the host's arithmetic. Push and pop in balance.
 
 Twitch makes the host turn a random 90° left or right on every forage step,
 producing the jittery, space-filling walk you see from a seeded Minimal
-Replicator. It is 31 opcodes:
+Replicator. It is 32 opcodes:
 
 ```
 # ── pos 0..3: INTERCEPT anchor = FORAGE_LOOP_HEAD pattern [0,1,0,1] ──
@@ -206,7 +222,11 @@ Replicator. It is 31 opcodes:
 :turn_left,
 
 # ── pos 26..30: jmp_t FORAGE_LOOP_HEAD (template [1,0,1,0]) ──
-:jmp_t, :nop_1, :nop_0, :nop_1, :nop_0
+:jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+
+# ── pos 31: trailing separator (mandatory — breaks the nop run across
+#            the ring wrap into LOOP_HEAD; never executed) ──
+:push0
 ```
 
 Reading it as a flow:
@@ -235,7 +255,7 @@ the plasmid fired ~160 turns while eat and move continued normally.
 
 Sprint makes the host take a second step and a second bite each forage
 iteration, so it covers ground roughly twice as fast. It needs no internal
-branch, so it is only 11 opcodes:
+branch, so it is only 12 opcodes:
 
 ```
 # ── pos 0..3: INTERCEPT anchor = FORAGE_LOOP_HEAD pattern [0,1,0,1] ──
@@ -245,7 +265,10 @@ branch, so it is only 11 opcodes:
 :move, :eat,
 
 # ── pos 6..10: jmp_t FORAGE_LOOP_HEAD (template [1,0,1,0]) ──
-:jmp_t, :nop_1, :nop_0, :nop_1, :nop_0
+:jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+
+# ── pos 11: trailing separator (mandatory) ──
+:push0
 ```
 
 The host's `jnz_t` diverts here, the plasmid does `move; eat`, then bounces back
@@ -274,7 +297,12 @@ has been verified end to end.
    `[0,1,0,1]`, hit every forage step;
 2. **do its work** in between, leaving the stack as it found it;
 3. **end** with `jmp_t FORAGE_LOOP_HEAD` (template `[1,0,1,0]`) to return control
-   to the real forage body.
+   to the real forage body;
+4. **then add one trailing non-nop separator** (`:push0`) as the very last
+   opcode — see rule 2 in §3. Without it the final template merges with the
+   host's LOOP_HEAD across the ring wrap and the bounce-back lands in
+   replication setup, freezing the host. This byte is never executed; it just
+   breaks the nop run.
 
 **Making it conjugable.** A custom codeome cannot pre-load a plasmid buffer
 through the editor, so you give yourself one at runtime:
@@ -287,8 +315,8 @@ through the editor, so you give yourself one at runtime:
 
 ### Worked example: the "Veer" plasmid
 
-The simplest payload that visibly changes movement is a single turn. Ten
-opcodes:
+The simplest payload that visibly changes movement is a single turn. Eleven
+opcodes (ten of behaviour plus the mandatory trailing separator):
 
 ```
 # ── pos 0..3: FORAGE_LOOP_HEAD anchor [0,1,0,1] ──
@@ -298,25 +326,30 @@ opcodes:
 :turn_left,
 
 # ── pos 5..9: jmp_t FORAGE_LOOP_HEAD (template [1,0,1,0]) ──
-:jmp_t, :nop_1, :nop_0, :nop_1, :nop_0
+:jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+
+# ── pos 10: trailing separator (mandatory — rule 4) ──
+:push0
 ```
 
-Suppose this sits at positions 40..49 of your codeome. Somewhere your code runs:
+Suppose this sits at positions 40..50 of your codeome. Somewhere your code runs:
 
 ```
 :push1, ...            # build the literal 40 into start_addr on the stack
 ...                    # (see Chapter 5 for building constants)
-:push1, ...            # build the literal 10 into length on the stack
-:make_plasmid,         # carve codeome[40..49] into the buffer; pushes 1
+:push1, ...            # build the literal 11 into length on the stack
+:make_plasmid,         # carve codeome[40..50] into the buffer; pushes 1
 :drop,                 # discard the success flag
 ...
 :conjugate,            # in your forage loop: infect the Lenie ahead
 :drop                  # discard the success flag
 ```
 
-Carving and expression are both verified: `make_plasmid 40 10` copies exactly
-those ten opcodes, and once conjugated into a Minimal Replicator the `turn_left`
-fires on every forage step (≈180 turns over 5000 steps in a trace).
+Carving and expression are both verified: `make_plasmid 40 11` copies exactly
+those eleven opcodes, and once conjugated into a Minimal Replicator the
+`turn_left` fires on every forage step (≈87 turns matched by 87 eats and 87
+moves over 2000 steps in a trace — the bounce-back returns cleanly to the
+forage body, so the host keeps eating and moving).
 
 ### The viability lesson
 
