@@ -55,21 +55,24 @@ defmodule Lenies.Codeomes.CarnivoreTest do
 
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
-    # Seed food so Lenies can survive during the duel
+    # Seed food so Lenies can survive during the duel.
+    # Use 2000 resource: the Sprint plasmid fires an extra move+eat every forage
+    # iter, which depletes local food faster than vanilla MR — 2000 prevents
+    # starvation before the duel outcome is observed.
     for x <- 0..254, y <- 0..254 do
       [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 200}})
+      :ets.insert(:cells, {key, %{cell | resource: 2000}})
     end
 
     :ok
   end
 
   test "carnivore.codeome/0 produces a Codeome with attack inserted before eat" do
-    base = MinimalReplicator.codeome() |> Codeome.to_list()
+    base_ops = MinimalReplicator.opcodes()
     carn = Carnivore.codeome() |> Codeome.to_list()
 
-    # carnivore has exactly one more opcode (the inserted :attack)
-    assert length(carn) == length(base) + 1
+    # carnivore = base (123) + :attack (1) + sprint plasmid (11) = 135
+    assert length(carn) == length(base_ops) + 1 + length(Carnivore.plasmid())
     assert :attack in carn
   end
 
@@ -81,8 +84,10 @@ defmodule Lenies.Codeomes.CarnivoreTest do
     {:ok, herb_pid} =
       Lenie.start_link(
         id: "HERB",
+        # Large energy: HERB uses codeome/0 which includes the Twitch plasmid
+        # and random-walks, so it needs extra energy to survive the duel window.
         codeome: MinimalReplicator.codeome(),
-        energy: 5000.0,
+        energy: 50_000.0,
         pos: {50, 50},
         dir: :w,
         lineage: {nil, 0}
@@ -98,7 +103,7 @@ defmodule Lenies.Codeomes.CarnivoreTest do
       Lenie.start_link(
         id: "CARN",
         codeome: Carnivore.codeome(),
-        energy: 5000.0,
+        energy: 50_000.0,
         pos: {49, 50},
         dir: :e,
         lineage: {nil, 0}

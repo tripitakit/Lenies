@@ -290,50 +290,50 @@ defmodule Lenies.Codeomes.MinimalReplicator do
     :push0
   ]
 
-  @spec codeome() :: Codeome.t()
-  def codeome, do: Codeome.from_list(@opcodes)
-
-  @doc "Returns the raw opcode list (useful for debugging)."
+  @doc "Returns the raw opcode list (plasmid-free base; useful for debugging and Carnivore)."
   @spec opcodes() :: [atom()]
   def opcodes, do: @opcodes
 
   @plasmid_opcodes [
-    # ── pos 0..3: INTERCEPT_ANCHOR — matches host's LOOP_HEAD template ──
-    :nop_1, :nop_1, :nop_1, :nop_1,
+    # ── pos 0..3: INTERCEPT_ANCHOR = FORAGE_LOOP_HEAD pattern [n0,n1,n0,n1] ──
+    :nop_0, :nop_1, :nop_0, :nop_1,
 
-    # ── pos 4..8: build pushN mod 2 on stack ─────────────────────────────
+    # ── pos 4..8: pushN mod 2 ────────────────────────────────────────────
     :pushN, :push1, :push1, :add, :mod,
 
-    # ── pos 9..13: jz_t TURN_LEFT_BR (template [n1,n0,n0,n0]) ───────────
+    # ── pos 9..13: jz_t TURN_LEFT_BR (template [n1,n0,n0,n0] → [n0,n1,n1,n1]) ──
     :jz_t, :nop_1, :nop_0, :nop_0, :nop_0,
 
-    # ── pos 14: turn_right (fallthrough — mod was 1) ────────────────────
+    # ── pos 14: turn_right (mod was 1) ───────────────────────────────────
     :turn_right,
 
-    # ── pos 15..19: jmp_t back to host LOOP_HEAD (template [n0,n0,n0,n0]) ──
-    :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
+    # ── pos 15..19: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ──────
+    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
 
-    # ── pos 20: separator (avoids 8-nop misread into next anchor) ───────
+    # ── pos 20: separator ────────────────────────────────────────────────
     :push0,
 
     # ── pos 21..24: TURN_LEFT_BR anchor [n0,n1,n1,n1] ───────────────────
     :nop_0, :nop_1, :nop_1, :nop_1,
 
-    # ── pos 25: turn_left ────────────────────────────────────────────────
+    # ── pos 25: turn_left (mod was 0) ────────────────────────────────────
     :turn_left,
 
-    # ── pos 26..30: jmp_t back to host LOOP_HEAD ─────────────────────────
-    :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0
+    # ── pos 26..30: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ──────
+    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0
   ]
 
   @doc """
-  The Twitch plasmid: 31 opcodes that intercept the host's end-of-forage
-  `jmp_t LOOP_HEAD` and inject a random L/R turn before bouncing back.
+  The Twitch plasmid: 31 opcodes that intercept the host's per-iteration
+  `jnz_t FORAGE_LOOP_HEAD` and inject a random L/R turn before bouncing back.
 
-  Anchor at pos 0..3 (`[n1,n1,n1,n1]`) matches any host whose LOOP_HEAD
-  uses the same pattern (i.e., any MR-derived codeome). The forward
-  template search finds this appended anchor before wrapping to position 0.
+  Anchor at pos 0..3 (`[n0,n1,n0,n1]`) matches the FORAGE_LOOP_HEAD pattern
+  in any MR-derived codeome. The intercept fires every forage iteration
+  (via the host's `jnz_t FORAGE_LOOP_HEAD`), producing visible movement.
   """
   @spec plasmid() :: [atom()]
   def plasmid, do: @plasmid_opcodes
+
+  @spec codeome() :: Codeome.t()
+  def codeome, do: Codeome.from_list(@opcodes ++ @plasmid_opcodes)
 end

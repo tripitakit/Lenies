@@ -1,7 +1,7 @@
 defmodule Lenies.SeedPlasmidTest do
   use ExUnit.Case, async: false
 
-  alias Lenies.{Lenie, Plasmid, World}
+  alias Lenies.{Codeome, Lenie, Plasmid, World}
   alias Lenies.Codeomes.MinimalReplicator
   alias Lenies.World.Tables
 
@@ -55,9 +55,11 @@ defmodule Lenies.SeedPlasmidTest do
   test "MR-Twitch moves on both x and y axes (twitch signature)" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
+    # Use 2000 resource so the Lenie (which random-walks due to Twitch) does not
+    # deplete local food before it has a chance to move off-axis.
     for x <- 0..254, y <- 0..254 do
       [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 200}})
+      :ets.insert(:cells, {key, %{cell | resource: 2000}})
     end
 
     [{key, cell}] = :ets.lookup(:cells, {128, 128})
@@ -69,7 +71,9 @@ defmodule Lenies.SeedPlasmidTest do
       Lenie.start_link(
         id: "TWITCH",
         codeome: MinimalReplicator.codeome(),
-        energy: 10_000.0,
+        # Large energy so the Twitch Lenie (random-walk) doesn't starve before
+        # it leaves the starting row.
+        energy: 100_000.0,
         pos: {128, 128},
         dir: :e,
         lineage: {nil, 0},
@@ -94,9 +98,11 @@ defmodule Lenies.SeedPlasmidTest do
   test "MR-Twitch infects an adjacent vanilla MR" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
+    # Use 2000 resource so the Twitch Lenie (random-walk) and vanilla MR both
+    # survive long enough to meet and perform conjugation.
     for x <- 0..254, y <- 0..254 do
       [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 200}})
+      :ets.insert(:cells, {key, %{cell | resource: 2000}})
     end
 
     [{key1, c1}] = :ets.lookup(:cells, {128, 128})
@@ -109,7 +115,10 @@ defmodule Lenies.SeedPlasmidTest do
     {:ok, twitch_pid} =
       Lenie.start_link(
         id: "TWITCH",
-        codeome: MinimalReplicator.codeome(),
+        # Use plasmid-free base codeome so TWITCH marches east and conjugates
+        # VANILLA on the first forage iteration. The plasmid buffer carries the
+        # Twitch opcodes for transfer — that is what we are testing here.
+        codeome: Codeome.from_list(MinimalReplicator.opcodes()),
         energy: 10_000.0,
         pos: {128, 128},
         dir: :e,
@@ -120,7 +129,7 @@ defmodule Lenies.SeedPlasmidTest do
     {:ok, vanilla_pid} =
       Lenie.start_link(
         id: "VANILLA",
-        codeome: MinimalReplicator.codeome(),
+        codeome: Codeome.from_list(MinimalReplicator.opcodes()),
         energy: 10_000.0,
         pos: {129, 128},
         dir: :n,
@@ -153,9 +162,11 @@ defmodule Lenies.SeedPlasmidTest do
   test "two MR-Twitch Lenies facing each other both survive (no deadlock crash)" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
+    # Use 2000 resource: both Lenies random-walk (Twitch) and need enough food
+    # to survive the 2.5s observation window without starving.
     for x <- 0..254, y <- 0..254 do
       [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 200}})
+      :ets.insert(:cells, {key, %{cell | resource: 2000}})
     end
 
     [{key1, c1}] = :ets.lookup(:cells, {128, 128})
@@ -168,7 +179,10 @@ defmodule Lenies.SeedPlasmidTest do
     {:ok, a_pid} =
       Lenie.start_link(
         id: "A",
-        codeome: MinimalReplicator.codeome(),
+        # Use plasmid-free base codeome: this test is about the deadlock fix,
+        # not Twitch behavior. The plasmid buffer carries the Twitch opcodes
+        # so `:conjugate` triggers the symmetric-donor scenario.
+        codeome: Codeome.from_list(MinimalReplicator.opcodes()),
         energy: 10_000.0,
         pos: {128, 128},
         dir: :e,
@@ -179,7 +193,7 @@ defmodule Lenies.SeedPlasmidTest do
     {:ok, b_pid} =
       Lenie.start_link(
         id: "B",
-        codeome: MinimalReplicator.codeome(),
+        codeome: Codeome.from_list(MinimalReplicator.opcodes()),
         energy: 10_000.0,
         pos: {129, 128},
         dir: :w,

@@ -83,7 +83,7 @@ defmodule LeniesWeb.EditorLiveTest do
     :ets.insert(:lenies, {"TEST-EDITOR-L1", %{id: "TEST-EDITOR-L1", codeome_hash: hash}})
 
     {:ok, _view, html} = live(conn, "/editor/edit/#{hash}")
-    assert html =~ "123 ops"
+    assert html =~ "154 ops"
   end
 
   test "drag-drop insert via edit_insert handler appends opcode and marks dirty", %{conn: conn} do

@@ -156,27 +156,36 @@ defmodule Lenies.Lenie do
 
   @impl true
   def handle_call({:receive_plasmid, plasmid_opcodes}, _from, state) do
+    already_carries =
+      match?([%Lenies.Plasmid{opcodes: ^plasmid_opcodes} | _], state.plasmids)
+
     current_size = Lenies.Codeome.size(state.codeome)
     new_size = current_size + length(plasmid_opcodes)
     {_min, max} = Application.get_env(:lenies, :codeome_length_bounds, {3, 1000})
 
-    if new_size > max do
-      {:reply, {:error, :too_large}, state}
-    else
-      new_codeome =
-        state.codeome
-        |> Lenies.Codeome.to_list()
-        |> Kernel.++(plasmid_opcodes)
-        |> Lenies.Codeome.from_list()
+    cond do
+      already_carries ->
+        # Already infected with this exact plasmid — no-op, avoid codeome bloat.
+        {:reply, :ok, state}
 
-      new_plasmid = Lenies.Plasmid.new(plasmid_opcodes)
-      new_plasmids = [new_plasmid]
-      new_interp = %{state.interp | plasmids: new_plasmids}
-      new_state = %{state | codeome: new_codeome, plasmids: new_plasmids, interp: new_interp}
+      new_size > max ->
+        {:reply, {:error, :too_large}, state}
 
-      cache_codeome_by_hash(new_codeome)
+      true ->
+        new_codeome =
+          state.codeome
+          |> Lenies.Codeome.to_list()
+          |> Kernel.++(plasmid_opcodes)
+          |> Lenies.Codeome.from_list()
 
-      {:reply, :ok, new_state}
+        new_plasmid = Lenies.Plasmid.new(plasmid_opcodes)
+        new_plasmids = [new_plasmid]
+        new_interp = %{state.interp | plasmids: new_plasmids}
+        new_state = %{state | codeome: new_codeome, plasmids: new_plasmids, interp: new_interp}
+
+        cache_codeome_by_hash(new_codeome)
+
+        {:reply, :ok, new_state}
     end
   end
 

@@ -64,10 +64,13 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
   test "minimal_replicator reaches at least generation 3 in 30 seconds" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
-    # Seed a large biomass area (wide strip so Lenies can eat as they move)
+    # Seed a large biomass area. With the Twitch plasmid in the expressed codeome,
+    # offspring do a random walk rather than a straight march, so the colony
+    # clusters near the origin instead of spreading linearly. Use a higher resource
+    # (2000 vs 200) to prevent local depletion in the cluster area.
     for x <- 0..254, y <- 0..254 do
       [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 200}})
+      :ets.insert(:cells, {key, %{cell | resource: 2000}})
     end
 
     # Spawn original replicator at center
@@ -78,7 +81,7 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
       Lenie.start_link(
         id: "ORIGIN",
         codeome: MinimalReplicator.codeome(),
-        energy: 5000.0,
+        energy: 100_000.0,
         pos: {50, 50},
         dir: :e,
         lineage: {nil, 0}
