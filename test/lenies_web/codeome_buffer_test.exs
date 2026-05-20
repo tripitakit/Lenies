@@ -135,6 +135,52 @@ defmodule LeniesWeb.CodeomeBufferTest do
     end
   end
 
+  describe "slice/2" do
+    test "returns the inclusive range of opcodes" do
+      assert CodeomeBuffer.slice([:a, :b, :c, :d], {1, 2}) == [:b, :c]
+    end
+
+    test "single-element range" do
+      assert CodeomeBuffer.slice([:a, :b, :c], {0, 0}) == [:a]
+    end
+
+    test "clamps hi to the last index" do
+      assert CodeomeBuffer.slice([:a, :b], {0, 9}) == [:a, :b]
+    end
+  end
+
+  describe "delete_range/2" do
+    test "removes the inclusive range" do
+      assert CodeomeBuffer.delete_range([:a, :b, :c, :d], {1, 2}) == [:a, :d]
+    end
+
+    test "deleting the whole buffer yields []" do
+      assert CodeomeBuffer.delete_range([:a, :b], {0, 1}) == []
+    end
+
+    test "clamps hi beyond the end" do
+      assert CodeomeBuffer.delete_range([:a, :b, :c], {1, 9}) == [:a]
+    end
+  end
+
+  describe "insert_many/3" do
+    test "inserts a list at the index" do
+      assert CodeomeBuffer.insert_many([:a, :d], 1, [:b, :c]) == [:a, :b, :c, :d]
+    end
+
+    test "index 0 prepends" do
+      assert CodeomeBuffer.insert_many([:c], 0, [:a, :b]) == [:a, :b, :c]
+    end
+
+    test "index past the end appends" do
+      assert CodeomeBuffer.insert_many([:a], 9, [:b]) == [:a, :b]
+    end
+
+    test "inserting an empty list is a no-op" do
+      assert CodeomeBuffer.insert_many([:a, :b], 1, []) == [:a, :b]
+    end
+  end
+
   describe "economics/3" do
     test "empty buffer has zero cost, zero gain" do
       e = CodeomeBuffer.economics([], 20, 10)

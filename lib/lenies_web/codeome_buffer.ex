@@ -58,6 +58,27 @@ defmodule LeniesWeb.CodeomeBuffer do
     end
   end
 
+  @doc "Copy the inclusive `{lo, hi}` range out of the buffer."
+  @spec slice(buffer(), {non_neg_integer(), non_neg_integer()}) :: buffer()
+  def slice(buffer, {lo, hi}) when lo >= 0 and hi >= lo do
+    Enum.slice(buffer, lo..hi)
+  end
+
+  @doc "Delete the inclusive `{lo, hi}` range from the buffer."
+  @spec delete_range(buffer(), {non_neg_integer(), non_neg_integer()}) :: buffer()
+  def delete_range(buffer, {lo, hi}) when lo >= 0 and hi >= lo do
+    {before, rest} = Enum.split(buffer, lo)
+    before ++ Enum.drop(rest, hi - lo + 1)
+  end
+
+  @doc "Insert a list of opcodes at `index` (clamped to the buffer length)."
+  @spec insert_many(buffer(), non_neg_integer(), [atom()]) :: buffer()
+  def insert_many(buffer, index, opcodes) when index >= 0 and is_list(opcodes) do
+    clamped = min(index, length(buffer))
+    {before, rest} = Enum.split(buffer, clamped)
+    before ++ opcodes ++ rest
+  end
+
   @spec validate(buffer()) ::
           {:ok, %{len: non_neg_integer(), non_nops: non_neg_integer()}}
           | {:error, [validation_error()]}
