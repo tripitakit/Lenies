@@ -392,6 +392,13 @@
   letter-spacing: -1px;
 }
 
+.conjugation-log .conj-rate {
+  color: #67e8f9;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-left: 0.5em;
+}
+
 .conjugation-log .conj-last {
   color: #fde047;
   margin-left: 1.5em;

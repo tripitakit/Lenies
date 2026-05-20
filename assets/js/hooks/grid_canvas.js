@@ -724,16 +724,21 @@ const GridCanvas = {
       )
       .join("");
 
+    const rate = this.conjEvents.filter((t) => now - t <= 1000).length;
+
     const legend = document.createElement("span");
     legend.className = "conj-legend";
     legend.textContent = "Conjugation events: ";
     const sparkEl = document.createElement("span");
     sparkEl.className = "conj-spark";
     sparkEl.textContent = spark;
+    const rateEl = document.createElement("span");
+    rateEl.className = "conj-rate";
+    rateEl.textContent = `${rate}/s`;
     const lastEl = document.createElement("span");
     lastEl.className = "conj-last";
     lastEl.textContent = `Last: ${this.conjLastLabel || "—"}`;
-    log.replaceChildren(legend, sparkEl, lastEl);
+    log.replaceChildren(legend, sparkEl, rateEl, lastEl);
   },
 
   destroyed() {
