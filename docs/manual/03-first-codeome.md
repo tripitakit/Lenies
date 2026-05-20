@@ -256,8 +256,7 @@ toolbar.
 **Snippets**
 Select a range of cells, then click **Save as snippet** in the toolbar. Give the snippet a
 name; it appears in the **Snippets** section at the bottom of the opcode palette and can be
-dragged into any codeome just like a single opcode. Snippets are stored in your browser's
-local storage, so they persist across sessions and page reloads.
+dragged into any codeome just like a single opcode. Snippets are saved on the server (in `priv/user_snippets.json`), so they persist across sessions and are available to anyone using the same running instance.
 
 ---
 
