@@ -225,6 +225,8 @@ defmodule LeniesWeb.EditorLiveTest do
       html = render_hook(view, "paste_clipboard", %{})
       assert listing_opcodes(html) ==
                ["PUSH0", "PUSH1", "PUSH0", "PUSH1", "ADD", "MOVE", "EAT"]
+      # paste selects the inserted range (PUSH0 PUSH1 at idx 2..3)
+      assert (Regex.scan(~r/codeome-block-selected/, html) |> length()) == 2
     end
 
     test "cut removes the range and fills the clipboard", %{conn: conn} do
@@ -233,6 +235,7 @@ defmodule LeniesWeb.EditorLiveTest do
       render_hook(view, "select_block", %{"index" => 2, "shift" => true})
       html = render_hook(view, "cut_selection", %{})
       assert listing_opcodes(html) == ["PUSH0", "MOVE", "EAT"]
+      refute html =~ "codeome-block-selected"
       html2 = render_hook(view, "paste_clipboard", %{})
       assert listing_opcodes(html2) == ["PUSH0", "MOVE", "EAT", "PUSH1", "ADD"]
     end
@@ -250,6 +253,8 @@ defmodule LeniesWeb.EditorLiveTest do
       render_hook(view, "select_block", %{"index" => 3, "shift" => false})
       html = render_hook(view, "duplicate_selection", %{})
       assert listing_opcodes(html) == ["PUSH0", "PUSH1", "ADD", "MOVE", "MOVE", "EAT"]
+      # the duplicate (single MOVE at idx 4) is selected
+      assert (Regex.scan(~r/codeome-block-selected/, html) |> length()) == 1
     end
 
     test "copy/paste with empty clipboard is a no-op", %{conn: conn} do

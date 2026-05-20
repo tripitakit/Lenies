@@ -255,7 +255,8 @@ defmodule LeniesWeb.EditorLive do
   def handle_event("copy_selection", _params, socket) do
     case socket.assigns.selection do
       nil -> {:noreply, socket}
-      range -> {:noreply, assign(socket, :clipboard, CodeomeBuffer.slice(socket.assigns.buffer, range))}
+      range ->
+        {:noreply, assign(socket, :clipboard, CodeomeBuffer.slice(socket.assigns.buffer, range))}
     end
   end
 
@@ -282,6 +283,8 @@ defmodule LeniesWeb.EditorLive do
         {:noreply, socket}
 
       clip ->
+        # Paste inserts AFTER the selection (it does not replace it), then
+        # selects the inserted range. This matches the editor's chosen rule.
         at = paste_index(socket.assigns.selection, length(socket.assigns.buffer))
         new_buffer = CodeomeBuffer.insert_many(socket.assigns.buffer, at, clip)
         pasted = {at, at + length(clip) - 1}
