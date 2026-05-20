@@ -204,4 +204,58 @@ defmodule LeniesWeb.EditorLiveTest do
       refute html =~ "codeome-block-selected"
     end
   end
+
+  describe "clipboard and editing" do
+    defp seeded_editor2(conn) do
+      {:ok, view, _} = live(conn, "/editor/new")
+      render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add move eat"})
+      view
+    end
+
+    defp listing_opcodes(html) do
+      Regex.scan(~r/codeome-block-name">([A-Z0-9_]+)</, html)
+      |> Enum.map(fn [_, name] -> name end)
+    end
+
+    test "copy then paste duplicates the range after the selection", %{conn: conn} do
+      view = seeded_editor2(conn)
+      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+      render_hook(view, "select_block", %{"index" => 1, "shift" => true})
+      render_hook(view, "copy_selection", %{})
+      html = render_hook(view, "paste_clipboard", %{})
+      assert listing_opcodes(html) ==
+               ["PUSH0", "PUSH1", "PUSH0", "PUSH1", "ADD", "MOVE", "EAT"]
+    end
+
+    test "cut removes the range and fills the clipboard", %{conn: conn} do
+      view = seeded_editor2(conn)
+      render_hook(view, "select_block", %{"index" => 1, "shift" => false})
+      render_hook(view, "select_block", %{"index" => 2, "shift" => true})
+      html = render_hook(view, "cut_selection", %{})
+      assert listing_opcodes(html) == ["PUSH0", "MOVE", "EAT"]
+      html2 = render_hook(view, "paste_clipboard", %{})
+      assert listing_opcodes(html2) == ["PUSH0", "MOVE", "EAT", "PUSH1", "ADD"]
+    end
+
+    test "delete_selection removes the range", %{conn: conn} do
+      view = seeded_editor2(conn)
+      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+      render_hook(view, "select_block", %{"index" => 2, "shift" => true})
+      html = render_hook(view, "delete_selection", %{})
+      assert listing_opcodes(html) == ["MOVE", "EAT"]
+    end
+
+    test "duplicate_selection inserts a copy right after", %{conn: conn} do
+      view = seeded_editor2(conn)
+      render_hook(view, "select_block", %{"index" => 3, "shift" => false})
+      html = render_hook(view, "duplicate_selection", %{})
+      assert listing_opcodes(html) == ["PUSH0", "PUSH1", "ADD", "MOVE", "MOVE", "EAT"]
+    end
+
+    test "copy/paste with empty clipboard is a no-op", %{conn: conn} do
+      view = seeded_editor2(conn)
+      html = render_hook(view, "paste_clipboard", %{})
+      assert listing_opcodes(html) == ["PUSH0", "PUSH1", "ADD", "MOVE", "EAT"]
+    end
+  end
 end

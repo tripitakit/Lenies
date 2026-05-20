@@ -13,6 +13,7 @@ defmodule LeniesWeb.EditorLive do
   use LeniesWeb, :live_view
 
   alias LeniesWeb.Disassembler
+  alias LeniesWeb.CodeomeBuffer
 
   @default_chapter "02-opcode-reference.md"
 
@@ -37,6 +38,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:text_input_error, nil)
       |> assign(:selection, nil)
       |> assign(:sel_anchor, nil)
+      |> assign(:clipboard, [])
 
     {:ok, socket}
   end
@@ -248,6 +250,80 @@ defmodule LeniesWeb.EditorLive do
 
   def handle_event("clear_selection", _params, socket) do
     {:noreply, assign(socket, selection: nil, sel_anchor: nil)}
+  end
+
+  def handle_event("copy_selection", _params, socket) do
+    case socket.assigns.selection do
+      nil -> {:noreply, socket}
+      range -> {:noreply, assign(socket, :clipboard, CodeomeBuffer.slice(socket.assigns.buffer, range))}
+    end
+  end
+
+  def handle_event("cut_selection", _params, socket) do
+    case socket.assigns.selection do
+      nil ->
+        {:noreply, socket}
+
+      range ->
+        clip = CodeomeBuffer.slice(socket.assigns.buffer, range)
+        new_buffer = CodeomeBuffer.delete_range(socket.assigns.buffer, range)
+
+        {:noreply,
+         socket
+         |> assign(:clipboard, clip)
+         |> assign(selection: nil, sel_anchor: nil)
+         |> commit_buffer_change(new_buffer)}
+    end
+  end
+
+  def handle_event("paste_clipboard", _params, socket) do
+    case socket.assigns.clipboard do
+      [] ->
+        {:noreply, socket}
+
+      clip ->
+        at = paste_index(socket.assigns.selection, length(socket.assigns.buffer))
+        new_buffer = CodeomeBuffer.insert_many(socket.assigns.buffer, at, clip)
+        pasted = {at, at + length(clip) - 1}
+
+        {:noreply,
+         socket
+         |> assign(selection: pasted, sel_anchor: at)
+         |> commit_buffer_change(new_buffer)}
+    end
+  end
+
+  def handle_event("duplicate_selection", _params, socket) do
+    case socket.assigns.selection do
+      nil ->
+        {:noreply, socket}
+
+      {_lo, hi} = range ->
+        clip = CodeomeBuffer.slice(socket.assigns.buffer, range)
+        at = hi + 1
+        new_buffer = CodeomeBuffer.insert_many(socket.assigns.buffer, at, clip)
+        dup = {at, at + length(clip) - 1}
+
+        {:noreply,
+         socket
+         |> assign(selection: dup, sel_anchor: at)
+         |> commit_buffer_change(new_buffer)}
+    end
+  end
+
+  def handle_event("delete_selection", _params, socket) do
+    case socket.assigns.selection do
+      nil ->
+        {:noreply, socket}
+
+      range ->
+        new_buffer = CodeomeBuffer.delete_range(socket.assigns.buffer, range)
+
+        {:noreply,
+         socket
+         |> assign(selection: nil, sel_anchor: nil)
+         |> commit_buffer_change(new_buffer)}
+    end
   end
 
   @impl true
@@ -548,6 +624,12 @@ defmodule LeniesWeb.EditorLive do
   defp selected?(nil, _idx), do: false
   defp selected?({lo, hi}, idx), do: idx >= lo and idx <= hi
 
+  # Central buffer-mutation entry point. A later task adds undo history here;
+  # for now it delegates to apply_buffer_change/2.
+  defp commit_buffer_change(socket, new_buffer) do
+    apply_buffer_change(socket, new_buffer)
+  end
+
   defp apply_buffer_change(socket, new_buffer) do
     original = socket.assigns[:original_buffer] || socket.assigns.buffer
     dirty = new_buffer != original
@@ -569,6 +651,10 @@ defmodule LeniesWeb.EditorLive do
     attack_damage = Application.get_env(:lenies, :attack_damage, 10)
     LeniesWeb.CodeomeBuffer.economics(buffer, eat_amount, attack_damage)
   end
+
+  # Paste lands right after the selection; with no selection, at the end.
+  defp paste_index(nil, len), do: len
+  defp paste_index({_lo, hi}, _len), do: hi + 1
 
   # `select_block` indices come from the editor's own JS hook (always
   # numeric), but parse defensively: unparseable input becomes -1, which
