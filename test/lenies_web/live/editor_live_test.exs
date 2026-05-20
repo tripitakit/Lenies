@@ -197,5 +197,11 @@ defmodule LeniesWeb.EditorLiveTest do
       html = render_hook(view, "clear_selection", %{})
       refute html =~ "codeome-block-selected"
     end
+
+    test "non-numeric index is a safe no-op", %{conn: conn} do
+      view = seeded_editor(conn)
+      html = render_hook(view, "select_block", %{"index" => "abc", "shift" => false})
+      refute html =~ "codeome-block-selected"
+    end
   end
 end

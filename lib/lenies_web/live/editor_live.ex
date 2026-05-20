@@ -232,6 +232,8 @@ defmodule LeniesWeb.EditorLive do
     if index < 0 or index >= len do
       {:noreply, socket}
     else
+      # shift arrives as a boolean from the JS hook / render_hook; accept the
+      # "true" string form too for robustness.
       {selection, anchor} =
         if shift in [true, "true"] and is_integer(socket.assigns.sel_anchor) do
           a = socket.assigns.sel_anchor
@@ -568,8 +570,17 @@ defmodule LeniesWeb.EditorLive do
     LeniesWeb.CodeomeBuffer.economics(buffer, eat_amount, attack_damage)
   end
 
+  # `select_block` indices come from the editor's own JS hook (always
+  # numeric), but parse defensively: unparseable input becomes -1, which
+  # the handler's `index < 0` guard treats as a no-op instead of crashing.
   defp to_int(n) when is_integer(n), do: n
-  defp to_int(n) when is_binary(n), do: String.to_integer(n)
+
+  defp to_int(n) when is_binary(n) do
+    case Integer.parse(n) do
+      {i, ""} -> i
+      _ -> -1
+    end
+  end
 
   defp parse_clamped(str, min, max, default) when is_binary(str) do
     case Integer.parse(str) do
