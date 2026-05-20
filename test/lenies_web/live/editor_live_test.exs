@@ -14,6 +14,11 @@ defmodule LeniesWeb.EditorLiveTest do
       _ -> :ok
     end
 
+    case Process.whereis(Lenies.Snippets.Store) do
+      nil -> {:ok, _} = Lenies.Snippets.Store.start_link([])
+      _ -> :ok
+    end
+
     on_exit(fn ->
       case Process.whereis(Lenies.World) do
         pid when is_pid(pid) ->
@@ -315,6 +320,68 @@ defmodule LeniesWeb.EditorLiveTest do
 
       html_redo = render_hook(view, "redo", %{})
       assert html_redo =~ "●dirty"
+    end
+  end
+
+  describe "snippet library" do
+    @snip_env :__test_user_snippets_file__
+
+    setup do
+      tmp = Path.join(System.tmp_dir!(), "lenies_snips_live_#{System.unique_integer([:positive])}.json")
+      orig = Application.get_env(:lenies, @snip_env)
+      Application.put_env(:lenies, @snip_env, tmp)
+      if Process.whereis(Lenies.Snippets.Store), do: Agent.stop(Lenies.Snippets.Store)
+      {:ok, _} = Lenies.Snippets.Store.start_link([])
+
+      on_exit(fn ->
+        if Process.whereis(Lenies.Snippets.Store) do
+          try do
+            Agent.stop(Lenies.Snippets.Store)
+          catch
+            :exit, _ -> :ok
+          end
+        end
+
+        File.rm(tmp)
+        if orig, do: Application.put_env(:lenies, @snip_env, orig), else: Application.delete_env(:lenies, @snip_env)
+      end)
+
+      :ok
+    end
+
+    defp names4(html) do
+      Regex.scan(~r/codeome-block-name">([A-Z0-9_]+)</, html)
+      |> Enum.map(fn [_, n] -> n end)
+    end
+
+    test "save selection as snippet, then insert it", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/editor/new")
+      render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+      render_hook(view, "select_block", %{"index" => 1, "shift" => true})
+
+      html = render_hook(view, "submit_snippet", %{"snippet_name" => "Pair"})
+      assert html =~ "Pair"
+      assert [%{name: "Pair", opcodes: [:push0, :push1]}] = Lenies.Snippets.Store.all()
+
+      render_hook(view, "clear_selection", %{})
+      html2 = render_hook(view, "insert_snippet", %{"id" => "pair"})
+      assert names4(html2) == ["PUSH0", "PUSH1", "ADD", "PUSH0", "PUSH1"]
+    end
+
+    test "delete a snippet removes it from the section", %{conn: conn} do
+      Lenies.Snippets.Store.save(%{id: "loop", name: "Loop", opcodes: [:move, :eat]})
+      {:ok, view, _} = live(conn, "/editor/new")
+      assert render(view) =~ "codeome-snippet-insert"
+      html = render_hook(view, "delete_snippet", %{"id" => "loop"})
+      refute html =~ "codeome-snippet-insert"
+    end
+
+    test "submit_snippet with no selection is a no-op", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/editor/new")
+      render_hook(view, "submit_opcode_text", %{"opcodes" => "push0"})
+      render_hook(view, "submit_snippet", %{"snippet_name" => "X"})
+      assert Lenies.Snippets.Store.all() == []
     end
   end
 end

@@ -41,6 +41,8 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:sel_anchor, nil)
       |> assign(:clipboard, [])
       |> assign(:history, EditorHistory.new(100))
+      |> assign(:snippets, Lenies.Snippets.Store.all())
+      |> assign(:show_snippet_form, false)
 
     {:ok, socket}
   end
@@ -372,6 +374,50 @@ defmodule LeniesWeb.EditorLive do
     end
   end
 
+  def handle_event("open_snippet_form", _params, socket) do
+    {:noreply, assign(socket, show_snippet_form: true)}
+  end
+
+  def handle_event("cancel_snippet_form", _params, socket) do
+    {:noreply, assign(socket, show_snippet_form: false)}
+  end
+
+  def handle_event("submit_snippet", %{"snippet_name" => name}, socket) do
+    with range when not is_nil(range) <- socket.assigns.selection,
+         opcodes <- CodeomeBuffer.slice(socket.assigns.buffer, range),
+         id <- Lenies.Slug.slugify(name),
+         :ok <- Lenies.Snippets.Store.save(%{id: id, name: name, opcodes: opcodes}) do
+      {:noreply,
+       socket
+       |> assign(:snippets, Lenies.Snippets.Store.all())
+       |> assign(:show_snippet_form, false)}
+    else
+      _ -> {:noreply, assign(socket, :show_snippet_form, false)}
+    end
+  end
+
+  def handle_event("insert_snippet", %{"id" => id}, socket) do
+    case Lenies.Snippets.Store.get(id) do
+      %{opcodes: ops} when ops != [] ->
+        at = paste_index(socket.assigns.selection, length(socket.assigns.buffer))
+        new_buffer = CodeomeBuffer.insert_many(socket.assigns.buffer, at, ops)
+        inserted = {at, at + length(ops) - 1}
+
+        {:noreply,
+         socket
+         |> assign(selection: inserted, sel_anchor: at)
+         |> commit_buffer_change(new_buffer)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("delete_snippet", %{"id" => id}, socket) do
+    Lenies.Snippets.Store.delete(id)
+    {:noreply, assign(socket, :snippets, Lenies.Snippets.Store.all())}
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -566,6 +612,54 @@ defmodule LeniesWeb.EditorLive do
                     </div>
                   <% end %>
                 </div>
+              </div>
+            <% end %>
+          </div>
+
+          <div class="codeome-snippets" id="codeome-snippets">
+            <div class="codeome-snippets-title">Snippets</div>
+            <%= if @show_snippet_form do %>
+              <form phx-submit="submit_snippet" class="codeome-snippet-form">
+                <input
+                  type="text"
+                  name="snippet_name"
+                  required
+                  minlength="1"
+                  maxlength="40"
+                  placeholder="snippet name"
+                  autocomplete="off"
+                  class="palette-text-input"
+                />
+                <button type="submit" class="palette-text-input-submit" title="Save snippet">✓</button>
+                <button type="button" phx-click="cancel_snippet_form" class="palette-text-input-submit" title="Cancel">⨯</button>
+              </form>
+            <% end %>
+            <%= if @snippets == [] do %>
+              <p class="codeome-snippets-empty">no snippets — select blocks and press Save as snippet</p>
+            <% else %>
+              <div class="codeome-snippets-list">
+                <%= for s <- @snippets do %>
+                  <div class="codeome-snippet-row">
+                    <button
+                      type="button"
+                      phx-click="insert_snippet"
+                      phx-value-id={s.id}
+                      class="codeome-snippet-insert"
+                      title={"Insert (#{length(s.opcodes)} ops)"}
+                    >
+                      {s.name}
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="delete_snippet"
+                      phx-value-id={s.id}
+                      class="codeome-snippet-del"
+                      title="Delete snippet"
+                    >
+                      ⨯
+                    </button>
+                  </div>
+                <% end %>
               </div>
             <% end %>
           </div>
