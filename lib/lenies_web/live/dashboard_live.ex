@@ -201,7 +201,7 @@ defmodule LeniesWeb.DashboardLive do
                 checked={@layers_visible.carcass}
                 class="accent-rose-400"
               />
-              <span>Carcasses</span>
+              <span>Detritus</span>
             </label>
           </div>
           <p class="dashboard-map-hint">
@@ -234,7 +234,7 @@ defmodule LeniesWeb.DashboardLive do
                     </div>
                   </div>
                   <div class="border border-rose-500/30 px-2 py-1">
-                    <div class="opacity-60">carcasses</div>
+                    <div class="opacity-60">detritus</div>
                     <div
                       class="text-rose-300 font-bold tabular-nums text-base"
                       title={"#{latest.total_carcass}"}
