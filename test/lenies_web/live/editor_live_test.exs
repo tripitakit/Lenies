@@ -304,5 +304,17 @@ defmodule LeniesWeb.EditorLiveTest do
       html = render_hook(view, "redo", %{})
       assert names(html) == ["PUSH0", "PUSH1", "ADD", "MOVE"]
     end
+
+    test "dirty flag tracks undo/redo back to the original buffer", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/editor/new")
+      html_after = render_hook(view, "submit_opcode_text", %{"opcodes" => "push0"})
+      assert html_after =~ "●dirty"
+
+      html_undo = render_hook(view, "undo", %{})
+      refute html_undo =~ "●dirty"
+
+      html_redo = render_hook(view, "redo", %{})
+      assert html_redo =~ "●dirty"
+    end
   end
 end

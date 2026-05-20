@@ -672,6 +672,9 @@ defmodule LeniesWeb.EditorLive do
 
   # Central buffer-mutation entry point: records the pre-change buffer onto
   # the undo history (clearing redo) before applying the new buffer.
+  # NOTE: history snapshots only the buffer list. If it ever expands to
+  # capture selection/UI state, this must be called BEFORE any such assign
+  # mutation on the socket (paste/duplicate set selection before committing).
   defp commit_buffer_change(socket, new_buffer) do
     history = EditorHistory.record(socket.assigns.history, socket.assigns.buffer)
 
