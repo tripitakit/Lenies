@@ -5,7 +5,7 @@ where digital organisms — Lenies — live, eat, reproduce, mutate, fight, die,
 and gradually evolve under selection pressure. Each Lenie is a BEAM process
 animated by its own tiny program (its *codeome*), and the whole population
 shares a single 256×256 toroidal grid full of regenerating resources,
-decaying carcasses, and the occasional cosmic-ray-style mutation.
+decaying detritus, and the occasional cosmic-ray-style mutation.
 
 The point isn't to ship a finished simulation — it's to give you a window
 into one. You can watch the population drift in real time, click into any
@@ -70,10 +70,10 @@ hand-tuned replicator seeding the population.
 
 **The world** is a 2D grid that wraps at every edge (so a Lenie walking
 north long enough comes back from the south). Each cell holds either
-nothing, a pile of resource, a carcass, or one Lenie. Radiation drips new
+nothing, a pile of resource, detritus, or one Lenie. Radiation drips new
 resource into cells every tick, concentrated on a handful of permanent
-hotspots and sprinkled uniformly elsewhere; carcasses decay over time and
-are also edible. Energy is conserved: it enters the system only through
+hotspots and sprinkled uniformly elsewhere; detritus decays over time and
+is also edible. Energy is conserved: it enters the system only through
 radiation, leaves only when Lenies starve, and is passed around through
 eating, fighting, and reproduction.
 
@@ -108,7 +108,7 @@ ecosystem you can poke at.
   that species (cursor turns into a pointer over occupied cells to hint
   at this). Empty cells are a no-op.
 - Three checkboxes under the map toggle the **Lenies / Resources /
-  Carcasses** layers independently.
+  Detritus** layers independently.
 
 **On the right column, top row:**
 

@@ -89,13 +89,13 @@ Each cell holds at most one of the following:
 - **Nothing.** An empty cell a Lenie can move into.
 - **Resource.** A pool of energy that Lenies can eat. Resources accumulate
   from radiation (see below) and are depleted by `:eat`.
-- **Carcass.** The remains of a Lenie that has died. Carcasses contain
+- **Detritus.** The remains of a Lenie that has died. Detritus contains
   energy — roughly half of what the dead Lenie had left — and can also be
-  eaten. Carcasses are slightly more nutritious per unit than raw resource.
-  Over time carcasses decay and disappear.
+  eaten. Detritus is slightly more nutritious per unit than raw resource.
+  Over time detritus decays and disappears.
 - **A Lenie.** A living organism occupying the cell.
 
-A cell can hold resource *and* a carcass simultaneously, but only one Lenie
+A cell can hold resource *and* detritus simultaneously, but only one Lenie
 at a time.
 
 **Radiation** is the primary energy source for the entire ecosystem. Every
@@ -116,7 +116,7 @@ predation and replication operations cost 5 to 10 or more. Every step of
 execution drains the energy reservoir.
 
 The **only** opcode that *adds* energy is `:eat`. When `:eat` executes, the
-Lenie consumes up to a fixed portion of whatever resource (or carcass) is in
+Lenie consumes up to a fixed portion of whatever resource (or detritus) is in
 its current cell and converts it into energy. If the cell is empty, `:eat`
 still costs its 2.0 units but gains nothing.
 
