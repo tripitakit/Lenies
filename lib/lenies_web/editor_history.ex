@@ -39,4 +39,14 @@ defmodule LeniesWeb.EditorHistory do
   def redo(%__MODULE__{future: [next | rest]} = h, current) do
     {next, %{h | past: Enum.take([current | h.past], h.max), future: rest}}
   end
+
+  @doc "True when there is at least one buffer to undo to."
+  @spec can_undo?(t()) :: boolean()
+  def can_undo?(%__MODULE__{past: []}), do: false
+  def can_undo?(%__MODULE__{}), do: true
+
+  @doc "True when there is at least one buffer to redo to."
+  @spec can_redo?(t()) :: boolean()
+  def can_redo?(%__MODULE__{future: []}), do: false
+  def can_redo?(%__MODULE__{}), do: true
 end

@@ -712,12 +712,12 @@ defmodule LeniesWeb.EditorLive do
           <div class="codeome-toolbar">
             <button type="button" phx-click="copy_selection" disabled={!has_selection?(@selection)} class="codeome-tool-btn" title="Copy (Ctrl/Cmd+C)">Copy</button>
             <button type="button" phx-click="cut_selection" disabled={!has_selection?(@selection)} class="codeome-tool-btn" title="Cut (Ctrl/Cmd+X)">Cut</button>
-            <button type="button" phx-click="paste_clipboard" disabled={@clipboard == []} class="codeome-tool-btn" title="Paste (Ctrl/Cmd+V)">Paste</button>
+            <button type="button" phx-click="paste_clipboard" disabled={!has_clipboard?(@clipboard)} class="codeome-tool-btn" title="Paste (Ctrl/Cmd+V)">Paste</button>
             <button type="button" phx-click="duplicate_selection" disabled={!has_selection?(@selection)} class="codeome-tool-btn" title="Duplicate (Ctrl/Cmd+D)">Duplicate</button>
             <button type="button" phx-click="delete_selection" disabled={!has_selection?(@selection)} class="codeome-tool-btn" title="Delete (Del)">Delete</button>
             <span class="codeome-toolbar-sep"></span>
-            <button type="button" phx-click="undo" disabled={@history.past == []} class="codeome-tool-btn" title="Undo (Ctrl/Cmd+Z)">Undo</button>
-            <button type="button" phx-click="redo" disabled={@history.future == []} class="codeome-tool-btn" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
+            <button type="button" phx-click="undo" disabled={!EditorHistory.can_undo?(@history)} class="codeome-tool-btn" title="Undo (Ctrl/Cmd+Z)">Undo</button>
+            <button type="button" phx-click="redo" disabled={!EditorHistory.can_redo?(@history)} class="codeome-tool-btn" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
             <span class="codeome-toolbar-sep"></span>
             <button type="button" phx-click="open_snippet_form" disabled={!has_selection?(@selection)} class="codeome-tool-btn" title="Save selection as snippet">Save as snippet</button>
           </div>
@@ -785,6 +785,9 @@ defmodule LeniesWeb.EditorLive do
 
   defp has_selection?(nil), do: false
   defp has_selection?({_lo, _hi}), do: true
+
+  defp has_clipboard?([]), do: false
+  defp has_clipboard?(list) when is_list(list), do: true
 
   # Central buffer-mutation entry point: records the pre-change buffer onto
   # the undo history (clearing redo) before applying the new buffer.

@@ -58,4 +58,18 @@ defmodule LeniesWeb.EditorHistoryTest do
     # max 3: keeps the 3 most-recent pushes (5, 4, 3), drops 2 and 1
     assert h.past == [[5], [4], [3]]
   end
+
+  test "can_undo?/can_redo? reflect stack emptiness" do
+    h = EditorHistory.new(50)
+    refute EditorHistory.can_undo?(h)
+    refute EditorHistory.can_redo?(h)
+
+    h2 = EditorHistory.record(h, [:a])
+    assert EditorHistory.can_undo?(h2)
+    refute EditorHistory.can_redo?(h2)
+
+    {_restored, h3} = EditorHistory.undo(h2, [:b])
+    refute EditorHistory.can_undo?(h3)
+    assert EditorHistory.can_redo?(h3)
+  end
 end

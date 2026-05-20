@@ -425,5 +425,12 @@ defmodule LeniesWeb.EditorLiveTest do
 
       assert names == ["PUSH1", "ADD"]
     end
+
+    test "undo button enables after a mutation", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/editor/new")
+      assert render(view) =~ ~r/phx-click="undo"[^>]*disabled/
+      render_hook(view, "submit_opcode_text", %{"opcodes" => "push0"})
+      refute render(view) =~ ~r/phx-click="undo"[^>]*disabled/
+    end
   end
 end
