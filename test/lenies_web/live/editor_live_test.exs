@@ -383,5 +383,15 @@ defmodule LeniesWeb.EditorLiveTest do
       render_hook(view, "submit_snippet", %{"snippet_name" => "X"})
       assert Lenies.Snippets.Store.all() == []
     end
+
+    test "submit_snippet with an invalid name keeps the form open and saves nothing", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/editor/new")
+      render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
+      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+      render_hook(view, "open_snippet_form", %{})
+      html = render_hook(view, "submit_snippet", %{"snippet_name" => "---"})
+      assert Lenies.Snippets.Store.all() == []
+      assert html =~ ~s(name="snippet_name")
+    end
   end
 end

@@ -392,7 +392,14 @@ defmodule LeniesWeb.EditorLive do
        |> assign(:snippets, Lenies.Snippets.Store.all())
        |> assign(:show_snippet_form, false)}
     else
-      _ -> {:noreply, assign(socket, :show_snippet_form, false)}
+      # No selection: nothing to save, close the form.
+      nil ->
+        {:noreply, assign(socket, :show_snippet_form, false)}
+
+      # Store rejected the save (e.g. empty/invalid name): keep the form open
+      # so the user can correct it, mirroring submit_save_seed's error handling.
+      {:error, _reason} ->
+        {:noreply, socket}
     end
   end
 
