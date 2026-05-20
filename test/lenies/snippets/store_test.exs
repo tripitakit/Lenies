@@ -72,10 +72,44 @@ defmodule Lenies.Snippets.StoreTest do
     assert Store.all() == []
   end
 
-  test "persists across a restart (reload from disk)" do
+  test "persists across a restart (reload from disk)", %{tmp_path: tmp_path} do
     :ok = Store.save(snippet())
+    assert File.exists?(tmp_path)
     Agent.stop(Store)
     {:ok, _} = Store.start_link([])
     assert [%{id: "loop", opcodes: [:nop_0, :eat, :move]}] = Store.all()
+  end
+
+  test "get/1 returns nil for an unknown id" do
+    assert Store.get("nope") == nil
+  end
+
+  test "delete is a no-op for an unknown id" do
+    :ok = Store.save(snippet())
+    assert :ok = Store.delete("does-not-exist")
+    assert [%{id: "loop"}] = Store.all()
+  end
+
+  test "load survives a corrupt JSON file by starting empty", %{tmp_path: tmp_path} do
+    Agent.stop(Store)
+    File.write!(tmp_path, "{not valid json")
+    {:ok, _} = Store.start_link([])
+    assert Store.all() == []
+  end
+
+  test "load drops snippets with unknown opcodes", %{tmp_path: tmp_path} do
+    Agent.stop(Store)
+
+    File.write!(
+      tmp_path,
+      Jason.encode!([
+        %{"id" => "good", "name" => "Good", "opcodes" => ["nop_0", "eat"]},
+        %{"id" => "bad", "name" => "Bad", "opcodes" => ["totally_unknown_opcode_xyz"]}
+      ])
+    )
+
+    {:ok, _} = Store.start_link([])
+    ids = Store.all() |> Enum.map(& &1.id)
+    assert ids == ["good"]
   end
 end

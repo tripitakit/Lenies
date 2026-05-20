@@ -9,6 +9,7 @@ defmodule Lenies.Snippets.Store do
 
   A snippet is `%{id, name, opcodes}`. `id` is the caller-supplied slug;
   `save/1` upserts by `id`. Snippets are fragments — no length validation.
+  `id` is required; `all/0` returns most-recently-saved first.
   """
 
   use Agent, restart: :transient
