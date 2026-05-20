@@ -244,19 +244,19 @@ With one or more cells selected, use the toolbar above the listing or keyboard s
 | Cut       | Ctrl/Cmd+X       |
 | Paste     | Ctrl/Cmd+V       |
 | Duplicate | Ctrl/Cmd+D       |
-| Delete    | Del              |
+| Delete    | Del / Backspace  |
 
 The clipboard is per editor session — it does not persist after you close the modal.
 
 **Undo / Redo**
 Every edit (drag, paste, delete, …) is recorded in a local history. Use **Ctrl/Cmd+Z** to
-undo and **Ctrl/Cmd+Shift+Z** (or **Ctrl+Y**) to redo, or press the ← / → buttons in the
+undo and **Ctrl/Cmd+Shift+Z** (or **Ctrl+Y**) to redo, or press the **Undo** / **Redo** buttons in the
 toolbar.
 
 **Snippets**
 Select a range of cells, then click **Save as snippet** in the toolbar. Give the snippet a
 name; it appears in the **Snippets** section at the bottom of the opcode palette and can be
-dragged into any codeome just like a single opcode. Snippets are saved on the server (in `priv/user_snippets.json`), so they persist across sessions and are available to anyone using the same running instance.
+dragged into any codeome just like a single opcode. Snippets are saved on the server (in `priv/user_snippets.json`), so they persist across sessions and are available to anyone using the same running instance. To remove a snippet from the library, click the ⨯ button on its row in the Snippets section.
 
 ---
 
