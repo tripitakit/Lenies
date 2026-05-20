@@ -709,6 +709,18 @@ defmodule LeniesWeb.EditorLive do
               </div>
             </div>
           </div>
+          <div class="codeome-toolbar">
+            <button type="button" phx-click="copy_selection" disabled={!has_selection?(@selection)} class="codeome-tool-btn" title="Copy (Ctrl/Cmd+C)">Copy</button>
+            <button type="button" phx-click="cut_selection" disabled={!has_selection?(@selection)} class="codeome-tool-btn" title="Cut (Ctrl/Cmd+X)">Cut</button>
+            <button type="button" phx-click="paste_clipboard" disabled={@clipboard == []} class="codeome-tool-btn" title="Paste (Ctrl/Cmd+V)">Paste</button>
+            <button type="button" phx-click="duplicate_selection" disabled={!has_selection?(@selection)} class="codeome-tool-btn" title="Duplicate (Ctrl/Cmd+D)">Duplicate</button>
+            <button type="button" phx-click="delete_selection" disabled={!has_selection?(@selection)} class="codeome-tool-btn" title="Delete (Del)">Delete</button>
+            <span class="codeome-toolbar-sep"></span>
+            <button type="button" phx-click="undo" disabled={@history.past == []} class="codeome-tool-btn" title="Undo (Ctrl/Cmd+Z)">Undo</button>
+            <button type="button" phx-click="redo" disabled={@history.future == []} class="codeome-tool-btn" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
+            <span class="codeome-toolbar-sep"></span>
+            <button type="button" phx-click="open_snippet_form" disabled={!has_selection?(@selection)} class="codeome-tool-btn" title="Save selection as snippet">Save as snippet</button>
+          </div>
           <div class="codeome-listing-pane-title">Codeome — {length(@buffer)} ops</div>
           <div
             class="codeome-blocks"
@@ -770,6 +782,9 @@ defmodule LeniesWeb.EditorLive do
 
   defp selected?(nil, _idx), do: false
   defp selected?({lo, hi}, idx), do: idx >= lo and idx <= hi
+
+  defp has_selection?(nil), do: false
+  defp has_selection?({_lo, _hi}), do: true
 
   # Central buffer-mutation entry point: records the pre-change buffer onto
   # the undo history (clearing redo) before applying the new buffer.

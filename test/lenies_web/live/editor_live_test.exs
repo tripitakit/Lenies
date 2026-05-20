@@ -394,4 +394,36 @@ defmodule LeniesWeb.EditorLiveTest do
       assert html =~ ~s(name="snippet_name")
     end
   end
+
+  describe "editor toolbar" do
+    test "paste button is disabled with an empty clipboard", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/editor/new")
+      html = render(view)
+      assert html =~ ~r/phx-click="paste_clipboard"[^>]*disabled/
+    end
+
+    test "copy button enables once a block is selected", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/editor/new")
+      render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
+      html = render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+      refute html =~ ~r/phx-click="copy_selection"[^>]*disabled/
+    end
+
+    test "clicking the Delete toolbar button removes the selection", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/editor/new")
+      render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+
+      html =
+        view
+        |> element("button[phx-click='delete_selection']")
+        |> render_click()
+
+      names =
+        Regex.scan(~r/codeome-block-name">([A-Z0-9_]+)</, html)
+        |> Enum.map(fn [_, n] -> n end)
+
+      assert names == ["PUSH1", "ADD"]
+    end
+  end
 end
