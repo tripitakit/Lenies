@@ -47,5 +47,6 @@ defmodule LeniesWeb.Disassembler do
   def opcode_class(op) when op in [:get_ip, :get_size, :read_self], do: :self_inspect
   def opcode_class(op) when op in [:allocate, :write_child, :divide], do: :replication
   def opcode_class(op) when op in [:store, :load], do: :memory
+  def opcode_class(op) when op in [:make_plasmid, :conjugate], do: :hgt
   def opcode_class(_), do: :unknown
 end

@@ -415,6 +415,7 @@
 .lenies-dashboard .op-self_inspect { color: #38bdf8; }
 .lenies-dashboard .op-replication  { color: #e879f9; }
 .lenies-dashboard .op-memory       { color: #a3e635; }
+.lenies-dashboard .op-hgt          { color: #fde047; }
 .lenies-dashboard .op-unknown      { color: #94a3b8; }
 
 /* ----- Lenies dashboard: codeome block view ----- */
@@ -656,7 +657,8 @@
    (= full category cell width) and the long opcode names like
    SENSE_ENERGY / WRITE_CHILD / TURN_RIGHT don't get ellipsized. */
 .lenies-dashboard.codeome-editor-page .palette-category-chips {
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 3px;
 }
 

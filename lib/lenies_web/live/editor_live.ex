@@ -406,7 +406,7 @@ defmodule LeniesWeb.EditorLive do
           <div class="codeome-palette" id="palette-grid" phx-hook="CodeomePalette">
             <%= for {category, ops} <- grouped_opcodes() do %>
               <div class="palette-category">
-                <div class="palette-category-label">{category}</div>
+                <div class="palette-category-label">{category_label(category)}</div>
                 <div class="palette-category-chips">
                   <%= for op <- ops do %>
                     <div
@@ -632,5 +632,12 @@ defmodule LeniesWeb.EditorLive do
   defp class_order(:self_inspect), do: 7
   defp class_order(:replication), do: 8
   defp class_order(:memory), do: 9
-  defp class_order(_), do: 10
+  defp class_order(:hgt), do: 10
+  defp class_order(_), do: 11
+
+  # The palette category label is rendered (and CSS-uppercased) as-is for
+  # most classes — the class atom doubles as the label. The horizontal-
+  # transfer class is the exception: its atom (:hgt) is not a readable name.
+  defp category_label(:hgt), do: "Horizontal Code Transfer"
+  defp category_label(other), do: Atom.to_string(other)
 end
