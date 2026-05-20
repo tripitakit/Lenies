@@ -26,7 +26,8 @@ defmodule Lenies.Species do
           size: non_neg_integer(),
           cost: float(),
           max_gain: float(),
-          seed_origin: nil | binary()
+          seed_origin: nil | binary(),
+          plasmids: [[atom()]]
         }
 
   @doc """
@@ -82,6 +83,20 @@ defmodule Lenies.Species do
       # band injection, which the rest of the simulation doesn't do.
       seed_origin = Map.get(sample_snap, :seed_origin)
 
+      # Opcode lists of the plasmids the representative Lenie carries in its
+      # buffer (acquired via conjugation or inherited). The dashboard maps
+      # each to a human label (Twitch / Sprint / hex hash). Like seed_origin,
+      # the plasmid buffer is uniform within a codeome-hash species.
+      plasmids =
+        sample_snap
+        |> Map.get(:plasmids, [])
+        |> Enum.map(fn
+          %Lenies.Plasmid{opcodes: ops} -> ops
+          ops when is_list(ops) -> ops
+          _ -> nil
+        end)
+        |> Enum.reject(&is_nil/1)
+
       %{
         hash: hash,
         population: length(entries),
@@ -90,7 +105,8 @@ defmodule Lenies.Species do
         size: size,
         cost: cost,
         max_gain: max_gain,
-        seed_origin: seed_origin
+        seed_origin: seed_origin,
+        plasmids: plasmids
       }
     end)
     |> Enum.sort_by(& &1.population, :desc)

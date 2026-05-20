@@ -285,7 +285,12 @@ defmodule LeniesWeb.DashboardLive do
                               {String.slice(sp.hash, 0..7)}
                             </span>
                           </td>
-                          <td class="py-0.5 opacity-80">{format_seed_origin(sp)}</td>
+                          <td class="py-0.5 opacity-80">
+                            {format_seed_origin(sp)}<span
+                              :if={carried_plasmids(sp) != []}
+                              class="ml-1 text-[9px] text-yellow-300/80"
+                            >+ {Enum.join(carried_plasmids(sp), ", ")}</span>
+                          </td>
                           <td class="text-right">{sp.size}</td>
                           <td class="text-right text-rose-300">{format_energy(sp.cost)}</td>
                           <td class="text-right text-emerald-300">{format_energy(sp.max_gain)}</td>
@@ -473,6 +478,23 @@ defmodule LeniesWeb.DashboardLive do
   defp plasmid_label(@twitch_hash), do: "Twitch"
   defp plasmid_label(@sprint_hash), do: "Sprint"
   defp plasmid_label(hash) when is_binary(hash), do: hash
+
+  # Human labels for the plasmids a species carries in its buffer (from the
+  # representative Lenie's snapshot). Used to annotate the species-table seed
+  # name with the conjugation-acquired plasmid(s).
+  defp carried_plasmids(%{plasmids: plasmids}) when is_list(plasmids) do
+    plasmids
+    |> Enum.map(&plasmid_label(plasmid_hash(&1)))
+    |> Enum.uniq()
+  end
+
+  defp carried_plasmids(_), do: []
+
+  defp plasmid_hash(opcodes) do
+    :erlang.phash2(opcodes, 16_777_216)
+    |> Integer.to_string(16)
+    |> String.pad_leading(6, "0")
+  end
 
   # Format large counters (resources / carcasses) so the user can read
   # them at a glance: thousand-separated below 1k, then k/M/B suffixes
