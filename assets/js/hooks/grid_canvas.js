@@ -687,8 +687,8 @@ const GridCanvas = {
   // Append a one-line event to the conjugation log next to the World
   // header. Each event is its own bordered box. Keeps the last 3 boxes
   // visible; older entries fade out and are removed via CSS + timers.
-  // Render the single compact conjugation line: rate (events/sec over the
-  // last second), an 8-second sparkline, and the last plasmid transferred.
+  // Render the single compact conjugation line: a legend, an 8-second
+  // sparkline of the conjugation rate, and the last plasmid transferred.
   // Replaces the old per-event scrolling log, which flickered unreadably
   // under high conjugation rates.
   renderConjugationRate() {
@@ -704,8 +704,6 @@ const GridCanvas = {
       return;
     }
 
-    const rate = this.conjEvents.filter((t) => now - t <= 1000).length;
-
     const buckets = 16;
     const bucketMs = windowMs / buckets;
     const counts = new Array(buckets).fill(0);
@@ -715,23 +713,27 @@ const GridCanvas = {
       counts[idx]++;
     }
     const blocks = "▁▂▃▄▅▆▇█";
-    const max = Math.max(1, ...counts);
+    // Fixed scale (events-per-bucket -> block level) so each bar keeps a
+    // stable height frame-to-frame. Window-peak normalization made every
+    // bar jump whenever the peak bucket changed, which read as flashing.
+    const SPARK_CAP = 8;
     const spark = counts
-      .map((c) => blocks[Math.round((c / max) * (blocks.length - 1))])
+      .map(
+        (c) =>
+          blocks[clamp(Math.round((c / SPARK_CAP) * (blocks.length - 1)), 0, blocks.length - 1)],
+      )
       .join("");
 
-    const arrow = document.createElement("span");
-    arrow.textContent = "⇄ ";
-    const rateEl = document.createElement("span");
-    rateEl.className = "conj-rate";
-    rateEl.textContent = `${rate}/s`;
+    const legend = document.createElement("span");
+    legend.className = "conj-legend";
+    legend.textContent = "Conjugation events: ";
     const sparkEl = document.createElement("span");
     sparkEl.className = "conj-spark";
-    sparkEl.textContent = ` ${spark}`;
+    sparkEl.textContent = spark;
     const lastEl = document.createElement("span");
     lastEl.className = "conj-last";
-    lastEl.textContent = `  last: ${this.conjLastLabel || "—"}`;
-    log.replaceChildren(arrow, rateEl, sparkEl, lastEl);
+    lastEl.textContent = `Last: ${this.conjLastLabel || "—"}`;
+    log.replaceChildren(legend, sparkEl, lastEl);
   },
 
   destroyed() {

@@ -381,20 +381,20 @@
   color: #94a3b8;
 }
 
-.conjugation-log .conj-rate {
-  color: #67e8f9;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
+.conjugation-log .conj-legend {
+  color: #94a3b8;
+  opacity: 0.8;
 }
 
 .conjugation-log .conj-spark {
   color: #67e8f9;
-  opacity: 0.7;
+  opacity: 0.85;
   letter-spacing: -1px;
 }
 
 .conjugation-log .conj-last {
   color: #fde047;
+  margin-left: 1.5em;
 }
 
 /* ----- Lenies dashboard: codeome opcode category colors ----- */

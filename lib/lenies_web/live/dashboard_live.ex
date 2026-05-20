@@ -131,14 +131,12 @@ defmodule LeniesWeb.DashboardLive do
 
       <div class="flex-1 flex gap-3 min-h-0">
         <section class="panel p-3 flex flex-col gap-2 min-h-0 shrink-0 dashboard-map-pane">
-          <div class="flex items-center gap-3">
-            <h2 class="text-xs shrink-0">▮ World</h2>
-            <div
-              id="conjugation-log"
-              phx-update="ignore"
-              class="conjugation-log flex-1 text-[10px] font-mono leading-tight overflow-hidden whitespace-nowrap"
-            >
-            </div>
+          <h2 class="text-xs">▮ World</h2>
+          <div
+            id="conjugation-log"
+            phx-update="ignore"
+            class="conjugation-log text-[10px] font-mono leading-tight overflow-hidden whitespace-nowrap"
+          >
           </div>
           <%!-- phx-update="ignore" keeps morphdom from patching the canvas
                 BITMAP; the element's own attributes (data-show-*,
