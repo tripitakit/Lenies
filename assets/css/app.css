@@ -373,35 +373,28 @@
   text-transform: lowercase;
 }
 
-/* ----- Conjugation event log (next to "World" header) ----- */
+/* ----- Conjugation rate display (next to "World" header) ----- */
 .conjugation-log {
   display: flex;
-  flex-direction: row-reverse;
-  justify-content: flex-end;
   align-items: center;
-  gap: 8px;
   min-width: 0;
+  color: #94a3b8;
 }
 
-.conjugation-log-line {
+.conjugation-log .conj-rate {
+  color: #67e8f9;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.conjugation-log .conj-spark {
+  color: #67e8f9;
+  opacity: 0.7;
+  letter-spacing: -1px;
+}
+
+.conjugation-log .conj-last {
   color: #fde047;
-  opacity: 0;
-  transition: opacity 200ms ease-in-out;
-  flex: 0 0 auto;
-  border: 1px solid rgba(253, 224, 71, 0.45);
-  border-radius: 3px;
-  padding: 2px 7px;
-  background: rgba(253, 224, 71, 0.06);
-  white-space: nowrap;
-}
-
-.conjugation-log-line-visible {
-  opacity: 0.95;
-}
-
-.conjugation-log-line-fading {
-  opacity: 0;
-  transition: opacity 900ms ease-in-out;
 }
 
 /* ----- Lenies dashboard: codeome opcode category colors ----- */

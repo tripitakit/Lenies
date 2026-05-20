@@ -113,6 +113,13 @@ const GridCanvas = {
 
     this.flashingCells = new Map(); // key: "x,y" -> { startMs, expireAt }
 
+    // Conjugation rate display: timestamps (performance.now) of recent
+    // events + the most recent plasmid label. A timer re-renders the line
+    // so the rate decays toward 0 when events stop (even while paused).
+    this.conjEvents = [];
+    this.conjLastLabel = null;
+    this.conjInterval = setInterval(() => this.renderConjugationRate(), 250);
+
     this.handleEvent("fx_conjugation", ({ sender, receiver, donor_seed, recipient_seed, plasmid_label }) => {
       const now = performance.now();
       const durationMs = 3000;
@@ -135,7 +142,9 @@ const GridCanvas = {
         if (r && r.expireAt <= performance.now()) this.flashingCells.delete(receiverKey);
       }, durationMs + 50);
 
-      this.appendConjugationLog(plasmid_label, donor_seed, recipient_seed);
+      this.conjEvents.push(now);
+      this.conjLastLabel = plasmid_label;
+      this.renderConjugationRate();
     });
 
     this.handleEvent("render_frame", (payload) => {
@@ -678,33 +687,59 @@ const GridCanvas = {
   // Append a one-line event to the conjugation log next to the World
   // header. Each event is its own bordered box. Keeps the last 3 boxes
   // visible; older entries fade out and are removed via CSS + timers.
-  appendConjugationLog(plasmidLabel, donorSeed, recipientSeed) {
+  // Render the single compact conjugation line: rate (events/sec over the
+  // last second), an 8-second sparkline, and the last plasmid transferred.
+  // Replaces the old per-event scrolling log, which flickered unreadably
+  // under high conjugation rates.
+  renderConjugationRate() {
     const log = document.getElementById("conjugation-log");
     if (!log) return;
 
-    const line = document.createElement("div");
-    line.className = "conjugation-log-line";
-    line.textContent = `${plasmidLabel} : ${donorSeed} > ${recipientSeed}`;
-    log.appendChild(line);
+    const now = performance.now();
+    const windowMs = 8000;
+    this.conjEvents = this.conjEvents.filter((t) => now - t <= windowMs);
 
-    while (log.childElementCount > 3) {
-      log.removeChild(log.firstElementChild);
+    if (this.conjEvents.length === 0 && !this.conjLastLabel) {
+      log.replaceChildren();
+      return;
     }
 
-    // Schedule a fade-out class change after a tick so the CSS transition
-    // applies. The line is removed after ~5 seconds.
-    requestAnimationFrame(() => line.classList.add("conjugation-log-line-visible"));
-    setTimeout(() => {
-      line.classList.remove("conjugation-log-line-visible");
-      line.classList.add("conjugation-log-line-fading");
-    }, 4500);
-    setTimeout(() => {
-      if (line.parentNode === log) log.removeChild(line);
-    }, 5500);
+    const rate = this.conjEvents.filter((t) => now - t <= 1000).length;
+
+    const buckets = 16;
+    const bucketMs = windowMs / buckets;
+    const counts = new Array(buckets).fill(0);
+    for (const t of this.conjEvents) {
+      let idx = buckets - 1 - Math.floor((now - t) / bucketMs);
+      idx = clamp(idx, 0, buckets - 1);
+      counts[idx]++;
+    }
+    const blocks = "▁▂▃▄▅▆▇█";
+    const max = Math.max(1, ...counts);
+    const spark = counts
+      .map((c) => blocks[Math.round((c / max) * (blocks.length - 1))])
+      .join("");
+
+    const arrow = document.createElement("span");
+    arrow.textContent = "⇄ ";
+    const rateEl = document.createElement("span");
+    rateEl.className = "conj-rate";
+    rateEl.textContent = `${rate}/s`;
+    const sparkEl = document.createElement("span");
+    sparkEl.className = "conj-spark";
+    sparkEl.textContent = ` ${spark}`;
+    const lastEl = document.createElement("span");
+    lastEl.className = "conj-last";
+    lastEl.textContent = `  last: ${this.conjLastLabel || "—"}`;
+    log.replaceChildren(arrow, rateEl, sparkEl, lastEl);
   },
 
   destroyed() {
     this.detachInteractionHandlers();
+    if (this.conjInterval) {
+      clearInterval(this.conjInterval);
+      this.conjInterval = null;
+    }
     if (this.pendingClickTimer) {
       clearTimeout(this.pendingClickTimer);
       this.pendingClickTimer = null;
