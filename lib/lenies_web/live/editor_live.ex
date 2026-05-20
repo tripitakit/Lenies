@@ -14,6 +14,7 @@ defmodule LeniesWeb.EditorLive do
 
   alias LeniesWeb.Disassembler
   alias LeniesWeb.CodeomeBuffer
+  alias LeniesWeb.EditorHistory
 
   @default_chapter "02-opcode-reference.md"
 
@@ -39,6 +40,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:selection, nil)
       |> assign(:sel_anchor, nil)
       |> assign(:clipboard, [])
+      |> assign(:history, EditorHistory.new(100))
 
     {:ok, socket}
   end
@@ -106,12 +108,20 @@ defmodule LeniesWeb.EditorLive do
   def handle_event("edit_delete", %{"index" => index_str}, socket) do
     index = String.to_integer(index_str)
     new_buffer = LeniesWeb.CodeomeBuffer.delete(socket.assigns.buffer, index)
-    {:noreply, apply_buffer_change(socket, new_buffer)}
+
+    {:noreply,
+     socket
+     |> assign(selection: nil, sel_anchor: nil)
+     |> commit_buffer_change(new_buffer)}
   end
 
   def handle_event("edit_reorder", %{"from" => from, "to" => to}, socket) do
     new_buffer = LeniesWeb.CodeomeBuffer.move(socket.assigns.buffer, from, to)
-    {:noreply, apply_buffer_change(socket, new_buffer)}
+
+    {:noreply,
+     socket
+     |> assign(selection: nil, sel_anchor: nil)
+     |> commit_buffer_change(new_buffer)}
   end
 
   def handle_event("edit_insert", %{"index" => index, "opcode" => opcode_str}, socket)
@@ -121,7 +131,11 @@ defmodule LeniesWeb.EditorLive do
 
       if Lenies.Codeome.Opcodes.known?(opcode) do
         new_buffer = LeniesWeb.CodeomeBuffer.insert(socket.assigns.buffer, index, opcode)
-        {:noreply, apply_buffer_change(socket, new_buffer)}
+
+        {:noreply,
+         socket
+         |> assign(selection: nil, sel_anchor: nil)
+         |> commit_buffer_change(new_buffer)}
       else
         {:noreply, socket}
       end
@@ -218,7 +232,8 @@ defmodule LeniesWeb.EditorLive do
 
         {:noreply,
          socket
-         |> apply_buffer_change(new_buffer)
+         |> assign(selection: nil, sel_anchor: nil)
+         |> commit_buffer_change(new_buffer)
          |> assign(text_input_value: "", text_input_error: nil)}
 
       {:error, invalid} ->
@@ -326,6 +341,34 @@ defmodule LeniesWeb.EditorLive do
          socket
          |> assign(selection: nil, sel_anchor: nil)
          |> commit_buffer_change(new_buffer)}
+    end
+  end
+
+  def handle_event("undo", _params, socket) do
+    case EditorHistory.undo(socket.assigns.history, socket.assigns.buffer) do
+      :none ->
+        {:noreply, socket}
+
+      {prev_buffer, history} ->
+        {:noreply,
+         socket
+         |> assign(:history, history)
+         |> assign(selection: nil, sel_anchor: nil)
+         |> apply_buffer_change(prev_buffer)}
+    end
+  end
+
+  def handle_event("redo", _params, socket) do
+    case EditorHistory.redo(socket.assigns.history, socket.assigns.buffer) do
+      :none ->
+        {:noreply, socket}
+
+      {next_buffer, history} ->
+        {:noreply,
+         socket
+         |> assign(:history, history)
+         |> assign(selection: nil, sel_anchor: nil)
+         |> apply_buffer_change(next_buffer)}
     end
   end
 
@@ -627,10 +670,14 @@ defmodule LeniesWeb.EditorLive do
   defp selected?(nil, _idx), do: false
   defp selected?({lo, hi}, idx), do: idx >= lo and idx <= hi
 
-  # Central buffer-mutation entry point. A later task adds undo history here;
-  # for now it delegates to apply_buffer_change/2.
+  # Central buffer-mutation entry point: records the pre-change buffer onto
+  # the undo history (clearing redo) before applying the new buffer.
   defp commit_buffer_change(socket, new_buffer) do
-    apply_buffer_change(socket, new_buffer)
+    history = EditorHistory.record(socket.assigns.history, socket.assigns.buffer)
+
+    socket
+    |> assign(:history, history)
+    |> apply_buffer_change(new_buffer)
   end
 
   defp apply_buffer_change(socket, new_buffer) do

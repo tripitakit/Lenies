@@ -263,4 +263,46 @@ defmodule LeniesWeb.EditorLiveTest do
       assert listing_opcodes(html) == ["PUSH0", "PUSH1", "ADD", "MOVE", "EAT"]
     end
   end
+
+  describe "undo / redo" do
+    defp seeded_editor3(conn) do
+      {:ok, view, _} = live(conn, "/editor/new")
+      render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+      view
+    end
+
+    defp names(html) do
+      Regex.scan(~r/codeome-block-name">([A-Z0-9_]+)</, html)
+      |> Enum.map(fn [_, n] -> n end)
+    end
+
+    test "undo reverts the last mutation; redo reapplies it", %{conn: conn} do
+      view = seeded_editor3(conn)
+      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+      html_after_delete = render_hook(view, "delete_selection", %{})
+      assert names(html_after_delete) == ["PUSH1", "ADD"]
+
+      html_undo = render_hook(view, "undo", %{})
+      assert names(html_undo) == ["PUSH0", "PUSH1", "ADD"]
+
+      html_redo = render_hook(view, "redo", %{})
+      assert names(html_redo) == ["PUSH1", "ADD"]
+    end
+
+    test "undo with empty history is a no-op", %{conn: conn} do
+      {:ok, view, _} = live(conn, "/editor/new")
+      html = render_hook(view, "undo", %{})
+      assert names(html) == []
+    end
+
+    test "a new mutation after undo clears the redo stack", %{conn: conn} do
+      view = seeded_editor3(conn)
+      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+      render_hook(view, "delete_selection", %{})
+      render_hook(view, "undo", %{})
+      render_hook(view, "submit_opcode_text", %{"opcodes" => "move"})
+      html = render_hook(view, "redo", %{})
+      assert names(html) == ["PUSH0", "PUSH1", "ADD", "MOVE"]
+    end
+  end
 end
