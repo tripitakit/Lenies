@@ -147,6 +147,14 @@ defmodule LeniesWeb.CodeomeBufferTest do
     test "clamps hi to the last index" do
       assert CodeomeBuffer.slice([:a, :b], {0, 9}) == [:a, :b]
     end
+
+    test "empty buffer yields []" do
+      assert CodeomeBuffer.slice([], {0, 0}) == []
+    end
+
+    test "lo past the end yields []" do
+      assert CodeomeBuffer.slice([:a, :b], {5, 9}) == []
+    end
   end
 
   describe "delete_range/2" do
@@ -160,6 +168,14 @@ defmodule LeniesWeb.CodeomeBufferTest do
 
     test "clamps hi beyond the end" do
       assert CodeomeBuffer.delete_range([:a, :b, :c], {1, 9}) == [:a]
+    end
+
+    test "empty buffer yields []" do
+      assert CodeomeBuffer.delete_range([], {0, 0}) == []
+    end
+
+    test "lo past the end leaves the buffer unchanged (no-op)" do
+      assert CodeomeBuffer.delete_range([:a, :b], {5, 9}) == [:a, :b]
     end
   end
 
@@ -178,6 +194,10 @@ defmodule LeniesWeb.CodeomeBufferTest do
 
     test "inserting an empty list is a no-op" do
       assert CodeomeBuffer.insert_many([:a, :b], 1, []) == [:a, :b]
+    end
+
+    test "inserting into an empty buffer" do
+      assert CodeomeBuffer.insert_many([], 0, [:a, :b]) == [:a, :b]
     end
   end
 

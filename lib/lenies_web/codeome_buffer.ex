@@ -58,13 +58,19 @@ defmodule LeniesWeb.CodeomeBuffer do
     end
   end
 
-  @doc "Copy the inclusive `{lo, hi}` range out of the buffer."
+  @doc """
+  Copy the inclusive `{lo, hi}` range out of the buffer. `hi` is clamped to
+  the last valid index; if `lo` is past the end, the result is empty.
+  """
   @spec slice(buffer(), {non_neg_integer(), non_neg_integer()}) :: buffer()
   def slice(buffer, {lo, hi}) when lo >= 0 and hi >= lo do
     Enum.slice(buffer, lo..hi)
   end
 
-  @doc "Delete the inclusive `{lo, hi}` range from the buffer."
+  @doc """
+  Delete the inclusive `{lo, hi}` range from the buffer. `hi` is clamped to
+  the end; if `lo` is past the end the buffer is returned unchanged (no-op).
+  """
   @spec delete_range(buffer(), {non_neg_integer(), non_neg_integer()}) :: buffer()
   def delete_range(buffer, {lo, hi}) when lo >= 0 and hi >= lo do
     {before, rest} = Enum.split(buffer, lo)
