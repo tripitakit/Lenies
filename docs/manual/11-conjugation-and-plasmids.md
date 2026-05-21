@@ -24,17 +24,21 @@ writing your own conjugable plasmid in a custom codeome.
 
 ## 1. What conjugation is — and what it is not
 
-A Lenie has, in addition to its codeome, an optional **plasmid buffer**: a short
-list of opcodes (up to 64) that it carries but does *not* execute. Think of the
-codeome as the chromosome and the plasmid as a loose ring of DNA riding
-alongside it.
+A Lenie has, in addition to its codeome, a **plasmid buffer**: the list of
+plasmids it carries — each a short sequence of opcodes (up to 64). Think of the
+codeome as the chromosome and a plasmid as a loose ring of DNA riding alongside
+it. A Lenie can carry **several distinct plasmids** at once; they accumulate as
+it acquires them.
 
-Two opcodes act on the buffer:
+Two opcodes act on plasmids:
 
-- `make_plasmid` carves a slice of the creature's *own* codeome into the buffer.
-- `conjugate` copies the buffer into the Lenie directly ahead — appending those
-  opcodes to that Lenie's codeome and installing them as *its* plasmid buffer
-  too, so the recipient can pass the trait on in turn.
+- `make_plasmid` carves a slice of the creature's *own* codeome into the buffer
+  — the payload it offers when it conjugates.
+- `conjugate` sends **one** carried plasmid — picked uniformly at random among
+  those it holds — to the Lenie directly ahead, appending those opcodes to that
+  Lenie's codeome and **adding** the plasmid to that Lenie's own buffer. The
+  recipient keeps any plasmids it already had, and can pass the new one on in
+  turn.
 
 That second clause is what makes it spread: every recipient becomes a potential
 donor. A single carrier dropped into a field of plain replicators can, over
@@ -73,14 +77,16 @@ region of your own code and say "this is the part I want to spread".
 
 ### `conjugate` `( -- 1|0 )`
 
-Takes no operands. If the creature holds a plasmid and the cell directly ahead
-is occupied by another Lenie, the plasmid is appended to that Lenie's codeome
-and installed as its plasmid buffer. Pushes `1` on success.
+Takes no operands. If the creature holds at least one plasmid and the cell
+directly ahead is occupied by another Lenie, **one of its plasmids — chosen at
+random** — is appended to that Lenie's codeome and added to its buffer. Pushes
+`1` on a successful transfer.
 
 Pushes `0` — and pays only the base cost — on any failure path:
 
 - the donor has no plasmid;
 - no Lenie is in the cell ahead;
+- the recipient already carries the plasmid that was picked (see below);
 - the recipient is full (appending would exceed the codeome length bound, 1000);
 - the recipient is busy (see the deadlock note below).
 
@@ -88,9 +94,13 @@ Pushes `0` — and pays only the base cost — on any failure path:
 
 Two robustness properties worth knowing:
 
-- **Idempotent.** Re-sending a recipient the exact plasmid it already carries is
-  a no-op — the recipient's codeome does not grow. Two already-converted Lenies
-  bumping into each other forever will not bloat each other to the length cap.
+- **Once per encounter.** Sending a recipient a plasmid it already carries is a
+  no-op: nothing is appended, **no conjugation event fires**, and the donor
+  reads failure (`0`). So two adjacent Lenies that already share a plasmid don't
+  spam transfers or bloat each other toward the length cap — a given plasmid
+  crosses to a given neighbour at most once. Combined with the random pick
+  above, a multi-plasmid donor hands the neighbour each distinct plasmid it
+  lacks over successive forage steps, then falls quiet.
 - **Deadlock-safe.** If two Lenies face each other and both call `conjugate` in
   the same instant, each is trying to write into the other at once. The transfer
   uses a short (50 ms) timeout and treats a busy recipient as an ordinary
@@ -385,16 +395,17 @@ copied, never executed.
   returning any — like Veer's bare turn — is a net drain unless the *behaviour*
   earns its keep indirectly (fresh grazing).
 - **The 1000-opcode cap.** Conjugation refuses to append if it would push the
-  recipient past the codeome length bound. Idempotency keeps the same plasmid
-  from stacking, but distinct plasmids accumulate; a host can only absorb so
-  many.
+  recipient past the codeome length bound. The once-per-encounter rule keeps the
+  same plasmid from stacking, but **distinct** plasmids accumulate; a host can
+  only absorb so many before it hits the cap.
 - **Symmetric conjugation.** Two carriers facing each other both calling
   `conjugate` is now safe (§2) — neither dies — but neither transfer completes
   that tick. In dense fields this is just a small amount of wasted effort.
 - **Watch it happen.** When a conjugation succeeds the dashboard flashes both
-  cells and prints a line to the conjugation log next to the *World* header,
-  in the form `Plasmid : Donor > Receiver`. This is the quickest way to confirm
-  your custom plasmid is actually transferring.
+  cells and updates the conjugation indicator next to the *World* header — a
+  live events/sec rate with a short sparkline of recent activity and the name of
+  the last plasmid transferred. This is the quickest way to confirm your custom
+  plasmid is actually spreading.
 
 ---
 
