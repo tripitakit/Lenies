@@ -68,4 +68,11 @@ defmodule LeniesWeb.SpeciesLiveTest do
     {:ok, _view, html} = live(conn, "/species/00000000")
     assert html =~ ~r/(extinct|not found|never existed|empty)/i
   end
+
+  test "flash group is rendered", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/species/00000000")
+    assert has_element?(view, "#flash-group")
+    assert has_element?(view, "#client-error")
+    assert has_element?(view, "#server-error")
+  end
 end

@@ -103,6 +103,7 @@ defmodule LeniesWeb.LenieInspectorLive do
   def render(assigns) do
     ~H"""
     <div class="inspector">
+      <Layouts.flash_group flash={@flash} />
       <h1>Lenie Inspector: {@id}</h1>
 
       <%= if @found? do %>

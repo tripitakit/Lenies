@@ -40,6 +40,13 @@ defmodule LeniesWeb.DashboardLiveTest do
     assert html =~ ~r/(Pause|Resume)/i
   end
 
+  test "flash group is rendered", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/")
+    assert has_element?(view, "#flash-group")
+    assert has_element?(view, "#client-error")
+    assert has_element?(view, "#server-error")
+  end
+
   test "shows initial canvas with width and height data attributes", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/")
     assert html =~ ~r/phx-hook="GridCanvas"/

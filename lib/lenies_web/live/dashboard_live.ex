@@ -119,6 +119,7 @@ defmodule LeniesWeb.DashboardLive do
       class="lenies-dashboard h-screen w-screen overflow-hidden flex flex-col p-3 gap-3"
       data-inspector-dirty={if @inspector_dirty, do: "true", else: nil}
     >
+      <Layouts.flash_group flash={@flash} />
       <header class="flex items-center justify-between px-2 shrink-0">
         <h1 class="text-lg font-bold tracking-widest">⬡ LENIES · SANDBOX</h1>
         <div class="flex items-center gap-4 text-xs">

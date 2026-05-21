@@ -44,6 +44,13 @@ defmodule LeniesWeb.EditorLiveTest do
     assert html =~ ~s(id="manual-pane")
   end
 
+  test "flash group is rendered", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/editor/new")
+    assert has_element?(view, "#flash-group")
+    assert has_element?(view, "#client-error")
+    assert has_element?(view, "#server-error")
+  end
+
   test "mounts on /editor/edit/:hash with empty buffer when hash unknown", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/editor/edit/NONEXISTENT")
     assert html =~ "Edit: NONEXISTENT"
