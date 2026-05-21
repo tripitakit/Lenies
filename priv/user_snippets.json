@@ -1,0 +1,16 @@
+[
+  {
+    "id": "test",
+    "name": "test",
+    "opcodes": [
+      "move",
+      "nop_0",
+      "nop_0",
+      "attack",
+      "eat",
+      "move",
+      "move",
+      "turn_right"
+    ]
+  }
+]

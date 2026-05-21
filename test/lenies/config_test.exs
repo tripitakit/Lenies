@@ -15,10 +15,6 @@ defmodule Lenies.ConfigTest do
     assert Config.radiation_per_tick() == 1000
   end
 
-  test "population_cap/0 returns configured value" do
-    assert Config.population_cap() == 50_000
-  end
-
   test "cell_resource_cap/0 returns configured value" do
     assert Config.cell_resource_cap() == 100
   end
@@ -43,9 +39,6 @@ defmodule Lenies.ConfigTest do
     end
   end
 
-  test "population_warning_threshold/0 returns configured value" do
-    assert Config.population_warning_threshold() == 0.8
-  end
 
   test "codeome_length_bounds/0 returns configured value" do
     assert Config.codeome_length_bounds() == {5, 1000}

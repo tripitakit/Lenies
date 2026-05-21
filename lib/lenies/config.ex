@@ -10,8 +10,6 @@ defmodule Lenies.Config do
   @app :lenies
 
   def grid_size, do: get(:grid_size, {256, 256})
-  def population_cap, do: get(:population_cap, 50_000)
-  def population_warning_threshold, do: get(:population_warning_threshold, 0.8)
   def tick_interval_ms, do: get(:tick_interval_ms, 100)
   def radiation_per_tick, do: get(:radiation_per_tick, 100)
   def radiation_uniform_ratio, do: get(:radiation_uniform_ratio, 0.7)
