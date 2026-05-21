@@ -31,6 +31,17 @@ defmodule Lenies.World do
   def sterilize, do: GenServer.call(@name, :sterilize)
 
   @doc """
+  Swap the 4 snapshot tables (`Lenies.Snapshot.tables/0`) for the `.tab` files
+  in `dir`, running in the World process so World owns the reloaded tables.
+
+  Intended to be called by `Lenies.Snapshot.restore_from_disk/1` AFTER a
+  separate `sterilize/0` call (so terminated-Lenie `:lenie_died` casts are
+  drained first) and AFTER the files have been validated. Does NOT recreate
+  `:cells` contents (they come from the file) nor touch `:species_codeomes`.
+  """
+  def restore_tables(dir), do: GenServer.call(@name, {:restore_tables, dir})
+
+  @doc """
   Execute an action requested by a Lenie. Synchronous call.
 
   Forms:
@@ -129,6 +140,42 @@ defmodule Lenies.World do
     )
 
     {:reply, :ok, new_state}
+  end
+
+  def handle_call({:restore_tables, dir}, _from, state) do
+    if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
+
+    result =
+      Enum.reduce_while(Lenies.Snapshot.tables(), :ok, fn table, _acc ->
+        path = Path.join(dir, "#{table}.tab") |> String.to_charlist()
+
+        # The table still exists after sterilize; delete it so file2tab can
+        # recreate it owned by THIS (World) process.
+        if :ets.whereis(table) != :undefined, do: :ets.delete(table)
+
+        case :ets.file2tab(path) do
+          {:ok, _} -> {:cont, :ok}
+          _error -> {:halt, {:error, {:restore_failed, table}}}
+        end
+      end)
+
+    # Reset tick bookkeeping like sterilize does and reschedule the tick.
+    new_state = %{state | tick_count: 0, tick_ref: nil}
+    new_state = maybe_schedule_tick(new_state)
+
+    case result do
+      :ok ->
+        Phoenix.PubSub.broadcast(
+          Lenies.PubSub,
+          "world:control",
+          {:restored, System.system_time(:millisecond)}
+        )
+
+        {:reply, :ok, new_state}
+
+      {:error, _} = err ->
+        {:reply, err, new_state}
+    end
   end
 
   def handle_call(:pause, _from, state) do

@@ -182,20 +182,25 @@ defmodule LeniesWeb.DashboardLiveTest do
   end
 
   test "Save snapshot button triggers Snapshot.save_to_disk", %{conn: conn} do
+    root =
+      Path.join(System.tmp_dir!(), "lenies-ui-snapshot-test-#{System.unique_integer([:positive])}")
+
+    Application.put_env(:lenies, :snapshot_root, root)
+    on_exit(fn ->
+      File.rm_rf!(root)
+      Application.delete_env(:lenies, :snapshot_root)
+    end)
+
     {:ok, view, _html} = live(conn, "/")
 
     [{key, cell}] = :ets.lookup(:cells, {2, 2})
     :ets.insert(:cells, {key, %{cell | resource: 42}})
 
-    base = "/tmp/lenies-ui-snapshot-test"
-    File.rm_rf!(base)
-
     view
-    |> form("form[phx-submit='snapshot_action']", %{path: base})
+    |> form("form[phx-submit='snapshot_action']", %{snapshot_name: "uitest"})
     |> render_submit(%{action: "save"})
 
-    assert File.exists?(Path.join(base, "cells.tab"))
-    File.rm_rf!(base)
+    assert File.exists?(Path.join([root, "uitest", "cells.tab"]))
   end
 
   describe "inspector dirty notification" do
