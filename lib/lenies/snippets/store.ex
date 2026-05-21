@@ -83,6 +83,8 @@ defmodule Lenies.Snippets.Store do
   defp validate_name(%{name: name, id: id}) when is_binary(name) and is_binary(id) do
     cond do
       String.trim(name) == "" -> {:error, :invalid_name}
+      # Defensive: slugs are always non-empty, but this function is public and
+      # could be called directly with an arbitrary map.
       id == "" -> {:error, :invalid_name}
       not String.match?(name, ~r/[a-zA-Z0-9]/) -> {:error, :invalid_name}
       true -> :ok

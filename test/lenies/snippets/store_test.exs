@@ -62,6 +62,14 @@ defmodule Lenies.Snippets.StoreTest do
     assert {:error, :invalid_name} = Store.save(snippet(%{name: "  ", id: "x"}))
   end
 
+  test "rejects an all-symbol name (no alphanumeric content)" do
+    assert {:error, :invalid_name} = Store.save(snippet(%{name: "###", id: "x"}))
+  end
+
+  test "accepts a name with alphanumeric content" do
+    assert :ok = Store.save(snippet(%{name: "My Loop", id: "my-loop"}))
+  end
+
   test "rejects unknown opcodes" do
     assert {:error, :invalid_opcodes} = Store.save(snippet(%{opcodes: [:not_a_real_op]}))
   end
