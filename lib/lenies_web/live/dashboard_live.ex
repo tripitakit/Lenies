@@ -252,10 +252,10 @@ defmodule LeniesWeb.DashboardLive do
               <div class="panel p-3 flex flex-col gap-2 min-h-0">
                 <h2 class="text-xs">▮ {@species_total} species</h2>
                 <div class="flex-1 min-h-0 overflow-auto">
-                  <table class="w-full text-[11px] tabular-nums">
+                  <table class="text-[11px] tabular-nums">
                     <thead class="text-cyan-300/80 sticky top-0 bg-slate-950/80">
                       <tr>
-                        <th class="text-left py-1">Hash</th>
+                        <th class="text-left py-1 whitespace-nowrap">Hash</th>
                         <th
                           class="text-left py-1 cursor-pointer select-none hover:text-cyan-200"
                           phx-click="sort_species"
@@ -265,15 +265,15 @@ defmodule LeniesWeb.DashboardLive do
                           Seed{sort_arrow(@sort_by, @sort_dir, :seed)}
                         </th>
                         <th
-                          class="text-right py-1 cursor-pointer select-none hover:text-cyan-200"
+                          class="text-right py-1 pl-3 whitespace-nowrap cursor-pointer select-none hover:text-cyan-200"
                           phx-click="sort_species"
                           phx-value-col="size"
                           title="Codeome length (opcodes). Click to sort."
                         >
-                          Codeome size{sort_arrow(@sort_by, @sort_dir, :size)}
+                          Size{sort_arrow(@sort_by, @sort_dir, :size)}
                         </th>
                         <th
-                          class="text-right py-1 cursor-pointer select-none hover:text-cyan-200"
+                          class="text-right py-1 pl-3 whitespace-nowrap cursor-pointer select-none hover:text-cyan-200"
                           phx-click="sort_species"
                           phx-value-col="cost"
                           title="Static energy cost for one linear pass through the codeome. Click to sort."
@@ -281,7 +281,7 @@ defmodule LeniesWeb.DashboardLive do
                           Cost{sort_arrow(@sort_by, @sort_dir, :cost)}
                         </th>
                         <th
-                          class="text-right py-1 cursor-pointer select-none hover:text-cyan-200"
+                          class="text-right py-1 pl-3 whitespace-nowrap cursor-pointer select-none hover:text-cyan-200"
                           phx-click="sort_species"
                           phx-value-col="gain"
                           title="Max energy gain for one linear pass (all eat/attack succeed). Click to sort."
@@ -289,7 +289,7 @@ defmodule LeniesWeb.DashboardLive do
                           Gain{sort_arrow(@sort_by, @sort_dir, :gain)}
                         </th>
                         <th
-                          class="text-right py-1 cursor-pointer select-none hover:text-cyan-200"
+                          class="text-right py-1 pl-3 whitespace-nowrap cursor-pointer select-none hover:text-cyan-200"
                           phx-click="sort_species"
                           phx-value-col="population"
                           title="Population. Click to sort."
@@ -297,7 +297,7 @@ defmodule LeniesWeb.DashboardLive do
                           Pop{sort_arrow(@sort_by, @sort_dir, :population)}
                         </th>
                         <th
-                          class="text-right py-1 cursor-pointer select-none hover:text-cyan-200"
+                          class="text-right py-1 pl-3 whitespace-nowrap cursor-pointer select-none hover:text-cyan-200"
                           phx-click="sort_species"
                           phx-value-col="avg_generation"
                           title="Average generation. Click to sort."
@@ -317,27 +317,29 @@ defmodule LeniesWeb.DashboardLive do
                         phx-click="select_species"
                         phx-value-hash={sp.hash}
                       >
-                        <td class="py-0.5 flex items-center gap-1.5">
-                          <span
-                            class="inline-block w-2 h-2 shrink-0"
-                            style={"background:#{Lenies.SpeciesColor.hex(sp.hash)}"}
-                          >
-                          </span>
-                          <span class="text-cyan-400">
-                            {String.slice(sp.hash, 0..7)}
-                          </span>
+                        <td class="py-0.5 whitespace-nowrap">
+                          <div class="flex items-center gap-1.5">
+                            <span
+                              class="inline-block w-2 h-2 shrink-0"
+                              style={"background:#{Lenies.SpeciesColor.hex(sp.hash)}"}
+                            >
+                            </span>
+                            <span class="text-cyan-400">
+                              {String.slice(sp.hash, 0..7)}
+                            </span>
+                          </div>
                         </td>
-                        <td class="py-0.5 opacity-80">
+                        <td class="py-0.5 opacity-80 max-w-[16rem] truncate">
                           {format_seed_origin(sp)}<span
                             :if={carried_plasmids(sp) != []}
                             class="ml-1 text-[9px] text-yellow-300/80"
                           >+ {Enum.join(carried_plasmids(sp), ", ")}</span>
                         </td>
-                        <td class="text-right">{sp.size}</td>
-                        <td class="text-right text-rose-300">{format_energy(sp.cost)}</td>
-                        <td class="text-right text-emerald-300">{format_energy(sp.max_gain)}</td>
-                        <td class="text-right">{sp.population}</td>
-                        <td class="text-right">{Float.round(sp.avg_generation, 2)}</td>
+                        <td class="text-right pl-3 whitespace-nowrap">{sp.size}</td>
+                        <td class="text-right pl-3 whitespace-nowrap text-rose-300">{format_energy(sp.cost)}</td>
+                        <td class="text-right pl-3 whitespace-nowrap text-emerald-300">{format_energy(sp.max_gain)}</td>
+                        <td class="text-right pl-3 whitespace-nowrap">{sp.population}</td>
+                        <td class="text-right pl-3 whitespace-nowrap">{Float.round(sp.avg_generation, 2)}</td>
                       </tr>
                     </tbody>
                   </table>
