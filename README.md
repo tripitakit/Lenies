@@ -235,9 +235,14 @@ Saves are atomic (write to `.tmp`, then `rename`). Corrupt JSON is
 renamed to `.bak` and the store starts fresh, so a malformed manual edit
 won't brick the app.
 
-World snapshots saved through the dashboard land under the path you give
-the Snapshot form — typically `/tmp/lenies-snapshot/` — as a small tree
-of `.tab` files.
+World snapshots saved through the dashboard are identified by a **name**
+(letters, digits, `-` and `_` only) typed into the Snapshot form. Each
+snapshot lands under `<root>/<name>/` as a small tree of `.tab` files,
+where `<root>` defaults to `<system tmp>/lenies-snapshots/` and is
+configurable via the `:snapshot_root` app env. Saves are atomic (each
+table is written to `.tab.tmp` then renamed), and restore validates every
+file before touching the live world, so a corrupt or partial snapshot
+can't wipe a running simulation.
 
 Repository layout:
 

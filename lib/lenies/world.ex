@@ -31,6 +31,17 @@ defmodule Lenies.World do
   def sterilize, do: GenServer.call(@name, :sterilize)
 
   @doc """
+  Swap the 4 snapshot tables (`Lenies.Snapshot.tables/0`) for the `.tab` files
+  in `dir`, running in the World process so World owns the reloaded tables.
+
+  Intended to be called by `Lenies.Snapshot.restore_from_disk/1` AFTER a
+  separate `sterilize/0` call (so terminated-Lenie `:lenie_died` casts are
+  drained first) and AFTER the files have been validated. Does NOT recreate
+  `:cells` contents (they come from the file) nor touch `:species_codeomes`.
+  """
+  def restore_tables(dir), do: GenServer.call(@name, {:restore_tables, dir})
+
+  @doc """
   Execute an action requested by a Lenie. Synchronous call.
 
   Forms:
@@ -129,6 +140,52 @@ defmodule Lenies.World do
     )
 
     {:reply, :ok, new_state}
+  end
+
+  def handle_call({:restore_tables, dir}, _from, state) do
+    if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
+
+    result =
+      try do
+        Enum.reduce_while(Lenies.Snapshot.tables(), :ok, fn table, _acc ->
+          path = Path.join(dir, "#{table}.tab") |> String.to_charlist()
+
+          # The table still exists after sterilize; delete it so file2tab can
+          # recreate it owned by THIS (World) process.
+          if :ets.whereis(table) != :undefined, do: :ets.delete(table)
+
+          case :ets.file2tab(path) do
+            {:ok, _} -> {:cont, :ok}
+            _error -> {:halt, {:error, {:restore_failed, table}}}
+          end
+        end)
+      rescue
+        _ -> {:error, {:restore_failed, :unknown}}
+      end
+
+    # Reset tick bookkeeping like sterilize does and reschedule the tick.
+    new_state = %{state | tick_count: 0, tick_ref: nil}
+    new_state = maybe_schedule_tick(new_state)
+
+    case result do
+      :ok ->
+        Phoenix.PubSub.broadcast(
+          Lenies.PubSub,
+          "world:control",
+          {:restored, System.system_time(:millisecond)}
+        )
+
+        {:reply, :ok, new_state}
+
+      {:error, _} = err ->
+        # Recovery: if file2tab failed partway through the loop, one or more
+        # snapshot tables may be missing (deleted but not recreated). An absent
+        # named table would cause World to crash on the next ETS lookup, so we
+        # recreate all 4 as fresh empty tables and re-initialise the :cells grid
+        # to leave the world in a valid, consistent (empty) state.
+        recover_tables(state.grid)
+        {:reply, err, new_state}
+    end
   end
 
   def handle_call(:pause, _from, state) do
@@ -236,6 +293,21 @@ defmodule Lenies.World do
     end
 
     :ok
+  end
+
+  # Recreate all 4 snapshot tables from scratch when a restore fails mid-loop.
+  # Any table that currently exists is deleted first so the :new/2 call can
+  # register the :named_table. The :cells grid is then populated the same way
+  # init/1 does it, so the world is immediately usable after recovery.
+  defp recover_tables(grid) do
+    table_opts = [:set, :named_table, :public, read_concurrency: true, write_concurrency: true]
+
+    for table <- Lenies.Snapshot.tables() do
+      if :ets.whereis(table) != :undefined, do: :ets.delete(table)
+      :ets.new(table, table_opts)
+    end
+
+    init_cells(grid)
   end
 
   defp prewarm_radiation(state) do
@@ -494,12 +566,12 @@ defmodule Lenies.World do
     end
   end
 
-  defp do_action({:attack, {x, y}, dir, _attacker_id}, state) do
+  defp do_action({:attack, {x, y}, dir, attacker_id}, state) do
     target_cell = front_cell({x, y}, dir, state.grid)
 
     case :ets.lookup(:cells, target_cell) do
       [{_, %{lenie_id: target_id}}] when is_binary(target_id) ->
-        resolve_attack(target_id, state)
+        resolve_attack(target_id, attacker_id, state)
 
       _ ->
         {{:ok, :no_target}, state}
@@ -508,7 +580,7 @@ defmodule Lenies.World do
 
   defp do_action(_unknown, state), do: {{:ok, {:error, :unknown_action}}, state}
 
-  defp resolve_attack(target_id, state) do
+  defp resolve_attack(target_id, attacker_id, state) do
     base_damage = Application.get_env(:lenies, :attack_damage, 10)
 
     case :ets.lookup(:lenies, target_id) do
@@ -522,9 +594,11 @@ defmodule Lenies.World do
             {base_damage, :attacked}
           end
 
-        # Send async damage message to the target Lenie
+        # Send async damage message to the target Lenie, including the
+        # attacker id so the victim can reward the attacker with exactly
+        # what it actually lost (energy conservation fix).
         case Lenies.Registry.whereis(target_id) do
-          pid when is_pid(pid) -> send(pid, {:take_damage, damage})
+          pid when is_pid(pid) -> send(pid, {:take_damage, damage, attacker_id})
           _ -> :ok
         end
 

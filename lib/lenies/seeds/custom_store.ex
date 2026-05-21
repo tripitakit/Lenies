@@ -6,10 +6,16 @@ defmodule Lenies.Seeds.CustomStore do
   `:__test_user_seeds_file__` app env key — used by tests). State lives in
   an `Agent` so reads (which happen on every dropdown render) are cheap.
 
-  Validation rules (`save/1`):
+  Validation rules (enforced by both `save/1` and the load path):
+  - `id` must be a non-empty binary
   - `name` must be a non-empty string after trimming
   - `color_hex` must match `^#[0-9a-fA-F]{6}$`
-  - every `opcode` must be in `Lenies.Codeome.Opcodes.all/0`
+  - `opcodes` must be a non-empty list of known opcodes from `Lenies.Codeome.Opcodes.all/0`
+  - `energy_default` must be a number (integer or float); an absent key defaults to 10_000.0
+
+  When loading from disk, rows that fail any of these rules are silently dropped
+  with a `Logger.warning` naming the seed id and the reason. This means a
+  hand-edited `priv/user_seeds.json` can never inject invalid data at runtime.
   """
 
   use Agent, restart: :transient
@@ -99,7 +105,7 @@ defmodule Lenies.Seeds.CustomStore do
 
   defp validate_color(_), do: {:error, :invalid_color}
 
-  defp validate_opcodes(%{opcodes: ops}) when is_list(ops) do
+  defp validate_opcodes(%{opcodes: ops}) when is_list(ops) and ops != [] do
     whitelist = MapSet.new(Lenies.Codeome.Opcodes.all())
 
     if Enum.all?(ops, fn op -> is_atom(op) and MapSet.member?(whitelist, op) end) do
@@ -153,20 +159,42 @@ defmodule Lenies.Seeds.CustomStore do
   end
 
   defp decode_seed(%{} = m) do
+    require Logger
+
     try do
       ops = Enum.map(m["opcodes"] || [], &String.to_existing_atom/1)
 
-      %{
+      energy =
+        case m do
+          %{"energy_default" => v} when is_number(v) -> v
+          %{"energy_default" => _bad} -> :invalid_energy
+          _ -> 10_000.0
+        end
+
+      candidate = %{
         id: m["id"],
         name: m["name"],
         color_hex: m["color_hex"],
-        energy_default: m["energy_default"] || 10_000.0,
+        energy_default: energy,
         opcodes: ops
       }
+
+      with true <- is_binary(candidate.id) and candidate.id != "",
+           :ok <- validate_name(candidate),
+           :ok <- validate_color(candidate),
+           :ok <- validate_opcodes(candidate),
+           true <- energy != :invalid_energy do
+        candidate
+      else
+        _ ->
+          Logger.warning(
+            "Lenies.Seeds.CustomStore: dropping seed #{inspect(m["id"])} — failed validation"
+          )
+
+          nil
+      end
     rescue
       ArgumentError ->
-        require Logger
-
         Logger.warning(
           "Lenies.Seeds.CustomStore: dropping seed #{inspect(m["id"])} — unknown opcode(s)"
         )

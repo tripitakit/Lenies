@@ -220,11 +220,11 @@ defmodule LeniesWeb.ControlsPanelComponent do
         >
           <h3 class="text-[10px]">▸ Snapshot</h3>
           <label class="flex items-center gap-2 text-[11px]">
-            <span class="opacity-70 w-12">path</span>
+            <span class="opacity-70 w-12">name</span>
             <input
               type="text"
-              name="path"
-              value="/tmp/lenies-snapshot"
+              name="snapshot_name"
+              value="default"
               class="flex-1 text-xs"
             />
           </label>
@@ -386,21 +386,24 @@ defmodule LeniesWeb.ControlsPanelComponent do
     {:noreply, socket}
   end
 
-  def handle_event("snapshot_action", %{"action" => "save", "path" => path}, socket) do
+  def handle_event("snapshot_action", %{"action" => "save", "snapshot_name" => name}, socket) do
     status =
-      case Lenies.Snapshot.save_to_disk(path) do
-        :ok -> "Saved to #{path}"
+      case Lenies.Snapshot.save_to_disk(name) do
+        :ok -> "Saved as “#{name}”"
+        {:error, :invalid_name} -> "Invalid name — use letters, digits, - and _ only"
         {:error, reason} -> "Save failed: #{inspect(reason)}"
       end
 
     {:noreply, assign(socket, :snapshot_status, status)}
   end
 
-  def handle_event("snapshot_action", %{"action" => "restore", "path" => path}, socket) do
+  def handle_event("snapshot_action", %{"action" => "restore", "snapshot_name" => name}, socket) do
     status =
-      case Lenies.Snapshot.restore_from_disk(path) do
-        :ok -> "Restored from #{path}"
-        {:error, :missing_file} -> "Missing snapshot files at #{path}"
+      case Lenies.Snapshot.restore_from_disk(name) do
+        :ok -> "Restored from “#{name}”"
+        {:error, :invalid_name} -> "Invalid name — use letters, digits, - and _ only"
+        {:error, :missing_file} -> "No snapshot named “#{name}”"
+        {:error, {:corrupt, table}} -> "Snapshot “#{name}” is corrupt (#{table}); world unchanged"
         {:error, reason} -> "Restore failed: #{inspect(reason)}"
       end
 
