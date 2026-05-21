@@ -439,14 +439,14 @@ defmodule Lenies.Lenie do
   defp apply_world_action({:conjugate, pos, dir, plasmid_opcodes}, donor_id, interp) do
     cond do
       plasmid_opcodes == [] ->
-        conjugate_failure(interp, 0)
+        conjugate_failure(interp)
 
       true ->
         target_pos = front_cell(pos, dir)
 
         case :ets.lookup(:cells, target_pos) do
           [{_, %{lenie_id: nil}}] ->
-            conjugate_failure(interp, 0)
+            conjugate_failure(interp)
 
           [{_, %{lenie_id: recipient_id}}] when is_binary(recipient_id) ->
             case Lenies.Registry.whereis(recipient_id) do
@@ -454,11 +454,11 @@ defmodule Lenies.Lenie do
                 attempt_transfer(interp, donor_id, recipient_pid, recipient_id, plasmid_opcodes)
 
               nil ->
-                conjugate_failure(interp, 0)
+                conjugate_failure(interp)
             end
 
           _ ->
-            conjugate_failure(interp, 0)
+            conjugate_failure(interp)
         end
     end
   end
@@ -484,13 +484,10 @@ defmodule Lenies.Lenie do
     end
   end
 
-  defp conjugate_failure(interp, plasmid_size) do
-    new_interp =
-      interp
-      |> Lenies.Interpreter.State.push(0)
-      |> Lenies.Interpreter.State.apply_cost(Lenies.Codeome.Costs.cost(:conjugate, plasmid_size))
-
-    {:ok, new_interp}
+  # Base cost is now charged in the interpreter dispatch; the failure path
+  # only pushes 0 (no additional energy deduction).
+  defp conjugate_failure(interp) do
+    {:ok, Lenies.Interpreter.State.push(interp, 0)}
   end
 
   # Symmetric-donor case: A facing east at {x,y}, B facing west at
@@ -538,12 +535,16 @@ defmodule Lenies.Lenie do
            }}
         )
 
+        # Base cost was already charged in dispatch; apply only the size
+        # surcharge here.  Net = base + surcharge = Costs.cost(:conjugate, plasmid_size).
+        surcharge =
+          Lenies.Codeome.Costs.cost(:conjugate, plasmid_size) -
+            Lenies.Codeome.Costs.cost(:conjugate, 0)
+
         new_interp =
           interp
           |> Lenies.Interpreter.State.push(1)
-          |> Lenies.Interpreter.State.apply_cost(
-            Lenies.Codeome.Costs.cost(:conjugate, plasmid_size)
-          )
+          |> Lenies.Interpreter.State.apply_cost(surcharge)
 
         {:ok, new_interp}
 
@@ -552,13 +553,13 @@ defmodule Lenies.Lenie do
         # broadcast. Donor pays only the base cost and reads failure (push
         # 0), so a tight forage loop stops re-conjugating the same neighbour
         # every tick (one transfer per plasmid per encounter).
-        conjugate_failure(interp, 0)
+        conjugate_failure(interp)
 
       {:error, :too_large} ->
-        conjugate_failure(interp, 0)
+        conjugate_failure(interp)
 
       :timeout ->
-        conjugate_failure(interp, 0)
+        conjugate_failure(interp)
     end
   end
 end

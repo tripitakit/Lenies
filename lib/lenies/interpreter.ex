@@ -352,9 +352,23 @@ defmodule Lenies.Interpreter do
         plasmids -> Enum.random(plasmids).opcodes
       end
 
-    # IP advances; cost is applied by apply_world_action based on outcome.
-    new_state = %{state | ip: rem(state.ip + 1, size)}
-    {:wait_world, {:conjugate, state.pos, state.dir, plasmid_opcodes}, new_state}
+    # Charge the base cost here (like every other world-yielding opcode).
+    # The world handler applies only the size surcharge on success; every
+    # failure path applies no additional cost.  Net totals are unchanged:
+    #   success: base[here] + surcharge[world] = Costs.cost(:conjugate, size)
+    #   failure: base[here] + 0 = Costs.cost(:conjugate, 0) = 4.0
+    cost = Costs.cost(:conjugate, 0)
+
+    new_state =
+      state
+      |> State.apply_cost(cost)
+      |> State.advance_ip(size, 1)
+
+    if new_state.energy <= 0 do
+      {:halt, :starvation, new_state}
+    else
+      {:wait_world, {:conjugate, state.pos, state.dir, plasmid_opcodes}, new_state}
+    end
   end
 
   # Stack on entry: [..., start_addr, length] with `length` on top. The pop
