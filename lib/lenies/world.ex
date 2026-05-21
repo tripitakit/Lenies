@@ -60,6 +60,15 @@ defmodule Lenies.World do
   @doc "Query current pause status."
   def paused?, do: GenServer.call(@name, :paused?)
 
+  @doc """
+  Synchronous reconciliation sweep: frees cells and deletes :lenies records
+  whose Lenie is no longer alive in the Registry.
+
+  Returns `{freed_cells, deleted_records}`.  Useful for tests and diagnostics;
+  the same sweep runs automatically on the `:reconcile_interval_ms` timer.
+  """
+  def reconcile, do: GenServer.call(@name, :reconcile)
+
   @doc "Notify the World that a Lenie has died (frees the cell, optionally leaves a carcass)."
   def lenie_died(id, pos, energy_at_death, codeome_hash)
       when is_binary(codeome_hash) do
@@ -97,11 +106,13 @@ defmodule Lenies.World do
       tick_interval_ms: tick_interval,
       tick_ref: nil,
       tick_count: 0,
-      paused?: false
+      paused?: false,
+      reconcile_ref: nil
     }
 
     state = prewarm_radiation(state)
     state = maybe_schedule_tick(state)
+    state = schedule_reconcile(state)
     {:ok, state}
   end
 
@@ -126,12 +137,14 @@ defmodule Lenies.World do
   def handle_call(:sterilize, _from, state) do
     terminate_all_lenies()
     if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
+    if state.reconcile_ref, do: Process.cancel_timer(state.reconcile_ref)
     Tables.clear_all()
     init_cells(state.grid)
     hotspots = Hotspots.initial(state.grid, Config.hotspot_count())
-    new_state = %{state | hotspots: hotspots, tick_count: 0, tick_ref: nil}
+    new_state = %{state | hotspots: hotspots, tick_count: 0, tick_ref: nil, reconcile_ref: nil}
     new_state = prewarm_radiation(new_state)
     new_state = maybe_schedule_tick(new_state)
+    new_state = schedule_reconcile(new_state)
 
     Phoenix.PubSub.broadcast(
       Lenies.PubSub,
@@ -144,6 +157,7 @@ defmodule Lenies.World do
 
   def handle_call({:restore_tables, dir}, _from, state) do
     if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
+    if state.reconcile_ref, do: Process.cancel_timer(state.reconcile_ref)
 
     result =
       try do
@@ -163,9 +177,10 @@ defmodule Lenies.World do
         _ -> {:error, {:restore_failed, :unknown}}
       end
 
-    # Reset tick bookkeeping like sterilize does and reschedule the tick.
-    new_state = %{state | tick_count: 0, tick_ref: nil}
+    # Reset tick bookkeeping like sterilize does and reschedule the tick and reconcile.
+    new_state = %{state | tick_count: 0, tick_ref: nil, reconcile_ref: nil}
     new_state = maybe_schedule_tick(new_state)
+    new_state = schedule_reconcile(new_state)
 
     case result do
       :ok ->
@@ -207,6 +222,11 @@ defmodule Lenies.World do
 
   def handle_call(:paused?, _from, state) do
     {:reply, state.paused?, state}
+  end
+
+  def handle_call(:reconcile, _from, state) do
+    result = do_reconcile(state)
+    {:reply, result, state}
   end
 
   @impl true
@@ -280,6 +300,12 @@ defmodule Lenies.World do
   def handle_info(:tick, state) do
     state = do_tick(state)
     state = maybe_schedule_tick(%{state | tick_ref: nil})
+    {:noreply, state}
+  end
+
+  def handle_info(:reconcile, state) do
+    do_reconcile(state)
+    state = schedule_reconcile(%{state | reconcile_ref: nil})
     {:noreply, state}
   end
 
@@ -431,6 +457,70 @@ defmodule Lenies.World do
     interval = Application.get_env(:lenies, :tick_interval_ms, state.tick_interval_ms)
     ref = Process.send_after(self(), :tick, interval)
     %{state | tick_ref: ref}
+  end
+
+  defp schedule_reconcile(state) do
+    interval = Config.reconcile_interval_ms()
+    ref = Process.send_after(self(), :reconcile, interval)
+    %{state | reconcile_ref: ref}
+  end
+
+  # Reconciliation sweep — O(grid + registry) but runs infrequently (default
+  # 30 s) so the cost is acceptable. Freeing a stale slot unblocks future
+  # moves/spawns/divides that would otherwise be permanently rejected.
+  #
+  # Two passes, both collect-then-apply to avoid mutating ETS tables mid-foldl
+  # (ETS foldl is safe to read during iteration but inserting/deleting during
+  # the same fold is undefined in concurrent settings).
+  #
+  # Returns {freed_cells, deleted_records}.
+  defp do_reconcile(_state) do
+    # Guard: if the Registry is not available (e.g. supervisor not started)
+    # return immediately without crashing World.
+    if Process.whereis(Lenies.Registry) == nil do
+      {0, 0}
+    else
+      # Pass 1 — collect keys of cells occupied by dead Lenies
+      stale_cell_keys =
+        :ets.foldl(
+          fn {key, cell}, acc ->
+            if is_binary(cell.lenie_id) and not is_pid(Lenies.Registry.whereis(cell.lenie_id)) do
+              [key | acc]
+            else
+              acc
+            end
+          end,
+          [],
+          :cells
+        )
+
+      # Apply: free each stale cell (no carcass — we have no reliable energy)
+      Enum.each(stale_cell_keys, fn key ->
+        case :ets.lookup(:cells, key) do
+          [{^key, cell}] -> :ets.insert(:cells, {key, %{cell | lenie_id: nil}})
+          _ -> :ok
+        end
+      end)
+
+      # Pass 2 — collect ids of orphaned :lenies records
+      stale_lenie_ids =
+        :ets.foldl(
+          fn {id, _record}, acc ->
+            if not is_pid(Lenies.Registry.whereis(id)) do
+              [id | acc]
+            else
+              acc
+            end
+          end,
+          [],
+          :lenies
+        )
+
+      # Apply: delete each orphaned record
+      Enum.each(stale_lenie_ids, fn id -> :ets.delete(:lenies, id) end)
+
+      {length(stale_cell_keys), length(stale_lenie_ids)}
+    end
   end
 
   defp terminate_all_lenies do
@@ -726,6 +816,11 @@ defmodule Lenies.World do
     end
   end
 
+  # No lost-update race with Lenie.maybe_write_snapshot/1:
+  # World mutates a Lenie's :lenies record (defending_until, child_slot_id) ONLY
+  # while that Lenie is blocked in a synchronous World.action call; the Lenie
+  # writes its own snapshot ONLY between batches, never mid-call — so these
+  # read-modify-writes are mutually exclusive. Preserve this invariant.
   defp update_lenie_record(id, fun) do
     case :ets.lookup(:lenies, id) do
       [{^id, record}] -> :ets.insert(:lenies, {id, fun.(record)})

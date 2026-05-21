@@ -318,6 +318,11 @@ defmodule Lenies.Lenie do
     new_state
   end
 
+  # No lost-update race with World.update_lenie_record/2:
+  # This snapshot write happens ONLY between batches (in age_and_continue/2 or
+  # init/1), never while a World.action call is in flight. World only mutates
+  # this Lenie's :lenies record while the Lenie is blocked inside World.action —
+  # so the two read-modify-writes are mutually exclusive. Preserve this invariant.
   defp maybe_write_snapshot(state) do
     cadence = Application.get_env(:lenies, :snapshot_every_batches, 10)
 

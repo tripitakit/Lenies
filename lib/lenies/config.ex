@@ -20,6 +20,7 @@ defmodule Lenies.Config do
   def carcass_decay, do: get(:carcass_decay, 0.05)
   def codeome_length_bounds, do: get(:codeome_length_bounds, {5, 1000})
   def min_viable_codeome_opcodes, do: get(:min_viable_codeome_opcodes, 10)
+  def reconcile_interval_ms, do: get(:reconcile_interval_ms, 30_000)
 
   defp get(key, default), do: Application.get_env(@app, key, default)
 end
