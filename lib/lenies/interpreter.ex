@@ -355,7 +355,7 @@ defmodule Lenies.Interpreter do
     # Charge the base cost here (like every other world-yielding opcode).
     # The world handler applies only the size surcharge on success; every
     # failure path applies no additional cost.  Net totals are unchanged:
-    #   success: base[here] + surcharge[world] = Costs.cost(:conjugate, size)
+    #   success: base[here] + surcharge[world] = Costs.cost(:conjugate, plasmid_size)
     #   failure: base[here] + 0 = Costs.cost(:conjugate, 0) = 4.0
     cost = Costs.cost(:conjugate, 0)
 

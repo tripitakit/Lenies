@@ -553,6 +553,7 @@ defmodule Lenies.Lenie do
         # broadcast. Donor pays only the base cost and reads failure (push
         # 0), so a tight forage loop stops re-conjugating the same neighbour
         # every tick (one transfer per plasmid per encounter).
+        # (base cost was charged in dispatch)
         conjugate_failure(interp)
 
       {:error, :too_large} ->

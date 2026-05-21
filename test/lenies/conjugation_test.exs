@@ -388,6 +388,10 @@ defmodule Lenies.ConjugationTest do
   test ":conjugate success costs exactly Costs.cost(:conjugate, plasmid_size)" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
+    # Subscribe BEFORE starting any Lenie so we cannot miss the broadcast
+    # when lenie_metabolize_delay_ms is 0 and the conjugation fires immediately.
+    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:fx")
+
     [{key1, c1}] = :ets.lookup(:cells, {128, 128})
     :ets.insert(:cells, {key1, %{c1 | lenie_id: "TX2"}})
     [{key2, c2}] = :ets.lookup(:cells, {129, 128})
@@ -428,7 +432,6 @@ defmodule Lenies.ConjugationTest do
 
     # Wait just long enough for the first conjugation to fire.
     # Use a PubSub notification so we stop measuring as soon as success is confirmed.
-    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:fx")
     assert_receive {:conjugation, %{donor_id: "TX2"}}, 2000
 
     # Allow one interpreter tick after the broadcast to let the apply_cost settle.
