@@ -19,9 +19,14 @@ defmodule Lenies.Mutator do
   @type outcome :: :write | :substitute | :insert | :delete
 
   @doc """
-  Decide which outcome to apply for a single `:write_child`. Rolls three
-  independent dice in the order substitution → insertion → deletion; the first
-  hit determines the outcome. If all miss, returns `:write` (exact copy).
+  Decide which outcome to apply for a single `:write_child`. Rolls dice in the
+  order substitution → insertion → deletion and the FIRST hit wins, so the
+  rolls are sequential/conditional, not independent: the effective insertion
+  rate is `(1 - substitution) * insert` and the effective deletion rate is
+  `(1 - substitution) * (1 - insert) * delete`. At the small rates used in
+  practice the difference is negligible, but the config values are upper
+  bounds, not exact per-class probabilities. If all miss, returns `:write`
+  (exact copy).
   """
   @spec copy_outcome(rates()) :: outcome()
   def copy_outcome(rates) do

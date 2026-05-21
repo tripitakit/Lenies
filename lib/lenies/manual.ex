@@ -91,7 +91,7 @@ defmodule Lenies.Manual do
     |> List.first()
     |> case do
       "# " <> rest -> String.trim(rest)
-      _ -> Path.basename("(untitled)", ".md")
+      _ -> "(untitled)"
     end
   end
 end
