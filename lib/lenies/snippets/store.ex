@@ -10,6 +10,19 @@ defmodule Lenies.Snippets.Store do
   A snippet is `%{id, name, opcodes}`. `id` is the caller-supplied slug;
   `save/1` upserts by `id`. Snippets are fragments — no length validation.
   `id` is required; `all/0` returns most-recently-saved first.
+
+  ## Concurrency and atomicity
+
+  Saves are serialized through the Agent: the state update and the disk write
+  both happen inside `Agent.get_and_update/2`, so the Agent processes one
+  write at a time. This means disk and in-memory state always agree after a
+  write — no two concurrent callers can interleave their writes and produce
+  a file that disagrees with the Agent state.
+
+  Trade-off: because the disk write runs in the Agent process, a `save/1` or
+  `delete/1` call briefly blocks concurrent `all/0` / `get/1` reads for the
+  duration of the write. Saves are user-initiated and rare, so this is
+  acceptable.
   """
 
   use Agent, restart: :transient
@@ -33,25 +46,36 @@ defmodule Lenies.Snippets.Store do
   def save(%{} = snippet) do
     with :ok <- validate_name(snippet),
          :ok <- validate_opcodes(snippet) do
-      new =
-        Agent.get_and_update(__MODULE__, fn snips ->
-          ns = [snippet | Enum.reject(snips, &(&1.id == snippet.id))]
-          {ns, ns}
-        end)
-
-      safe_write(new)
+      # State update and disk write are performed together inside Agent.get_and_update/2.
+      # The Agent serializes messages, so no two concurrent saves can interleave their
+      # writes — disk and in-memory state always agree after the call returns.
+      Agent.get_and_update(__MODULE__, fn snips ->
+        ns = [snippet | Enum.reject(snips, &(&1.id == snippet.id))]
+        {safe_write(ns), ns}
+      end)
     end
   end
 
   @spec delete(String.t()) :: :ok | {:error, :io_error}
   def delete(id) when is_binary(id) do
-    new =
-      Agent.get_and_update(__MODULE__, fn snips ->
-        ns = Enum.reject(snips, &(&1.id == id))
-        {ns, ns}
-      end)
+    Agent.get_and_update(__MODULE__, fn snips ->
+      ns = Enum.reject(snips, &(&1.id == id))
+      {safe_write(ns), ns}
+    end)
+  end
 
-    safe_write(new)
+  # ----- write safety -----
+
+  # Runs inside the Agent process (called from within Agent.get_and_update/2).
+  # Must rescue filesystem errors AND JSON encode errors — an unhandled raise
+  # here would crash the Agent.
+  defp safe_write(snips) do
+    try do
+      write_to_disk(snips)
+      :ok
+    rescue
+      _e in [File.Error, Jason.EncodeError, Protocol.UndefinedError] -> {:error, :io_error}
+    end
   end
 
   # ----- validation -----
@@ -79,15 +103,6 @@ defmodule Lenies.Snippets.Store do
   defp validate_opcodes(_), do: {:error, :invalid_opcodes}
 
   # ----- file I/O -----
-
-  defp safe_write(snips) do
-    try do
-      write_to_disk(snips)
-      :ok
-    rescue
-      _e in [File.Error] -> {:error, :io_error}
-    end
-  end
 
   defp file_path do
     case Application.get_env(:lenies, :__test_user_snippets_file__) do
@@ -154,7 +169,9 @@ defmodule Lenies.Snippets.Store do
       end)
       |> Jason.encode!(pretty: true)
 
-    tmp = path <> ".tmp"
+    # Unique suffix avoids any cross-process or cross-store tmp collision
+    # and prevents stale-tmp reuse even if two OS processes share the dir.
+    tmp = path <> ".tmp." <> Integer.to_string(System.unique_integer([:positive]))
     File.write!(tmp, json)
     File.rename!(tmp, path)
   end

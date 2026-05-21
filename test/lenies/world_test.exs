@@ -147,6 +147,94 @@ defmodule Lenies.WorldTest do
     end
   end
 
+  # ---- I5: cached totals ----
+
+  describe "snapshot_stats cached totals match direct ETS fold" do
+    setup do
+      {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+      :ok
+    end
+
+    # Helper: independent fold over :cells to sum resource & carcass
+    defp direct_sum do
+      :ets.foldl(
+        fn {_key, cell}, {r, c} -> {r + cell.resource, c + cell.carcass} end,
+        {0, 0},
+        :cells
+      )
+    end
+
+    test "cached total_resource equals direct sum after several ticks" do
+      for _ <- 1..5, do: World.tick_now()
+      stats = World.snapshot_stats()
+      {direct_r, _direct_c} = direct_sum()
+      assert stats.total_resource == direct_r
+    end
+
+    test "cached total_carcass equals direct sum after seeding carcass and ticking" do
+      Application.put_env(:lenies, :carcass_decay, 0.1)
+      on_exit(fn -> Application.put_env(:lenies, :carcass_decay, 0) end)
+
+      [{key, cell}] = :ets.lookup(:cells, {7, 7})
+      :ets.insert(:cells, {key, %{cell | carcass: 200}})
+
+      for _ <- 1..3, do: World.tick_now()
+
+      stats = World.snapshot_stats()
+      {_direct_r, direct_c} = direct_sum()
+
+      # cached total must equal fresh fold (decay applied, post-decay value cached)
+      assert stats.total_carcass == direct_c
+    end
+
+    test "carcass total decreases across ticks when decay is enabled" do
+      Application.put_env(:lenies, :carcass_decay, 0.2)
+      on_exit(fn -> Application.put_env(:lenies, :carcass_decay, 0) end)
+
+      [{key, cell}] = :ets.lookup(:cells, {3, 3})
+      :ets.insert(:cells, {key, %{cell | carcass: 1000}})
+
+      # One tick to seed the cached total with the injected carcass.
+      World.tick_now()
+      stats_after_first = World.snapshot_stats()
+
+      # Further ticks must reduce the total.
+      for _ <- 1..5, do: World.tick_now()
+
+      stats_after_more = World.snapshot_stats()
+      # decay must have reduced total carcass
+      assert stats_after_more.total_carcass < stats_after_first.total_carcass
+    end
+
+    test "cached total_carcass after decay matches fresh fold (totals-drift canary)" do
+      # This test would catch a bug where we cache the PRE-decay carcass
+      # rather than the post-decay value.
+      Application.put_env(:lenies, :carcass_decay, 0.5)
+      on_exit(fn -> Application.put_env(:lenies, :carcass_decay, 0) end)
+
+      [{key, cell}] = :ets.lookup(:cells, {15, 15})
+      :ets.insert(:cells, {key, %{cell | carcass: 500}})
+
+      World.tick_now()
+
+      stats = World.snapshot_stats()
+      {_direct_r, direct_c} = direct_sum()
+
+      # If implementation cached pre-decay value, stats.total_carcass would
+      # be 500 here while direct_c would be ~250. This assertion catches that.
+      assert stats.total_carcass == direct_c
+    end
+
+    test "total_resource is correct at init (before first tick)" do
+      # Before any tick, radiation has not run (tick_interval_ms: 0 = no auto-tick,
+      # but prewarm_radiation uses :initial_radiation_ticks which defaults to 50 in
+      # test config — check actual resource).
+      stats = World.snapshot_stats()
+      {direct_r, _} = direct_sum()
+      assert stats.total_resource == direct_r
+    end
+  end
+
   describe "eat clears carcass_hue when carcass goes to 0" do
     setup do
       {:ok, _pid} = World.start_link(tick_interval_ms: 0)

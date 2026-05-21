@@ -74,6 +74,7 @@ defmodule LeniesWeb.SpeciesLive do
   def render(assigns) do
     ~H"""
     <div class="species-view">
+      <Layouts.flash_group flash={@flash} />
       <h1>Species: {String.slice(@hash, 0..15)}…</h1>
 
       <%= if @found? do %>

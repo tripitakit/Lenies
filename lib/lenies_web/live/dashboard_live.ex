@@ -42,6 +42,9 @@ defmodule LeniesWeb.DashboardLive do
     grid = Lenies.Config.grid_size()
     {species, all_species, species_total} = aggregate_with_top(10)
 
+    sort_by = :population
+    sort_dir = :desc
+
     socket =
       socket
       |> assign(:grid, grid)
@@ -55,8 +58,10 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:selected_hash, nil)
       |> assign(:selected_species_record, nil)
       |> assign(:inspector_dirty, false)
-      |> assign(:sort_by, :population)
-      |> assign(:sort_dir, :desc)
+      |> assign(:sort_by, sort_by)
+      |> assign(:sort_dir, sort_dir)
+      |> stream_configure(:species_table, dom_id: fn sp -> "species-row-#{sp.hash}" end)
+      |> stream(:species_table, sort_species(all_species, sort_by, sort_dir))
 
     # Push an initial frame as soon as the websocket is connected so the
     # canvas isn't black between mount and the next throttled tick
@@ -114,6 +119,7 @@ defmodule LeniesWeb.DashboardLive do
       class="lenies-dashboard h-screen w-screen overflow-hidden flex flex-col p-3 gap-3"
       data-inspector-dirty={if @inspector_dirty, do: "true", else: nil}
     >
+      <Layouts.flash_group flash={@flash} />
       <header class="flex items-center justify-between px-2 shrink-0">
         <h1 class="text-lg font-bold tracking-widest">⬡ LENIES · SANDBOX</h1>
         <div class="flex items-center gap-4 text-xs">
@@ -302,40 +308,39 @@ defmodule LeniesWeb.DashboardLive do
                         </th>
                       </tr>
                     </thead>
-                    <tbody>
-                      <%= for sp <- sort_species(@all_species, @sort_by, @sort_dir) do %>
-                        <tr
-                          class={[
-                            "hover:bg-cyan-500/10 cursor-pointer",
-                            @selected_hash == sp.hash && "bg-cyan-500/20 ring-1 ring-cyan-400"
-                          ]}
-                          id={"species-row-#{sp.hash}"}
-                          phx-click="select_species"
-                          phx-value-hash={sp.hash}
-                        >
-                          <td class="py-0.5 flex items-center gap-1.5">
-                            <span
-                              class="inline-block w-2 h-2 shrink-0"
-                              style={"background:#{Lenies.SpeciesColor.hex(sp.hash)}"}
-                            >
-                            </span>
-                            <span class="text-cyan-400">
-                              {String.slice(sp.hash, 0..7)}
-                            </span>
-                          </td>
-                          <td class="py-0.5 opacity-80">
-                            {format_seed_origin(sp)}<span
-                              :if={carried_plasmids(sp) != []}
-                              class="ml-1 text-[9px] text-yellow-300/80"
-                            >+ {Enum.join(carried_plasmids(sp), ", ")}</span>
-                          </td>
-                          <td class="text-right">{sp.size}</td>
-                          <td class="text-right text-rose-300">{format_energy(sp.cost)}</td>
-                          <td class="text-right text-emerald-300">{format_energy(sp.max_gain)}</td>
-                          <td class="text-right">{sp.population}</td>
-                          <td class="text-right">{Float.round(sp.avg_generation, 2)}</td>
-                        </tr>
-                      <% end %>
+                    <tbody id="species-rows" phx-update="stream">
+                      <tr
+                        :for={{dom_id, sp} <- @streams.species_table}
+                        id={dom_id}
+                        class={[
+                          "hover:bg-cyan-500/10 cursor-pointer",
+                          @selected_hash == sp.hash && "bg-cyan-500/20 ring-1 ring-cyan-400"
+                        ]}
+                        phx-click="select_species"
+                        phx-value-hash={sp.hash}
+                      >
+                        <td class="py-0.5 flex items-center gap-1.5">
+                          <span
+                            class="inline-block w-2 h-2 shrink-0"
+                            style={"background:#{Lenies.SpeciesColor.hex(sp.hash)}"}
+                          >
+                          </span>
+                          <span class="text-cyan-400">
+                            {String.slice(sp.hash, 0..7)}
+                          </span>
+                        </td>
+                        <td class="py-0.5 opacity-80">
+                          {format_seed_origin(sp)}<span
+                            :if={carried_plasmids(sp) != []}
+                            class="ml-1 text-[9px] text-yellow-300/80"
+                          >+ {Enum.join(carried_plasmids(sp), ", ")}</span>
+                        </td>
+                        <td class="text-right">{sp.size}</td>
+                        <td class="text-right text-rose-300">{format_energy(sp.cost)}</td>
+                        <td class="text-right text-emerald-300">{format_energy(sp.max_gain)}</td>
+                        <td class="text-right">{sp.population}</td>
+                        <td class="text-right">{Float.round(sp.avg_generation, 2)}</td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
@@ -374,13 +379,16 @@ defmodule LeniesWeb.DashboardLive do
         hash
       end
 
+    %{all_species: all_species, sort_by: sort_by, sort_dir: sort_dir} = socket.assigns
+
     socket =
       socket
       |> assign(:selected_hash, new_hash)
       |> assign(
         :selected_species_record,
-        find_selected_record(new_hash, socket.assigns.all_species)
+        find_selected_record(new_hash, all_species)
       )
+      |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
 
     socket =
       if is_nil(new_hash),
@@ -409,7 +417,16 @@ defmodule LeniesWeb.DashboardLive do
             {new_by, default_sort_dir(new_by)}
           end
 
-        {:noreply, assign(socket, sort_by: by, sort_dir: dir)}
+        socket =
+          socket
+          |> assign(sort_by: by, sort_dir: dir)
+          |> stream(
+            :species_table,
+            sort_species(socket.assigns.all_species, by, dir),
+            reset: true
+          )
+
+        {:noreply, socket}
 
       :error ->
         {:noreply, socket}
@@ -481,6 +498,7 @@ defmodule LeniesWeb.DashboardLive do
 
     if rem(new_counter, throttle) == 0 do
       {species, all_species, species_total} = aggregate_with_top(10)
+      %{sort_by: sort_by, sort_dir: sort_dir} = socket.assigns
 
       socket =
         socket
@@ -493,6 +511,7 @@ defmodule LeniesWeb.DashboardLive do
           find_selected_record(socket.assigns.selected_hash, all_species)
         )
         |> maybe_clear_selected_species(all_species)
+        |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
 
       payload = GridRenderer.encode_payload(socket.assigns.grid)
       {:noreply, push_event(socket, "render_frame", payload)}
@@ -502,6 +521,16 @@ defmodule LeniesWeb.DashboardLive do
   end
 
   def handle_info({:sterilized, _ts}, socket) do
+    {species, all_species, species_total} = aggregate_with_top(10)
+    %{sort_by: sort_by, sort_dir: sort_dir} = socket.assigns
+
+    socket =
+      socket
+      |> assign(:species, species)
+      |> assign(:species_total, species_total)
+      |> assign(:all_species, all_species)
+      |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
+
     payload = GridRenderer.encode_payload(socket.assigns.grid)
     {:noreply, push_event(socket, "render_frame", payload)}
   end
@@ -601,8 +630,8 @@ defmodule LeniesWeb.DashboardLive do
 
   # Order the species rows by the active column/direction. `Enum.sort_by/3`
   # handles both numeric keys and the (downcased) seed-name string via term
-  # ordering. Applied in render so the per-tick data refresh stays unaware
-  # of sort state.
+  # ordering. Called from mount and event/tick handlers (not render) so the
+  # stream is always pre-sorted before being sent to the client.
   defp sort_species(species, sort_by, sort_dir) do
     Enum.sort_by(species, sort_key_fun(sort_by), sort_dir)
   end

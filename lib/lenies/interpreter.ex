@@ -352,9 +352,23 @@ defmodule Lenies.Interpreter do
         plasmids -> Enum.random(plasmids).opcodes
       end
 
-    # IP advances; cost is applied by apply_world_action based on outcome.
-    new_state = %{state | ip: rem(state.ip + 1, size)}
-    {:wait_world, {:conjugate, state.pos, state.dir, plasmid_opcodes}, new_state}
+    # Charge the base cost here (like every other world-yielding opcode).
+    # The world handler applies only the size surcharge on success; every
+    # failure path applies no additional cost.  Net totals are unchanged:
+    #   success: base[here] + surcharge[world] = Costs.cost(:conjugate, plasmid_size)
+    #   failure: base[here] + 0 = Costs.cost(:conjugate, 0) = 4.0
+    cost = Costs.cost(:conjugate, 0)
+
+    new_state =
+      state
+      |> State.apply_cost(cost)
+      |> State.advance_ip(size, 1)
+
+    if new_state.energy <= 0 do
+      {:halt, :starvation, new_state}
+    else
+      {:wait_world, {:conjugate, state.pos, state.dir, plasmid_opcodes}, new_state}
+    end
   end
 
   # Stack on entry: [..., start_addr, length] with `length` on top. The pop
@@ -369,7 +383,7 @@ defmodule Lenies.Interpreter do
       new_plasmid = Lenies.Plasmid.new(ops)
       cost = Costs.cost(:make_plasmid, length)
 
-      new_state = %{s2 | plasmids: [new_plasmid]}
+      new_state = %{s2 | plasmids: s2.plasmids ++ [new_plasmid]}
 
       new_state
       |> State.push(1)
@@ -422,29 +436,19 @@ defmodule Lenies.Interpreter do
     {template, t_len} = Template.extract(codeome, state.ip + 1, template_max_len())
     skip_to = Integer.mod(state.ip + 1 + t_len, size)
 
-    should_jump =
+    # Pop exactly once for conditional jumps; no pop for :always.
+    {should_jump, state_after_pop} =
       case condition do
         :always ->
-          true
+          {true, state}
 
         :zero ->
-          {top, _} = State.pop(state)
-          top == 0
+          {top, s} = State.pop(state)
+          {top == 0, s}
 
         :nonzero ->
-          {top, _} = State.pop(state)
-          top != 0
-      end
-
-    # For conditional jumps, consume the stack value
-    state_after_pop =
-      case condition do
-        :always ->
-          state
-
-        _ ->
-          {_, s} = State.pop(state)
-          s
+          {top, s} = State.pop(state)
+          {top != 0, s}
       end
 
     target_ip =

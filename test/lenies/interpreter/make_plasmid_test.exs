@@ -93,15 +93,17 @@ defmodule Lenies.Interpreter.MakePlasmidTest do
     assert [%Plasmid{opcodes: [:defend, :make_plasmid, :eat]}] = new_state.plasmids
   end
 
-  test ":make_plasmid replaces an existing plasmid" do
+  test ":make_plasmid appends to an existing single plasmid (does not replace)" do
+    # I3 fix: make_plasmid must append, not overwrite
     codeome = Codeome.from_list([:eat, :move, :make_plasmid])
+    existing = Plasmid.new([:turn_left, :turn_right])
 
     state =
       State.new(
         energy: 100.0,
         pos: {0, 0},
         dir: :n,
-        plasmids: [Plasmid.new([:turn_left, :turn_right])]
+        plasmids: [existing]
       )
       |> State.push(0)
       |> State.push(2)
@@ -109,6 +111,50 @@ defmodule Lenies.Interpreter.MakePlasmidTest do
 
     new_state = run_one(state, codeome)
 
-    assert [%Plasmid{opcodes: [:eat, :move]}] = new_state.plasmids
+    # Length increases by 1; existing plasmid is still first
+    assert length(new_state.plasmids) == 2
+    assert Enum.at(new_state.plasmids, 0) == existing
+    assert %Plasmid{opcodes: [:eat, :move]} = Enum.at(new_state.plasmids, 1)
+  end
+
+  test ":make_plasmid appends when carrying multiple plasmids" do
+    # I3 fix: works for N > 1 pre-existing plasmids
+    codeome = Codeome.from_list([:eat, :move, :make_plasmid])
+    p1 = Plasmid.new([:turn_left])
+    p2 = Plasmid.new([:turn_right])
+
+    state =
+      State.new(
+        energy: 100.0,
+        pos: {0, 0},
+        dir: :n,
+        plasmids: [p1, p2]
+      )
+      |> State.push(0)
+      |> State.push(2)
+      |> Map.put(:ip, 2)
+
+    new_state = run_one(state, codeome)
+
+    assert length(new_state.plasmids) == 3
+    assert Enum.at(new_state.plasmids, 0) == p1
+    assert Enum.at(new_state.plasmids, 1) == p2
+    assert %Plasmid{opcodes: [:eat, :move]} = Enum.at(new_state.plasmids, 2)
+  end
+
+  test ":make_plasmid with no prior plasmids yields exactly one" do
+    # Regression guard: empty start still yields exactly one plasmid
+    codeome = Codeome.from_list([:eat, :move, :make_plasmid])
+
+    state =
+      State.new(energy: 100.0, pos: {0, 0}, dir: :n)
+      |> State.push(0)
+      |> State.push(2)
+      |> Map.put(:ip, 2)
+
+    new_state = run_one(state, codeome)
+
+    assert length(new_state.plasmids) == 1
+    assert %Plasmid{opcodes: [:eat, :move]} = hd(new_state.plasmids)
   end
 end

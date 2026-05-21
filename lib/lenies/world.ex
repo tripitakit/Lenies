@@ -60,6 +60,15 @@ defmodule Lenies.World do
   @doc "Query current pause status."
   def paused?, do: GenServer.call(@name, :paused?)
 
+  @doc """
+  Synchronous reconciliation sweep: frees cells and deletes :lenies records
+  whose Lenie is no longer alive in the Registry.
+
+  Returns `{freed_cells, deleted_records}`.  Useful for tests and diagnostics;
+  the same sweep runs automatically on the `:reconcile_interval_ms` timer.
+  """
+  def reconcile, do: GenServer.call(@name, :reconcile)
+
   @doc "Notify the World that a Lenie has died (frees the cell, optionally leaves a carcass)."
   def lenie_died(id, pos, energy_at_death, codeome_hash)
       when is_binary(codeome_hash) do
@@ -91,27 +100,39 @@ defmodule Lenies.World do
     tick_interval = Keyword.get(opts, :tick_interval_ms, Config.tick_interval_ms())
     hotspots = Hotspots.initial(grid, Config.hotspot_count())
 
+    {total_resource, total_carcass} = sum_cells()
+
     state = %{
       grid: grid,
       hotspots: hotspots,
       tick_interval_ms: tick_interval,
       tick_ref: nil,
       tick_count: 0,
-      paused?: false
+      paused?: false,
+      reconcile_ref: nil,
+      total_resource: total_resource,
+      total_carcass: total_carcass
     }
 
     state = prewarm_radiation(state)
+    # After prewarm, recompute totals to reflect the radiation deposited.
+    {r, c} = sum_cells()
+    state = %{state | total_resource: r, total_carcass: c}
     state = maybe_schedule_tick(state)
+    state = schedule_reconcile(state)
     {:ok, state}
   end
 
   @impl true
   def handle_call(:snapshot_stats, _from, state) do
+    # total_resource and total_carcass are maintained as cached values in state,
+    # updated once per tick in decay_and_sum_cells/0. Between ticks the values
+    # may be up to one tick stale, which is acceptable for a stats display.
     stats = %{
       cells: :ets.info(:cells, :size),
       population: :ets.info(:lenies, :size),
-      total_resource: sum_cell_field(:resource),
-      total_carcass: sum_cell_field(:carcass),
+      total_resource: state.total_resource,
+      total_carcass: state.total_carcass,
       tick_count: state.tick_count
     }
 
@@ -126,12 +147,28 @@ defmodule Lenies.World do
   def handle_call(:sterilize, _from, state) do
     terminate_all_lenies()
     if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
+    if state.reconcile_ref, do: Process.cancel_timer(state.reconcile_ref)
     Tables.clear_all()
     init_cells(state.grid)
     hotspots = Hotspots.initial(state.grid, Config.hotspot_count())
-    new_state = %{state | hotspots: hotspots, tick_count: 0, tick_ref: nil}
+    {total_resource, total_carcass} = sum_cells()
+
+    new_state = %{
+      state
+      | hotspots: hotspots,
+        tick_count: 0,
+        tick_ref: nil,
+        reconcile_ref: nil,
+        total_resource: total_resource,
+        total_carcass: total_carcass
+    }
+
     new_state = prewarm_radiation(new_state)
+    # Recompute totals after prewarm radiation has deposited resources.
+    {r, c} = sum_cells()
+    new_state = %{new_state | total_resource: r, total_carcass: c}
     new_state = maybe_schedule_tick(new_state)
+    new_state = schedule_reconcile(new_state)
 
     Phoenix.PubSub.broadcast(
       Lenies.PubSub,
@@ -144,6 +181,7 @@ defmodule Lenies.World do
 
   def handle_call({:restore_tables, dir}, _from, state) do
     if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
+    if state.reconcile_ref, do: Process.cancel_timer(state.reconcile_ref)
 
     result =
       try do
@@ -163,12 +201,17 @@ defmodule Lenies.World do
         _ -> {:error, {:restore_failed, :unknown}}
       end
 
-    # Reset tick bookkeeping like sterilize does and reschedule the tick.
-    new_state = %{state | tick_count: 0, tick_ref: nil}
+    # Reset tick bookkeeping like sterilize does and reschedule the tick and reconcile.
+    new_state = %{state | tick_count: 0, tick_ref: nil, reconcile_ref: nil}
     new_state = maybe_schedule_tick(new_state)
+    new_state = schedule_reconcile(new_state)
 
     case result do
       :ok ->
+        # Recompute totals from the freshly loaded :cells table.
+        {r, c} = sum_cells()
+        new_state = %{new_state | total_resource: r, total_carcass: c}
+
         Phoenix.PubSub.broadcast(
           Lenies.PubSub,
           "world:control",
@@ -184,6 +227,8 @@ defmodule Lenies.World do
         # recreate all 4 as fresh empty tables and re-initialise the :cells grid
         # to leave the world in a valid, consistent (empty) state.
         recover_tables(state.grid)
+        {r, c} = sum_cells()
+        new_state = %{new_state | total_resource: r, total_carcass: c}
         {:reply, err, new_state}
     end
   end
@@ -207,6 +252,11 @@ defmodule Lenies.World do
 
   def handle_call(:paused?, _from, state) do
     {:reply, state.paused?, state}
+  end
+
+  def handle_call(:reconcile, _from, state) do
+    result = do_reconcile(state)
+    {:reply, result, state}
   end
 
   @impl true
@@ -283,6 +333,12 @@ defmodule Lenies.World do
     {:noreply, state}
   end
 
+  def handle_info(:reconcile, state) do
+    do_reconcile(state)
+    state = schedule_reconcile(%{state | reconcile_ref: nil})
+    {:noreply, state}
+  end
+
   # ----- internals -----
 
   defp init_cells({w, h}) do
@@ -326,7 +382,9 @@ defmodule Lenies.World do
 
   defp do_tick(state) do
     apply_radiation(state)
-    apply_carcass_decay()
+    # Single fold: apply carcass decay AND accumulate {total_resource, total_carcass}.
+    # Runs AFTER radiation so total_resource reflects post-radiation state.
+    {total_resource, total_carcass} = decay_and_sum_cells()
     maybe_background_mutation(state)
 
     hotspots = Hotspots.drift(state.hotspots, state.grid)
@@ -337,7 +395,13 @@ defmodule Lenies.World do
       {:tick, state.tick_count + 1}
     )
 
-    %{state | hotspots: hotspots, tick_count: state.tick_count + 1}
+    %{
+      state
+      | hotspots: hotspots,
+        tick_count: state.tick_count + 1,
+        total_resource: total_resource,
+        total_carcass: total_carcass
+    }
   end
 
   defp apply_radiation(state) do
@@ -360,22 +424,36 @@ defmodule Lenies.World do
     end)
   end
 
-  defp apply_carcass_decay do
+  # Single fold over :cells that:
+  #   1. Applies carcass decay (when rate > 0, only to cells with carcass > 0).
+  #   2. Accumulates {total_resource, total_carcass} in one pass.
+  #
+  # The carcass total is accumulated from the POST-decay value so the cached
+  # total reflects what a fresh sum would return immediately after decay.
+  # Resource is unchanged by decay, so it is summed as-is.
+  #
+  # Inserting into :cells during the foldl (for a :set table, updating the
+  # same key) is the established pattern here — this is safe for a :set as
+  # long as we are only updating existing keys, not inserting new ones.
+  defp decay_and_sum_cells do
     rate = Config.carcass_decay()
 
-    if rate > 0 do
-      :ets.foldl(
-        fn {key, cell}, _acc ->
-          if cell.carcass > 0 do
-            :ets.insert(:cells, {key, Cell.decay_carcass(cell, rate)})
+    :ets.foldl(
+      fn {key, cell}, {sum_r, sum_c} ->
+        effective_cell =
+          if rate > 0 and cell.carcass > 0 do
+            decayed = Cell.decay_carcass(cell, rate)
+            :ets.insert(:cells, {key, decayed})
+            decayed
+          else
+            cell
           end
 
-          nil
-        end,
-        nil,
-        :cells
-      )
-    end
+        {sum_r + effective_cell.resource, sum_c + effective_cell.carcass}
+      end,
+      {0, 0},
+      :cells
+    )
   end
 
   # Background mutations are configured as a RATE — N mutations per 1000
@@ -413,10 +491,12 @@ defmodule Lenies.World do
     end
   end
 
-  defp sum_cell_field(field) do
+  # One fold returning {total_resource, total_carcass} without side effects.
+  # Used at init, sterilize, and restore_tables to seed the cached totals.
+  defp sum_cells do
     :ets.foldl(
-      fn {_key, cell}, acc -> acc + Map.get(cell, field, 0) end,
-      0,
+      fn {_key, cell}, {r, c} -> {r + cell.resource, c + cell.carcass} end,
+      {0, 0},
       :cells
     )
   end
@@ -431,6 +511,70 @@ defmodule Lenies.World do
     interval = Application.get_env(:lenies, :tick_interval_ms, state.tick_interval_ms)
     ref = Process.send_after(self(), :tick, interval)
     %{state | tick_ref: ref}
+  end
+
+  defp schedule_reconcile(state) do
+    interval = Config.reconcile_interval_ms()
+    ref = Process.send_after(self(), :reconcile, interval)
+    %{state | reconcile_ref: ref}
+  end
+
+  # Reconciliation sweep — O(grid + registry) but runs infrequently (default
+  # 30 s) so the cost is acceptable. Freeing a stale slot unblocks future
+  # moves/spawns/divides that would otherwise be permanently rejected.
+  #
+  # Two passes, both collect-then-apply to avoid mutating ETS tables mid-foldl
+  # (ETS foldl is safe to read during iteration but inserting/deleting during
+  # the same fold is undefined in concurrent settings).
+  #
+  # Returns {freed_cells, deleted_records}.
+  defp do_reconcile(_state) do
+    # Guard: if the Registry is not available (e.g. supervisor not started)
+    # return immediately without crashing World.
+    if Process.whereis(Lenies.Registry) == nil do
+      {0, 0}
+    else
+      # Pass 1 — collect keys of cells occupied by dead Lenies
+      stale_cell_keys =
+        :ets.foldl(
+          fn {key, cell}, acc ->
+            if is_binary(cell.lenie_id) and not is_pid(Lenies.Registry.whereis(cell.lenie_id)) do
+              [key | acc]
+            else
+              acc
+            end
+          end,
+          [],
+          :cells
+        )
+
+      # Apply: free each stale cell (no carcass — we have no reliable energy)
+      Enum.each(stale_cell_keys, fn key ->
+        case :ets.lookup(:cells, key) do
+          [{^key, cell}] -> :ets.insert(:cells, {key, %{cell | lenie_id: nil}})
+          _ -> :ok
+        end
+      end)
+
+      # Pass 2 — collect ids of orphaned :lenies records
+      stale_lenie_ids =
+        :ets.foldl(
+          fn {id, _record}, acc ->
+            if not is_pid(Lenies.Registry.whereis(id)) do
+              [id | acc]
+            else
+              acc
+            end
+          end,
+          [],
+          :lenies
+        )
+
+      # Apply: delete each orphaned record
+      Enum.each(stale_lenie_ids, fn id -> :ets.delete(:lenies, id) end)
+
+      {length(stale_cell_keys), length(stale_lenie_ids)}
+    end
   end
 
   defp terminate_all_lenies do
@@ -726,6 +870,11 @@ defmodule Lenies.World do
     end
   end
 
+  # No lost-update race with Lenie.maybe_write_snapshot/1:
+  # World mutates a Lenie's :lenies record (defending_until, child_slot_id) ONLY
+  # while that Lenie is blocked in a synchronous World.action call; the Lenie
+  # writes its own snapshot ONLY between batches, never mid-call — so these
+  # read-modify-writes are mutually exclusive. Preserve this invariant.
   defp update_lenie_record(id, fun) do
     case :ets.lookup(:lenies, id) do
       [{^id, record}] -> :ets.insert(:lenies, {id, fun.(record)})

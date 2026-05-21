@@ -40,6 +40,13 @@ defmodule LeniesWeb.DashboardLiveTest do
     assert html =~ ~r/(Pause|Resume)/i
   end
 
+  test "flash group is rendered", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/")
+    assert has_element?(view, "#flash-group")
+    assert has_element?(view, "#client-error")
+    assert has_element?(view, "#server-error")
+  end
+
   test "shows initial canvas with width and height data attributes", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/")
     assert html =~ ~r/phx-hook="GridCanvas"/
@@ -575,6 +582,124 @@ defmodule LeniesWeb.DashboardLiveTest do
 
       assert row_pos(html, "OLDGEN") < row_pos(html, "YOUNG")
       assert html =~ "Gen ▼"
+    end
+  end
+
+  describe "species table — LiveView stream" do
+    test "species rows are rendered with the expected stream DOM id", %{conn: conn} do
+      :ets.insert(:lenies, {"S1", %{id: "S1", codeome_hash: "STREAM-HASH-1", lineage: {nil, 0}}})
+
+      {:ok, view, _html} = live(conn, "/")
+
+      assert has_element?(view, "#species-row-STREAM-HASH-1")
+    end
+
+    test "tbody has phx-update=stream and the wrapping id", %{conn: conn} do
+      {:ok, _view, html} = live(conn, "/")
+
+      assert html =~ ~s(id="species-rows")
+      assert html =~ ~s(phx-update="stream")
+    end
+
+    test "species_total count is still displayed after stream conversion", %{conn: conn} do
+      :ets.insert(:lenies, {"T1", %{id: "T1", codeome_hash: "COUNT-A", lineage: {nil, 0}}})
+      :ets.insert(:lenies, {"T2", %{id: "T2", codeome_hash: "COUNT-B", lineage: {nil, 0}}})
+
+      {:ok, _view, html} = live(conn, "/")
+
+      # The header reads "▮ 2 species"
+      assert html =~ ~r/2 species/
+    end
+
+    test "select_species re-streams and highlights the selected row", %{conn: conn} do
+      :ets.insert(:lenies, {"HL1", %{id: "HL1", codeome_hash: "HASH-HL", lineage: {nil, 0}}})
+
+      {:ok, view, _html} = live(conn, "/")
+
+      # Row should exist in the stream from mount
+      assert has_element?(view, "#species-row-HASH-HL")
+
+      # Click the row to select it
+      html =
+        view
+        |> element("#species-row-HASH-HL")
+        |> render_click()
+
+      # After re-stream, the row must still be present and carry the highlight classes
+      assert has_element?(view, "#species-row-HASH-HL")
+      assert html =~ "bg-cyan-500/20"
+      assert html =~ "ring-1 ring-cyan-400"
+    end
+
+    test "deselecting a row removes the highlight class via re-stream", %{conn: conn} do
+      :ets.insert(:lenies, {"DH1", %{id: "DH1", codeome_hash: "HASH-DH", lineage: {nil, 0}}})
+
+      {:ok, view, _html} = live(conn, "/")
+
+      # Select then deselect
+      view |> element("#species-row-HASH-DH") |> render_click()
+
+      html =
+        view
+        |> element("#species-row-HASH-DH")
+        |> render_click()
+
+      # Row still present (re-streamed) but no highlight classes
+      assert has_element?(view, "#species-row-HASH-DH")
+      refute html =~ "ring-1 ring-cyan-400"
+    end
+
+    test "sort_species re-streams rows in the new order", %{conn: conn} do
+      # SORTED-HI: 3 lenies; SORTED-LO: 1 lenie — default order: HI first
+      :ets.insert(:lenies, {"SR1", %{id: "SR1", codeome_hash: "SORTED-HI", lineage: {nil, 0}}})
+      :ets.insert(:lenies, {"SR2", %{id: "SR2", codeome_hash: "SORTED-HI", lineage: {nil, 0}}})
+      :ets.insert(:lenies, {"SR3", %{id: "SR3", codeome_hash: "SORTED-HI", lineage: {nil, 0}}})
+      :ets.insert(:lenies, {"SR4", %{id: "SR4", codeome_hash: "SORTED-LO", lineage: {nil, 0}}})
+
+      {:ok, view, html_before} = live(conn, "/")
+      # Default: population descending → HI appears first
+      assert row_pos(html_before, "SORTED-HI") < row_pos(html_before, "SORTED-LO")
+
+      # Click population header to toggle to ascending
+      html_after =
+        view
+        |> element("th[phx-click='sort_species'][phx-value-col='population']")
+        |> render_click()
+
+      # After re-stream: LO (pop=1) should come before HI (pop=3)
+      assert row_pos(html_after, "SORTED-LO") < row_pos(html_after, "SORTED-HI")
+      # Both rows still in the stream
+      assert has_element?(view, "#species-row-SORTED-HI")
+      assert has_element?(view, "#species-row-SORTED-LO")
+    end
+
+    test "tick re-streams updated species data", %{conn: conn} do
+      Application.put_env(:lenies, :dashboard_throttle_ticks, 1)
+
+      :ets.insert(:lenies, {"TK1", %{id: "TK1", codeome_hash: "TICK-HASH", lineage: {nil, 0}}})
+
+      {:ok, view, _html} = live(conn, "/")
+
+      assert has_element?(view, "#species-row-TICK-HASH")
+
+      # Remove the lenie and send a tick — stream should clear the row
+      :ets.delete(:lenies, "TK1")
+      send(view.pid, {:tick, 1})
+      render(view)
+
+      refute has_element?(view, "#species-row-TICK-HASH")
+    after
+      Application.delete_env(:lenies, :dashboard_throttle_ticks)
+    end
+
+    test "all_species is NOT referenced in the rendered HTML (only stream is)", %{conn: conn} do
+      {:ok, _view, html} = live(conn, "/")
+
+      # The stream tbody is present; there must be no old-style for-loop artifact.
+      # The plain tbody without phx-update="stream" would not have this attribute.
+      assert html =~ ~s(phx-update="stream")
+      # No raw `@all_species` leakage — the template uses @streams.species_table
+      refute html =~ "all_species"
     end
   end
 end

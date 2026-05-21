@@ -60,4 +60,64 @@ defmodule Lenies.TelemetryTest do
     ticks = Enum.map(entries, & &1.tick) |> Enum.sort()
     assert ticks == [16, 17, 18, 19, 20]
   end
+
+  # ---- I6: O(1) ring-buffer eviction ----
+
+  describe "ring buffer O(1) eviction — correct oldest-entry removal" do
+    setup do
+      {:ok, _world} = World.start_link(tick_interval_ms: 0)
+      {:ok, _tel} = Lenies.Telemetry.start_link(max_entries: 3)
+      :ok
+    end
+
+    # Drive ticks by sending {:tick, n} directly to Telemetry so there is no
+    # PubSub timing uncertainty. We bypass World.tick_now to avoid PubSub races.
+    defp send_tick(_n) do
+      # World.snapshot_stats() is called inside handle_info({:tick, n},...),
+      # so World must be running. We drive via World.tick_now to keep stats real,
+      # then drain the PubSub message that world.ex broadcasts (telemetry would
+      # receive it too — but since we want synchronous control, we drive ticks
+      # purely via World.tick_now() which broadcasts {:tick, n} on "world:tick".
+      # :sys.get_state/1 after each group forces the mailbox to drain.
+      World.tick_now()
+    end
+
+    test "buffer size is capped at max_entries after overflow" do
+      for _ <- 1..7, do: send_tick(nil)
+      # Drain Telemetry mailbox synchronously
+      :sys.get_state(Lenies.Telemetry)
+      assert :ets.info(:history, :size) == 3
+    end
+
+    test "retained entries are the most recent ones (oldest evicted)" do
+      for _ <- 1..6, do: send_tick(nil)
+      :sys.get_state(Lenies.Telemetry)
+
+      entries = Lenies.Telemetry.history(:all)
+      assert length(entries) == 3
+
+      # Ticks 4, 5, 6 must be present; ticks 1, 2, 3 evicted
+      ticks = Enum.map(entries, & &1.tick) |> Enum.sort()
+      assert ticks == [4, 5, 6]
+    end
+
+    test "eviction still correct after sterilize resets counter" do
+      # Sterilize resets counter to 0 in Telemetry; subsequent ticks should
+      # still evict oldest correctly.
+      for _ <- 1..4, do: send_tick(nil)
+      :sys.get_state(Lenies.Telemetry)
+
+      World.sterilize()
+      # sterilize broadcasts {:sterilized, ts} which resets Telemetry counter
+      :sys.get_state(Lenies.Telemetry)
+
+      for _ <- 1..5, do: send_tick(nil)
+      :sys.get_state(Lenies.Telemetry)
+
+      assert :ets.info(:history, :size) == 3
+      entries = Lenies.Telemetry.history(:all)
+      ticks = Enum.map(entries, & &1.tick) |> Enum.sort()
+      assert ticks == [3, 4, 5]
+    end
+  end
 end

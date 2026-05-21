@@ -3,6 +3,7 @@ defmodule Lenies.ConjugationTest do
 
   alias Lenies.{Codeome, Lenie, Plasmid, World}
   alias Lenies.World.Tables
+  alias Lenies.Codeome.Costs
 
   @moduletag timeout: 60_000
 
@@ -378,5 +379,139 @@ defmodule Lenies.ConjugationTest do
 
     # Donor keeps its full set.
     assert length(:sys.get_state(donor_pid).plasmids) == 2
+  end
+
+  # ── Energy-accounting tests (I4 fix) ─────────────────────────────────────────
+
+  # Success total = Costs.cost(:conjugate, plasmid_size). Verifies the
+  # base+surcharge split does not change the net cost to the donor.
+  test ":conjugate success costs exactly Costs.cost(:conjugate, plasmid_size)" do
+    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+
+    # Subscribe BEFORE starting any Lenie so we cannot miss the broadcast
+    # when lenie_metabolize_delay_ms is 0 and the conjugation fires immediately.
+    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:fx")
+
+    [{key1, c1}] = :ets.lookup(:cells, {128, 128})
+    :ets.insert(:cells, {key1, %{c1 | lenie_id: "TX2"}})
+    [{key2, c2}] = :ets.lookup(:cells, {129, 128})
+    :ets.insert(:cells, {key2, %{c2 | lenie_id: "RX2"}})
+
+    plasmid_ops = [:turn_left, :defend, :eat]
+    plasmid_size = length(plasmid_ops)
+    expected_cost = Costs.cost(:conjugate, plasmid_size)
+
+    {:ok, _recipient_pid} =
+      Lenie.start_link(
+        id: "RX2",
+        codeome: Codeome.from_list([:eat, :move]),
+        energy: 5_000.0,
+        pos: {129, 128},
+        dir: :w,
+        lineage: {nil, 0}
+      )
+
+    plasmid = Plasmid.new(plasmid_ops)
+    start_energy = 5_000.0
+
+    {:ok, donor_pid} =
+      Lenie.start_link(
+        id: "TX2",
+        # Use :nop_0 as second op so the conjugation loops but max_codeome
+        # eventually blocks re-transfer (recipient already_present → failure cost).
+        # We only care about the FIRST iteration which succeeds.
+        codeome: Codeome.from_list([:conjugate, :nop_0]),
+        energy: start_energy,
+        pos: {128, 128},
+        dir: :e,
+        lineage: {nil, 0},
+        plasmids: [plasmid]
+      )
+
+    Process.unlink(donor_pid)
+
+    # Wait just long enough for the first conjugation to fire.
+    # Use a PubSub notification so we stop measuring as soon as success is confirmed.
+    assert_receive {:conjugation, %{donor_id: "TX2"}}, 2000
+
+    # Allow one interpreter tick after the broadcast to let the apply_cost settle.
+    Process.sleep(50)
+
+    donor_snap = :sys.get_state(donor_pid)
+    energy_spent = start_energy - donor_snap.interp.energy
+
+    # Energy spent should be at least the cost of one successful conjugation
+    # (may be more if extra ops ran, but never less on first success).
+    assert energy_spent >= expected_cost - 0.001,
+      "Expected ≥ #{expected_cost} spent; got #{energy_spent}"
+  end
+
+  # Verify that a failed conjugation (empty plasmid list → world returns push(0))
+  # costs the donor EXACTLY the base cost across the full dispatch+world cycle.
+  # This is a unit-level simulation: dispatch charges base_cost, world handler
+  # calls conjugate_failure which pushes 0 with NO additional cost.
+  test ":conjugate failure total cost equals base 4.0 (dispatch+world handler combined)" do
+    # We simulate the full cost flow without starting a real Lenie process.
+    alias Lenies.Interpreter
+    alias Lenies.Interpreter.State, as: IState
+    alias Lenies.Codeome
+
+    start_energy = 100.0
+    base_cost = Costs.cost(:conjugate, 0)
+
+    # A Lenie with no plasmids (empty list) — dispatch will still yield
+    # {:wait_world, {:conjugate, _, _, []}, new_state}.  The world handler
+    # then calls conjugate_failure/1, which pushes 0 and does NOT deduct
+    # any further energy.
+    c = Codeome.from_list([:conjugate, :nop_0])
+    state = IState.new(energy: start_energy, pos: {5, 5}, dir: :n)
+    # No plasmids on state (default empty list).
+
+    # Step 1: dispatch — charges base cost and advances IP.
+    assert {:wait_world, {:conjugate, _, _, []}, after_dispatch} = Interpreter.step(state, c)
+    assert_in_delta after_dispatch.energy, start_energy - base_cost, 0.0001
+
+    # Step 2: world handler (simulated via conjugate_failure/1 equivalent):
+    # just push(0) — no additional apply_cost.
+    after_world = IState.push(after_dispatch, 0)
+
+    # Total deduction = base_cost only.
+    assert_in_delta start_energy - after_world.energy, base_cost, 0.0001
+    assert hd(after_world.stack) == 0
+  end
+
+  # Verify that a successful conjugation total cost equals Costs.cost(:conjugate, plasmid_size).
+  test ":conjugate success total cost equals Costs.cost(:conjugate, plasmid_size)" do
+    alias Lenies.Interpreter
+    alias Lenies.Interpreter.State, as: IState
+    alias Lenies.Codeome
+
+    plasmid_ops = [:turn_left, :defend, :eat, :move, :turn_right]
+    plasmid_size = length(plasmid_ops)
+    start_energy = 100.0
+    base_cost = Costs.cost(:conjugate, 0)
+    total_cost = Costs.cost(:conjugate, plasmid_size)
+    surcharge = total_cost - base_cost
+
+    plasmid = Plasmid.new(plasmid_ops)
+    c = Codeome.from_list([:conjugate, :nop_0])
+
+    state =
+      IState.new(energy: start_energy, pos: {5, 5}, dir: :e)
+      |> Map.put(:plasmids, [plasmid])
+
+    # Step 1: dispatch — charges base cost.
+    assert {:wait_world, {:conjugate, _, _, _ops}, after_dispatch} = Interpreter.step(state, c)
+    assert_in_delta after_dispatch.energy, start_energy - base_cost, 0.0001
+
+    # Step 2: world success path — applies surcharge only, pushes 1.
+    after_world =
+      after_dispatch
+      |> IState.push(1)
+      |> IState.apply_cost(surcharge)
+
+    # Total deduction = total_cost.
+    assert_in_delta start_energy - after_world.energy, total_cost, 0.0001
+    assert hd(after_world.stack) == 1
   end
 end

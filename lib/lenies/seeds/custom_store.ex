@@ -16,6 +16,19 @@ defmodule Lenies.Seeds.CustomStore do
   When loading from disk, rows that fail any of these rules are silently dropped
   with a `Logger.warning` naming the seed id and the reason. This means a
   hand-edited `priv/user_seeds.json` can never inject invalid data at runtime.
+
+  ## Concurrency and atomicity
+
+  Saves are serialized through the Agent: the state update and the disk write
+  both happen inside `Agent.get_and_update/2`, so the Agent processes one
+  write at a time. This means disk and in-memory state always agree after a
+  write — no two concurrent callers can interleave their writes and produce
+  a file that disagrees with the Agent state.
+
+  Trade-off: because the disk write runs in the Agent process, a `save/1` or
+  `delete/1` call briefly blocks concurrent `all/0` / `get/1` reads for the
+  duration of the write. Saves are user-initiated and rare, so this is
+  acceptable.
   """
 
   use Agent, restart: :transient
@@ -50,35 +63,35 @@ defmodule Lenies.Seeds.CustomStore do
     with :ok <- validate_name(seed),
          :ok <- validate_color(seed),
          :ok <- validate_opcodes(seed) do
-      new_seeds =
-        Agent.get_and_update(__MODULE__, fn seeds ->
-          ns = [seed | Enum.reject(seeds, &(&1.id == seed.id))]
-          {ns, ns}
-        end)
-
-      safe_write(new_seeds)
+      # State update and disk write are performed together inside Agent.get_and_update/2.
+      # The Agent serializes messages, so no two concurrent saves can interleave their
+      # writes — disk and in-memory state always agree after the call returns.
+      Agent.get_and_update(__MODULE__, fn seeds ->
+        ns = [seed | Enum.reject(seeds, &(&1.id == seed.id))]
+        {safe_write(ns), ns}
+      end)
     end
   end
 
   @spec delete(String.t()) :: :ok | {:error, :io_error}
   def delete(id) when is_binary(id) do
-    new_seeds =
-      Agent.get_and_update(__MODULE__, fn seeds ->
-        ns = Enum.reject(seeds, &(&1.id == id))
-        {ns, ns}
-      end)
-
-    safe_write(new_seeds)
+    Agent.get_and_update(__MODULE__, fn seeds ->
+      ns = Enum.reject(seeds, &(&1.id == id))
+      {safe_write(ns), ns}
+    end)
   end
 
   # ----- write safety -----
 
+  # Runs inside the Agent process (called from within Agent.get_and_update/2).
+  # Must rescue filesystem errors AND JSON encode errors — an unhandled raise
+  # here would crash the Agent.
   defp safe_write(seeds) do
     try do
       write_to_disk(seeds)
       :ok
     rescue
-      _e in [File.Error] -> {:error, :io_error}
+      _e in [File.Error, Jason.EncodeError, Protocol.UndefinedError] -> {:error, :io_error}
     end
   end
 
@@ -214,7 +227,9 @@ defmodule Lenies.Seeds.CustomStore do
       |> Enum.map(&encode_seed/1)
       |> Jason.encode!(pretty: true)
 
-    tmp = path <> ".tmp"
+    # Unique suffix avoids any cross-process or cross-store tmp collision
+    # and prevents stale-tmp reuse even if two OS processes share the dir.
+    tmp = path <> ".tmp." <> Integer.to_string(System.unique_integer([:positive]))
     File.write!(tmp, json)
     File.rename!(tmp, path)
   end

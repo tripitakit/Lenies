@@ -229,4 +229,63 @@ defmodule Lenies.Seeds.CustomStoreTest do
       assert {:error, :invalid_opcodes} = CustomStore.save(valid_seed(%{opcodes: []}))
     end
   end
+
+  describe "concurrency safety (I10)" do
+    test "concurrent saves all return :ok, disk == agent state, no stale tmp files",
+         %{tmp_path: tmp_path} do
+      n = 20
+      dir = Path.dirname(tmp_path)
+
+      tasks =
+        Enum.map(1..n, fn i ->
+          Task.async(fn ->
+            seed = valid_seed(%{id: "seed-#{i}", name: "Seed #{i}"})
+            CustomStore.save(seed)
+          end)
+        end)
+
+      results = Task.await_many(tasks, 10_000)
+
+      # (a) every save returned :ok
+      assert Enum.all?(results, &(&1 == :ok)),
+             "Some saves failed: #{inspect(Enum.reject(results, &(&1 == :ok)))}"
+
+      # (b) disk == agent state, and both contain all N items
+      all_in_memory = CustomStore.all()
+      assert length(all_in_memory) == n
+
+      Agent.stop(CustomStore)
+      {:ok, _} = CustomStore.start_link([])
+      all_from_disk = CustomStore.all()
+
+      memory_ids = all_in_memory |> Enum.map(& &1.id) |> Enum.sort()
+      disk_ids = all_from_disk |> Enum.map(& &1.id) |> Enum.sort()
+      expected_ids = Enum.map(1..n, &"seed-#{&1}") |> Enum.sort()
+
+      assert memory_ids == expected_ids, "In-memory IDs mismatch: #{inspect(memory_ids)}"
+      assert disk_ids == expected_ids, "On-disk IDs mismatch: #{inspect(disk_ids)}"
+
+      # (c) no leftover .tmp* files
+      tmp_files =
+        File.ls!(dir)
+        |> Enum.filter(&String.contains?(&1, ".tmp"))
+        |> Enum.filter(&String.starts_with?(&1, Path.basename(tmp_path)))
+
+      assert tmp_files == [], "Stale tmp files remain: #{inspect(tmp_files)}"
+    end
+
+    test "after a normal save no .tmp* file remains", %{tmp_path: tmp_path} do
+      dir = Path.dirname(tmp_path)
+      base = Path.basename(tmp_path)
+
+      :ok = CustomStore.save(valid_seed())
+
+      stale =
+        File.ls!(dir)
+        |> Enum.filter(&String.starts_with?(&1, base))
+        |> Enum.filter(&String.contains?(&1, ".tmp"))
+
+      assert stale == [], "Stale tmp files: #{inspect(stale)}"
+    end
+  end
 end

@@ -433,6 +433,7 @@ defmodule LeniesWeb.EditorLive do
       phx-hook="RememberManualState"
       class="lenies-dashboard codeome-editor-page h-screen w-screen overflow-hidden"
     >
+      <Layouts.flash_group flash={@flash} />
       <header class="codeome-editor-page-header">
         <.link
           navigate={~p"/"}

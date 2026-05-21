@@ -35,7 +35,9 @@ lenies-*.tar
 npm-debug.log
 /assets/node_modules/
 
-# Runtime user data — the codeome editor's "Save" persists seeds here.
+# Runtime user data — the codeome editor's "Save" persists seeds/snippets here.
 /priv/user_seeds.json
 /priv/user_seeds.json.bak
+/priv/user_snippets.json
+/priv/user_snippets.json.bak
 
