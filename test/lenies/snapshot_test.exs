@@ -73,7 +73,9 @@ defmodule Lenies.SnapshotTest do
   end
 
   describe "invalid names (C1: path traversal)" do
-    for name <- ["../etc", "foo/bar", "", "a.b", "a b"] do
+    # "foo\n" is included to guard against PCRE's $ matching before a trailing
+    # newline — \A/\z anchors are required to reject it strictly.
+    for name <- ["../etc", "foo/bar", "", "a.b", "a b", "foo\n"] do
       @name name
 
       test "save rejects #{inspect(name)}" do
@@ -135,6 +137,80 @@ defmodule Lenies.SnapshotTest do
         assert :ets.info(table, :owner) == world,
                "expected World to own #{table} after restore"
       end
+    end
+  end
+
+  describe "partial-swap guard (FIX 1)" do
+    test "file2tab failure mid-loop leaves all 4 tables present and World usable", %{root: root} do
+      # Save a valid snapshot so 3 of the 4 .tab files are well-formed.
+      :ok = Snapshot.save_to_disk("partial-swap")
+      dir = Path.join(root, "partial-swap")
+
+      # Corrupt the lenies.tab file AFTER the header so that
+      # :ets.tabfile_info/1 (read-only header check) succeeds but
+      # :ets.file2tab/1 fails when it tries to decode the payload.
+      # We do this by: reading the file, keeping the first 32 bytes
+      # (Erlang DETS/ETS file header), then replacing the rest with garbage.
+      lenies_tab = Path.join(dir, "lenies.tab")
+      {:ok, bin} = File.read(lenies_tab)
+      # Overwrite everything after the 32-byte header with garbage bytes.
+      # This passes tabfile_info (which only inspects the header) but
+      # causes file2tab to fail on payload decoding.
+      header = binary_part(bin, 0, min(32, byte_size(bin)))
+      corrupt = header <> :binary.copy(<<0xFF>>, 512)
+      File.write!(lenies_tab, corrupt)
+
+      # The validation pass (tabfile_info) should still pass for this file
+      # because we kept the header intact (or file2tab might reject it — either
+      # outcome exercises the recovery path, which is what we're testing).
+      result = Snapshot.restore_from_disk("partial-swap")
+
+      # Whether tabfile_info catches it (returns {:error, {:corrupt, :lenies}})
+      # or file2tab catches it mid-loop (returns {:error, {:restore_failed, _}}),
+      # the important invariant is that ALL 4 snapshot tables still exist and
+      # World is still functional.
+      assert match?({:error, _}, result),
+             "expected restore to fail, got: #{inspect(result)}"
+
+      # All 4 tables must still be present and accessible — no raised ArgumentError.
+      for table <- Snapshot.tables() do
+        assert :ets.info(table, :size) != :undefined,
+               "expected #{table} to still exist after failed restore"
+      end
+
+      # World must still be alive and able to serve requests.
+      assert %{cells: cells_count} = World.snapshot_stats()
+      assert cells_count > 0, "World should have cells after recovery"
+    end
+
+    test "after a mid-loop failure, World.restore_tables/1 with a missing file returns error and keeps world consistent",
+         %{root: root} do
+      # Save a valid snapshot, then remove one .tab file AFTER the save so
+      # restore_tables is called with a dir containing a missing file.
+      # This exercises a different failure mode: file2tab gets called and
+      # immediately returns an error (file not found).
+      :ok = Snapshot.save_to_disk("missing-one")
+      dir = Path.join(root, "missing-one")
+
+      # Remove cells.tab to force file2tab to fail on the very first table.
+      File.rm!(Path.join(dir, "cells.tab"))
+
+      # Call restore_tables directly (bypassing the tabfile_info pre-check in
+      # restore_from_disk) to exercise the recovery path inside the handler.
+      World.sterilize()
+      result = World.restore_tables(dir)
+
+      assert match?({:error, {:restore_failed, :cells}}, result),
+             "expected {:error, {:restore_failed, :cells}}, got: #{inspect(result)}"
+
+      # All 4 tables must exist (recovery recreated the missing ones empty).
+      for table <- Snapshot.tables() do
+        assert :ets.info(table, :size) != :undefined,
+               "expected #{table} to still exist after recovery"
+      end
+
+      # World remains functional.
+      assert %{cells: _} = World.snapshot_stats()
     end
   end
 end

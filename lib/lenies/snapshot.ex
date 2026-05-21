@@ -8,7 +8,7 @@ defmodule Lenies.Snapshot do
 
   ## Identifying a snapshot by NAME (not a path)
 
-  Snapshots are identified by a `name` matching `~r/^[A-Za-z0-9_-]+$/`. The
+  Snapshots are identified by a `name` matching `~r/\A[A-Za-z0-9_-]+\z/`. The
   on-disk directory is `Path.join(root, name)` where `root` comes from
   `Application.get_env(:lenies, :snapshot_root, <tmp>/lenies-snapshots)`.
   Because the name is restricted to `[A-Za-z0-9_-]`, the resolved directory can
@@ -34,7 +34,10 @@ defmodule Lenies.Snapshot do
 
   @tables [:cells, :lenies, :child_slots, :history]
 
-  @name_regex ~r/^[A-Za-z0-9_-]+$/
+  # \A and \z anchor to the very start/end of the string (unlike ^ and $
+  # which PCRE allows to match before a trailing newline), preventing names
+  # like "foo\n" from slipping through the validation.
+  @name_regex ~r/\A[A-Za-z0-9_-]+\z/
 
   @doc "The 4 ETS tables managed by snapshots (single source of truth)."
   def tables, do: @tables
@@ -49,7 +52,7 @@ defmodule Lenies.Snapshot do
 
   @doc """
   Save all 4 ETS tables to files under `root/name`. `name` must match
-  `~r/^[A-Za-z0-9_-]+$/`.
+  `~r/\\A[A-Za-z0-9_-]+\\z/`.
 
   Atomic: writes each table to `<table>.tab.tmp` then renames to `<table>.tab`
   only after all temp writes succeed. Returns `:ok`, `{:error, :invalid_name}`,

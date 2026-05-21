@@ -146,18 +146,22 @@ defmodule Lenies.World do
     if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
 
     result =
-      Enum.reduce_while(Lenies.Snapshot.tables(), :ok, fn table, _acc ->
-        path = Path.join(dir, "#{table}.tab") |> String.to_charlist()
+      try do
+        Enum.reduce_while(Lenies.Snapshot.tables(), :ok, fn table, _acc ->
+          path = Path.join(dir, "#{table}.tab") |> String.to_charlist()
 
-        # The table still exists after sterilize; delete it so file2tab can
-        # recreate it owned by THIS (World) process.
-        if :ets.whereis(table) != :undefined, do: :ets.delete(table)
+          # The table still exists after sterilize; delete it so file2tab can
+          # recreate it owned by THIS (World) process.
+          if :ets.whereis(table) != :undefined, do: :ets.delete(table)
 
-        case :ets.file2tab(path) do
-          {:ok, _} -> {:cont, :ok}
-          _error -> {:halt, {:error, {:restore_failed, table}}}
-        end
-      end)
+          case :ets.file2tab(path) do
+            {:ok, _} -> {:cont, :ok}
+            _error -> {:halt, {:error, {:restore_failed, table}}}
+          end
+        end)
+      rescue
+        _ -> {:error, {:restore_failed, :unknown}}
+      end
 
     # Reset tick bookkeeping like sterilize does and reschedule the tick.
     new_state = %{state | tick_count: 0, tick_ref: nil}
@@ -174,6 +178,12 @@ defmodule Lenies.World do
         {:reply, :ok, new_state}
 
       {:error, _} = err ->
+        # Recovery: if file2tab failed partway through the loop, one or more
+        # snapshot tables may be missing (deleted but not recreated). An absent
+        # named table would cause World to crash on the next ETS lookup, so we
+        # recreate all 4 as fresh empty tables and re-initialise the :cells grid
+        # to leave the world in a valid, consistent (empty) state.
+        recover_tables(state.grid)
         {:reply, err, new_state}
     end
   end
@@ -283,6 +293,21 @@ defmodule Lenies.World do
     end
 
     :ok
+  end
+
+  # Recreate all 4 snapshot tables from scratch when a restore fails mid-loop.
+  # Any table that currently exists is deleted first so the :new/2 call can
+  # register the :named_table. The :cells grid is then populated the same way
+  # init/1 does it, so the world is immediately usable after recovery.
+  defp recover_tables(grid) do
+    table_opts = [:set, :named_table, :public, read_concurrency: true, write_concurrency: true]
+
+    for table <- Lenies.Snapshot.tables() do
+      if :ets.whereis(table) != :undefined, do: :ets.delete(table)
+      :ets.new(table, table_opts)
+    end
+
+    init_cells(grid)
   end
 
   defp prewarm_radiation(state) do
