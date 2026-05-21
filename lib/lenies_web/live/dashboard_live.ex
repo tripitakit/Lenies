@@ -219,13 +219,13 @@ defmodule LeniesWeb.DashboardLive do
                     %{population: 0, total_resource: 0, total_carcass: 0} %>
                 <div class="grid grid-cols-3 gap-2 text-[11px]">
                   <div class="border border-cyan-500/30 px-2 py-1">
-                    <div class="opacity-60">pop.</div>
+                    <div class="opacity-60">Population</div>
                     <div class="text-cyan-300 font-bold tabular-nums text-base">
                       {format_count(latest.population)}
                     </div>
                   </div>
                   <div class="border border-emerald-500/30 px-2 py-1">
-                    <div class="opacity-60">resources</div>
+                    <div class="opacity-60">Resources</div>
                     <div
                       class="text-emerald-300 font-bold tabular-nums text-base"
                       title={"#{latest.total_resource}"}
@@ -234,7 +234,7 @@ defmodule LeniesWeb.DashboardLive do
                     </div>
                   </div>
                   <div class="border border-rose-500/30 px-2 py-1">
-                    <div class="opacity-60">detritus</div>
+                    <div class="opacity-60">Detritus</div>
                     <div
                       class="text-rose-300 font-bold tabular-nums text-base"
                       title={"#{latest.total_carcass}"}
