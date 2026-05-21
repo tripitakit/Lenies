@@ -151,4 +151,45 @@ defmodule Lenies.WorldCarcassEatTest do
     assert after_cell.carcass == 0
     assert after_cell.resource == 35
   end
+
+  # Regression for the astronomical-detritus bug: eating a carcass repeatedly
+  # must never yield MORE total energy than the carcass held. The old 1.5x
+  # bonus created 0.5x energy per eat, which — in the energy→death→carcass→eat
+  # loop — accumulated without bound (detritus blew up to ~1e23). With 1:1
+  # conservation the total extracted equals exactly the carcass, never more.
+  test "repeatedly eating a carcass creates no energy (sum == carcass, not 1.5x)" do
+    {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+
+    original_eat_amount = Application.get_env(:lenies, :eat_amount)
+    Application.put_env(:lenies, :eat_amount, 20)
+
+    on_exit(fn ->
+      if original_eat_amount,
+        do: Application.put_env(:lenies, :eat_amount, original_eat_amount),
+        else: Application.delete_env(:lenies, :eat_amount)
+    end)
+
+    carcass = 1000
+    [{key, cell}] = :ets.lookup(:cells, {9, 9})
+    :ets.insert(:cells, {key, %{cell | resource: 0, carcass: carcass}})
+
+    # Drain the carcass with repeated eats; sum every unit of energy handed out.
+    total =
+      Enum.reduce_while(1..1000, 0, fn _, acc ->
+        {:ok, {:ate, amount}} = World.action({:eat, {9, 9}})
+
+        if amount == 0 do
+          {:halt, acc}
+        else
+          {:cont, acc + amount}
+        end
+      end)
+
+    # Total energy extracted equals the carcass exactly — no creation.
+    # (Old 1.5x code would have produced 1500.)
+    assert total == carcass
+
+    [{_, after_cell}] = :ets.lookup(:cells, {9, 9})
+    assert after_cell.carcass == 0
+  end
 end
