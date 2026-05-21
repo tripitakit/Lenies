@@ -12,10 +12,35 @@ defmodule Lenies.Seeds.CustomStore do
   - `color_hex` must match `^#[0-9a-fA-F]{6}$`
   - `opcodes` must be a non-empty list of known opcodes from `Lenies.Codeome.Opcodes.all/0`
   - `energy_default` must be a number (integer or float); an absent key defaults to 10_000.0
+  - `opcodes` length must not exceed the codeome upper bound (currently 1000)
 
   When loading from disk, rows that fail any of these rules are silently dropped
   with a `Logger.warning` naming the seed id and the reason. This means a
   hand-edited `priv/user_seeds.json` can never inject invalid data at runtime.
+
+  ## File format (MH4 versioned envelope)
+
+  The JSON file is written in a versioned envelope format:
+
+      {"version": 1, "items": [...]}
+
+  **Backward compatibility**: old bare-array files (`[{...}, ...]`) are still
+  read correctly and upgraded to the envelope format on the next write. This
+  means existing `priv/user_seeds.json` files from before this change load
+  with zero data loss.
+
+  **Unknown future versions**: if the file carries a `version` number greater
+  than `@schema_version`, the store logs a warning and starts fresh. This
+  prevents an old build from silently mangling a file written by a newer build
+  that uses a different schema.
+
+  ## Payload-size cap (MH1 DoS hardening)
+
+  During load, rows whose `opcodes` list exceeds `@max_opcodes_from_config`
+  (derived from `Lenies.Config.codeome_length_bounds/0`, currently 1000) are
+  dropped before the expensive `String.to_existing_atom/1` conversion. This
+  prevents a hand-crafted multi-million-element array from blocking the
+  supervisor start.
 
   ## Concurrency and atomicity
 
@@ -32,6 +57,16 @@ defmodule Lenies.Seeds.CustomStore do
   """
 
   use Agent, restart: :transient
+
+  # Schema version written to disk. Bump when the JSON shape changes in a
+  # backward-incompatible way. The read path handles v1 (current) and the
+  # old bare-array format. Files with an unknown (higher) version are refused
+  # and the store starts fresh rather than silently mangling foreign data.
+  @schema_version 1
+
+  # Opcodes cap: derived from the codeome upper bound so the guard is always
+  # consistent with the rest of the system. Evaluated at compile time.
+  @max_opcodes_from_config elem(Lenies.Config.codeome_length_bounds(), 1)
 
   @type seed :: %{
           id: String.t(),
@@ -162,7 +197,26 @@ defmodule Lenies.Seeds.CustomStore do
   end
 
   defp parse_contents(contents, path) do
+    require Logger
+
     case Jason.decode(contents) do
+      # New versioned envelope: {"version": N, "items": [...]}
+      {:ok, %{"version" => v, "items" => list}} when is_list(list) and v == @schema_version ->
+        list
+        |> Enum.map(&decode_seed/1)
+        |> Enum.filter(& &1)
+
+      # Unknown/future version: refuse to decode to avoid silent data mangling.
+      {:ok, %{"version" => v, "items" => _}} ->
+        Logger.warning(
+          "Lenies.Seeds.CustomStore: unknown schema version #{inspect(v)} " <>
+            "(this build supports v#{@schema_version}); starting fresh"
+        )
+
+        []
+
+      # Old bare-array format: backward-compatible load with zero data loss.
+      # The next write will upgrade the file to the envelope format.
       {:ok, list} when is_list(list) ->
         list
         |> Enum.map(&decode_seed/1)
@@ -179,45 +233,69 @@ defmodule Lenies.Seeds.CustomStore do
   defp decode_seed(%{} = m) do
     require Logger
 
-    try do
-      ops = Enum.map(m["opcodes"] || [], &String.to_existing_atom/1)
+    # MH1: Early payload-size guard — reject non-list opcodes and lists that
+    # exceed the codeome upper bound BEFORE calling String.to_existing_atom/1.
+    # This prevents a hand-crafted multi-million-element array from blocking
+    # the supervisor start during Agent init.
+    raw_opcodes = m["opcodes"]
 
-      energy =
-        case m do
-          %{"energy_default" => v} when is_number(v) -> v
-          %{"energy_default" => _bad} -> :invalid_energy
-          _ -> 10_000.0
-        end
-
-      candidate = %{
-        id: m["id"],
-        name: m["name"],
-        color_hex: m["color_hex"],
-        energy_default: energy,
-        opcodes: ops
-      }
-
-      with true <- is_binary(candidate.id) and candidate.id != "",
-           :ok <- validate_name(candidate),
-           :ok <- validate_color(candidate),
-           :ok <- validate_opcodes(candidate),
-           true <- energy != :invalid_energy do
-        candidate
-      else
-        _ ->
-          Logger.warning(
-            "Lenies.Seeds.CustomStore: dropping seed #{inspect(m["id"])} — failed validation"
-          )
-
-          nil
-      end
-    rescue
-      ArgumentError ->
+    cond do
+      not is_list(raw_opcodes) ->
         Logger.warning(
-          "Lenies.Seeds.CustomStore: dropping seed #{inspect(m["id"])} — unknown opcode(s)"
+          "Lenies.Seeds.CustomStore: dropping seed #{inspect(m["id"])} — opcodes is not a list"
         )
 
         nil
+
+      length(raw_opcodes) > @max_opcodes_from_config ->
+        Logger.warning(
+          "Lenies.Seeds.CustomStore: dropping seed #{inspect(m["id"])} — " <>
+            "opcodes length #{length(raw_opcodes)} exceeds cap #{@max_opcodes_from_config}"
+        )
+
+        nil
+
+      true ->
+        try do
+          ops = Enum.map(raw_opcodes, &String.to_existing_atom/1)
+
+          energy =
+            case m do
+              %{"energy_default" => v} when is_number(v) -> v
+              %{"energy_default" => _bad} -> :invalid_energy
+              _ -> 10_000.0
+            end
+
+          candidate = %{
+            id: m["id"],
+            name: m["name"],
+            color_hex: m["color_hex"],
+            energy_default: energy,
+            opcodes: ops
+          }
+
+          with true <- is_binary(candidate.id) and candidate.id != "",
+               :ok <- validate_name(candidate),
+               :ok <- validate_color(candidate),
+               :ok <- validate_opcodes(candidate),
+               true <- energy != :invalid_energy do
+            candidate
+          else
+            _ ->
+              Logger.warning(
+                "Lenies.Seeds.CustomStore: dropping seed #{inspect(m["id"])} — failed validation"
+              )
+
+              nil
+          end
+        rescue
+          ArgumentError ->
+            Logger.warning(
+              "Lenies.Seeds.CustomStore: dropping seed #{inspect(m["id"])} — unknown opcode(s)"
+            )
+
+            nil
+        end
     end
   end
 
@@ -227,10 +305,13 @@ defmodule Lenies.Seeds.CustomStore do
     path = file_path()
     File.mkdir_p!(Path.dirname(path))
 
+    # MH4: Write the versioned envelope. Old bare-array files are upgraded to
+    # this format on the next write after being loaded by parse_contents/2.
     json =
-      seeds
-      |> Enum.map(&encode_seed/1)
-      |> Jason.encode!(pretty: true)
+      Jason.encode!(
+        %{"version" => @schema_version, "items" => Enum.map(seeds, &encode_seed/1)},
+        pretty: true
+      )
 
     # Unique suffix avoids any cross-process or cross-store tmp collision
     # and prevents stale-tmp reuse even if two OS processes share the dir.
