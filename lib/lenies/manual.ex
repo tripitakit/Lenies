@@ -68,8 +68,7 @@ defmodule Lenies.Manual do
 
     cond do
       File.dir?(priv) -> priv
-      File.dir?("docs/manual") -> Path.expand("docs/manual")
-      true -> priv
+      true -> Path.expand(Path.join(__DIR__, "../../docs/manual"))
     end
   end
 

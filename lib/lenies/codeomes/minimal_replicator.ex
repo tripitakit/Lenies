@@ -294,6 +294,59 @@ defmodule Lenies.Codeomes.MinimalReplicator do
   @spec opcodes() :: [atom()]
   def opcodes, do: @opcodes
 
+  @preamble [
+    # ── pos 0..3: LOOP_HEAD anchor [n1, n1, n1, n1] ──────────────────────
+    :nop_1, :nop_1, :nop_1, :nop_1,
+
+    # ── pos 4..6: get own size N, store in slot[0] ───────────────────────
+    :get_size, :push0, :store,
+
+    # ── pos 7..9: allocate child slot of size N in front cell ────────────
+    :push0, :load, :allocate,
+
+    # ── pos 10..14: jz_t ABORT_TARGET if allocate failed (template [n0,n0,n1,n1]) ──
+    :jz_t, :nop_0, :nop_0, :nop_1, :nop_1,
+
+    # ── pos 15..17: init copy counter slot[1] = 0 ────────────────────────
+    :push0, :push1, :store,
+
+    # ── pos 18..21: COPY_LOOP_HEAD anchor [n1, n0, n0, n1] ───────────────
+    :nop_1, :nop_0, :nop_0, :nop_1,
+
+    # ── pos 22..29: copy body — read self at slot[1], write to child ────
+    :push1, :load, :read_self,
+    :push1, :load, :swap, :write_child, :drop,
+
+    # ── pos 30..35: increment slot[1] (copy counter) ─────────────────────
+    :push1, :load, :push1, :add, :push1, :store,
+
+    # ── pos 36..40: loop condition (N - (counter+1)) ─────────────────────
+    :push0, :load, :push1, :load, :sub,
+
+    # ── pos 41..45: jnz_t COPY_LOOP_HEAD (template [n0,n1,n1,n0]) ───────
+    :jnz_t, :nop_0, :nop_1, :nop_1, :nop_0,
+
+    # ── pos 46: divide ───────────────────────────────────────────────────
+    :divide,
+
+    # ── pos 47..50: ABORT_TARGET anchor [n1, n1, n0, n0] ─────────────────
+    :nop_1, :nop_1, :nop_0, :nop_0,
+
+    # ── pos 51: deterministic post-divide turn ───────────────────────────
+    :turn_left
+  ]
+
+  @doc """
+  The shared replication preamble (52 opcodes, positions 0..51):
+  LOOP_HEAD → get_size/store → allocate → copy loop → divide →
+  ABORT_TARGET anchor → turn_left.
+
+  This prefix is byte-identical across `Defender`, `Forager`, and `Hunter`.
+  Each of those codeomes is built as `replication_preamble() ++ <forage body>`.
+  """
+  @spec replication_preamble() :: [atom()]
+  def replication_preamble, do: @preamble
+
   @plasmid_opcodes [
     # ── pos 0..3: INTERCEPT_ANCHOR = FORAGE_LOOP_HEAD pattern [n0,n1,n0,n1] ──
     :nop_0, :nop_1, :nop_0, :nop_1,

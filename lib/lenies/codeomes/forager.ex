@@ -69,49 +69,9 @@ defmodule Lenies.Codeomes.Forager do
   """
 
   alias Lenies.Codeome
+  alias Lenies.Codeomes.MinimalReplicator
 
-  @opcodes [
-    # ── pos 0..3: LOOP_HEAD anchor [n1, n1, n1, n1] ──────────────────────
-    :nop_1, :nop_1, :nop_1, :nop_1,
-
-    # ── pos 4..6: get_size; store slot[0] ────────────────────────────────
-    :get_size, :push0, :store,
-
-    # ── pos 7..9: allocate(N) ────────────────────────────────────────────
-    :push0, :load, :allocate,
-
-    # ── pos 10..14: jz_t ABORT_TARGET (template [n0,n0,n1,n1]) ──────────
-    :jz_t, :nop_0, :nop_0, :nop_1, :nop_1,
-
-    # ── pos 15..17: init slot[1] = 0 ─────────────────────────────────────
-    :push0, :push1, :store,
-
-    # ── pos 18..21: COPY_LOOP_HEAD anchor [n1, n0, n0, n1] ───────────────
-    :nop_1, :nop_0, :nop_0, :nop_1,
-
-    # ── pos 22..29: copy body ────────────────────────────────────────────
-    :push1, :load, :read_self,
-    :push1, :load, :swap, :write_child, :drop,
-
-    # ── pos 30..35: increment slot[1] ────────────────────────────────────
-    :push1, :load, :push1, :add, :push1, :store,
-
-    # ── pos 36..40: loop condition (N - (counter+1) != 0?) ──────────────
-    :push0, :load, :push1, :load, :sub,
-
-    # ── pos 41..45: jnz_t COPY_LOOP_HEAD (template [n0,n1,n1,n0]) ───────
-    :jnz_t, :nop_0, :nop_1, :nop_1, :nop_0,
-
-    # ── pos 46: divide ───────────────────────────────────────────────────
-    :divide,
-
-    # ── pos 47..50: ABORT_TARGET anchor [n1, n1, n0, n0] ─────────────────
-    # Landing pad for both jz_t (allocate failed) and post-divide fall-through.
-    :nop_1, :nop_1, :nop_0, :nop_0,
-
-    # ── pos 51: deterministic post-divide turn ───────────────────────────
-    :turn_left,
-
+  @forage_body [
     # ── pos 52..65: build K=128 (push1 + 7×(dup,add)) ────────────────────
     :push1, :dup, :add, :dup, :add, :dup, :add,
     :dup, :add, :dup, :add, :dup, :add, :dup, :add,
@@ -189,6 +149,8 @@ defmodule Lenies.Codeomes.Forager do
     # ── pos 137: separator (final wrap protection) ───────────────────────
     :push0
   ]
+
+  @opcodes MinimalReplicator.replication_preamble() ++ @forage_body
 
   @spec codeome() :: Codeome.t()
   def codeome, do: Codeome.from_list(@opcodes)

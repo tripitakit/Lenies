@@ -915,12 +915,7 @@ defmodule Lenies.World do
   end
 
   defp front_cell({x, y}, dir, {w, h}) do
-    case dir do
-      :n -> {x, Integer.mod(y - 1, h)}
-      :e -> {Integer.mod(x + 1, w), y}
-      :s -> {x, Integer.mod(y + 1, h)}
-      :w -> {Integer.mod(x - 1, w), y}
-    end
+    Lenies.World.Geometry.step({x, y}, dir, {w, h})
   end
 
   defp current_copy_rates do

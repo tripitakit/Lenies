@@ -84,6 +84,7 @@ defmodule Lenies.Snippets.Store do
     cond do
       String.trim(name) == "" -> {:error, :invalid_name}
       id == "" -> {:error, :invalid_name}
+      not String.match?(name, ~r/[a-zA-Z0-9]/) -> {:error, :invalid_name}
       true -> :ok
     end
   end
