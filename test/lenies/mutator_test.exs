@@ -71,6 +71,40 @@ defmodule Lenies.MutatorTest do
     end
   end
 
+  describe "insert_at/4" do
+    # MH2: lock the exact truncation behaviour of the :insert copy-mutation path.
+    # Inserting at idx places the new op there, shifts elements right, and DROPS
+    # the original last element — tuple size is preserved.
+
+    test "inserts op at index 0, shifts right, drops last element" do
+      # {:a,:b,:c,:d} insert :x at 0 → {:x,:a,:b,:c} (drops :d)
+      result = Mutator.insert_at({:a, :b, :c, :d}, 0, :x, 4)
+      assert result == {:x, :a, :b, :c}
+      assert tuple_size(result) == 4
+    end
+
+    test "inserts op at a middle index, shifts tail right, drops last element" do
+      # {:a,:b,:c,:d} insert :x at 1 → {:a,:x,:b,:c} (drops :d)
+      result = Mutator.insert_at({:a, :b, :c, :d}, 1, :x, 4)
+      assert result == {:a, :x, :b, :c}
+      assert tuple_size(result) == 4
+    end
+
+    test "inserts op at last index, drops the original last element" do
+      # {:a,:b,:c,:d} insert :x at 3 → {:a,:b,:c,:x} (drops :d)
+      result = Mutator.insert_at({:a, :b, :c, :d}, 3, :x, 4)
+      assert result == {:a, :b, :c, :x}
+      assert tuple_size(result) == 4
+    end
+
+    test "index out of range wraps via Integer.mod" do
+      # idx=5 mod 4 = 1, same as inserting at 1
+      result = Mutator.insert_at({:a, :b, :c, :d}, 5, :x, 4)
+      assert result == {:a, :x, :b, :c}
+      assert tuple_size(result) == 4
+    end
+  end
+
   describe "copy_mutate_list/4" do
     test "rate 0.0 reproduces the input exactly" do
       original = [:eat, :move, :turn_left]

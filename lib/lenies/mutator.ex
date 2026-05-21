@@ -74,6 +74,35 @@ defmodule Lenies.Mutator do
   end
 
   @doc """
+  Insert `op` at position `idx` in `opcodes_tuple`, shifting elements
+  rightward and dropping the original last element to keep the tuple size
+  constant at `size`.
+
+  This is the helper used by the `:insert` copy-mutation path in
+  `World.apply_copy_outcome/4`. Extracting it here allows direct unit testing
+  of the truncation behaviour without needing a running World.
+
+  ## Examples
+
+      iex> Lenies.Mutator.insert_at({:a, :b, :c, :d}, 1, :x, 4)
+      {:a, :x, :b, :c}
+
+      iex> Lenies.Mutator.insert_at({:a, :b, :c, :d}, 3, :x, 4)
+      {:a, :b, :c, :x}
+
+  """
+  @spec insert_at(tuple(), non_neg_integer(), atom(), pos_integer()) :: tuple()
+  def insert_at(opcodes_tuple, idx, op, size) do
+    idx = Integer.mod(idx, size)
+
+    list = Tuple.to_list(opcodes_tuple)
+    {head, tail} = Enum.split(list, idx)
+    # Drop the last element of tail to keep size constant
+    new_tail = [op | tail] |> Enum.take(length(tail))
+    (head ++ new_tail) |> List.to_tuple()
+  end
+
+  @doc """
   Apply per-opcode copy mutations to a list. For each opcode, rolls
   substitution → insert → delete dice in that order; the first hit
   determines the outcome (same convention as `copy_outcome/1`). Insertions
