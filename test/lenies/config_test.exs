@@ -39,7 +39,6 @@ defmodule Lenies.ConfigTest do
     end
   end
 
-
   test "codeome_length_bounds/0 returns configured value" do
     assert Config.codeome_length_bounds() == {5, 1000}
   end
