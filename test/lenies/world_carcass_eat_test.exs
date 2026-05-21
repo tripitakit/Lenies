@@ -50,11 +50,8 @@ defmodule Lenies.WorldCarcassEatTest do
     [{key, cell}] = :ets.lookup(:cells, {5, 5})
     :ets.insert(:cells, {key, %{cell | resource: 50, carcass: 10}})
 
-    # eat_amount = 20 default; carcass available = 10 → take 10 carcass for 10 energy (1:1)
-    # remaining quota = 10, but resource is NOT consumed because eat is carcass-first
-    # and carcass is exhausted (10 taken) leaving quota 10, then resource fills remaining 10
-    # Wait — the new logic: carcass_taken=10, remaining_quota=10, resource_taken=min(50,10)=10
-    # total_energy = 10 + 10 = 20
+    # eat_amount = 20 default. Carcass-first: carcass_taken = 10 (1:1 energy),
+    # remaining_quota = 10, resource_taken = min(50, 10) = 10. total = 10 + 10 = 20.
     {:ok, {:ate, amount}} = World.action({:eat, {5, 5}})
     # 10 carcass (1:1) + 10 resource = 20 total
     assert amount == 20

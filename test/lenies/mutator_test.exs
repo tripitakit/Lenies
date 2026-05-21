@@ -3,6 +3,8 @@ defmodule Lenies.MutatorTest do
 
   alias Lenies.Mutator
 
+  doctest Lenies.Mutator
+
   describe "copy_outcome/1" do
     test "with all rates at 0 always returns :write" do
       outcome = Mutator.copy_outcome(%{substitution: 0.0, insert: 0.0, delete: 0.0})
