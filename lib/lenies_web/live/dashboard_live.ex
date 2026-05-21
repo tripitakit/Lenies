@@ -252,12 +252,12 @@ defmodule LeniesWeb.DashboardLive do
               <div class="panel p-3 flex flex-col gap-2 min-h-0">
                 <h2 class="text-xs">▮ {@species_total} species</h2>
                 <div class="flex-1 min-h-0 overflow-auto">
-                  <table class="text-[11px] tabular-nums">
+                  <table class="w-full text-[11px] tabular-nums">
                     <thead class="text-cyan-300/80 sticky top-0 bg-slate-950/80">
                       <tr>
-                        <th class="text-left py-1 whitespace-nowrap">Hash</th>
+                        <th class="text-left py-1 pr-4 whitespace-nowrap">Hash</th>
                         <th
-                          class="text-left py-1 cursor-pointer select-none hover:text-cyan-200"
+                          class="text-left py-1 w-full cursor-pointer select-none hover:text-cyan-200"
                           phx-click="sort_species"
                           phx-value-col="seed"
                           title="Seed of origin — bare seed name when the species' codeome still matches the pristine seed; prefixed with 'evolved from' once mutations have drifted it. Click to sort."
@@ -317,7 +317,7 @@ defmodule LeniesWeb.DashboardLive do
                         phx-click="select_species"
                         phx-value-hash={sp.hash}
                       >
-                        <td class="py-0.5 whitespace-nowrap">
+                        <td class="py-0.5 pr-4 whitespace-nowrap">
                           <div class="flex items-center gap-1.5">
                             <span
                               class="inline-block w-2 h-2 shrink-0"
@@ -329,7 +329,7 @@ defmodule LeniesWeb.DashboardLive do
                             </span>
                           </div>
                         </td>
-                        <td class="py-0.5 opacity-80 max-w-[16rem] truncate">
+                        <td class="py-0.5 opacity-80">
                           {format_seed_origin(sp)}<span
                             :if={carried_plasmids(sp) != []}
                             class="ml-1 text-[9px] text-yellow-300/80"
