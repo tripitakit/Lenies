@@ -67,7 +67,7 @@ defmodule Lenies.Snapshot do
 
   @doc """
   Restore all 4 ETS tables from files under `root/name`. `name` must match
-  `~r/^[A-Za-z0-9_-]+$/`.
+  `~r/\\A[A-Za-z0-9_-]+\\z/`.
 
   Order of operations (validate-before-destroy):
   1. validate name
