@@ -2,7 +2,8 @@ defmodule Lenies.AttackEnergyConservationTest do
   @moduledoc """
   Tests that the attack mechanic conserves energy:
   - Attacker gains exactly what the victim lost (no more, even on overkill).
-  - Defended attack: attacker gains actual clamped damage minus penalty.
+  - Defended attack: async reward equals clamped damage; penalty is applied
+    separately by the interpreter (synchronously, before any reward arrives).
   - Unit tests of the victim's handle_info({:take_damage, amount, attacker_id}) clamp.
   """
   use ExUnit.Case, async: false
@@ -45,11 +46,12 @@ defmodule Lenies.AttackEnergyConservationTest do
   # Spawn a lenie at position, register it in ETS. Starts paused by default
   # so metabolism doesn't drain energy between spawn and the test action.
   # The initial snapshot is still written in init/1 regardless of paused?.
-  defp spawn_lenie(id, pos, energy, opts \\ []) do
+  defp spawn_lenie(id, pos, energy, opts) do
     [{key, cell}] = :ets.lookup(:cells, pos)
     :ets.insert(:cells, {key, %{cell | lenie_id: id}})
 
-    codeome = Codeome.from_list([:nop_0, :nop_0, :nop_0])
+    opcodes = Keyword.get(opts, :codeome, [:nop_0, :nop_0, :nop_0])
+    codeome = Codeome.from_list(opcodes)
 
     {:ok, pid} =
       Lenie.start_link(
@@ -61,11 +63,33 @@ defmodule Lenies.AttackEnergyConservationTest do
           dir: Keyword.get(opts, :dir, :n),
           lineage: {nil, 0},
           paused?: Keyword.get(opts, :paused?, true)
-        ] ++ Keyword.drop(opts, [:dir, :paused?])
+        ] ++ Keyword.drop(opts, [:dir, :paused?, :codeome])
       )
 
     Process.unlink(pid)
     pid
+  end
+
+  # Poll attacker's energy via inspect_state until it changes from `before`
+  # or the deadline (in ms) passes. Raises on timeout.
+  defp await_energy_change(pid, before, deadline_ms \\ 1_000, interval_ms \\ 10) do
+    deadline = System.monotonic_time(:millisecond) + deadline_ms
+
+    Stream.repeatedly(fn ->
+      Process.sleep(interval_ms)
+      Lenie.inspect_state(pid).energy
+    end)
+    |> Enum.reduce_while(before, fn energy, _acc ->
+      if energy != before do
+        {:halt, energy}
+      else
+        if System.monotonic_time(:millisecond) >= deadline do
+          flunk("Attacker energy did not change from #{before} within #{deadline_ms}ms")
+        else
+          {:cont, before}
+        end
+      end
+    end)
   end
 
   describe "energy conservation on overkill" do
@@ -89,11 +113,10 @@ defmodule Lenies.AttackEnergyConservationTest do
       # Victim must die — overkill
       assert_receive {:DOWN, ^ref, :process, ^victim_pid, :killed}, 1_000
 
-      # Allow async :attack_reward message to be delivered to the attacker
-      # then check via inspect_state (synchronous GenServer call that
-      # processes all preceding messages first).
-      Process.sleep(100)
-      attacker_after = Lenie.inspect_state(attacker_pid).energy
+      # Once the DOWN arrives the victim has already sent :attack_reward.
+      # Use inspect_state (a synchronous GenServer call) to flush the attacker's
+      # mailbox and read the settled energy.
+      attacker_after = await_energy_change(attacker_pid, attacker_before)
 
       attacker_gain = attacker_after - attacker_before
 
@@ -122,10 +145,8 @@ defmodule Lenies.AttackEnergyConservationTest do
       {:ok, {:attacked, ^attack_damage}} =
         World.action({:attack, {20, 21}, :e, "ATK_NRM"})
 
-      # Allow async :attack_reward to land
-      Process.sleep(100)
-
-      attacker_after = Lenie.inspect_state(attacker_pid).energy
+      # Wait deterministically for the async :attack_reward to land on the attacker.
+      attacker_after = await_energy_change(attacker_pid, attacker_before)
       victim_after = Lenie.inspect_state(victim_pid).energy
 
       attacker_gain = attacker_after - attacker_before
@@ -172,10 +193,8 @@ defmodule Lenies.AttackEnergyConservationTest do
       {:ok, {:defended, ^half_damage}} =
         World.action({:attack, {20, 22}, :e, "ATK_DEF"})
 
-      # Allow async :attack_reward to arrive
-      Process.sleep(100)
-
-      attacker_after = Lenie.inspect_state(attacker_pid).energy
+      # Wait deterministically for the async :attack_reward to land on the attacker.
+      attacker_after = await_energy_change(attacker_pid, attacker_before)
       victim_after = Lenie.inspect_state(victim_pid).energy
 
       attacker_gain = attacker_after - attacker_before
@@ -197,28 +216,91 @@ defmodule Lenies.AttackEnergyConservationTest do
       GenServer.stop(victim_pid)
     end
 
-    test "defended: apply_world_action applies only penalty (not damage) synchronously" do
-      # This tests the interpreter side: when apply_world_action runs, the
-      # attacker should only lose the penalty synchronously; the reward
-      # arrives later async (not tested here — covered in the other tests).
+    test "defended: apply_world_action charges only the penalty — not a pre-credited damage bonus" do
+      # This test runs the attacker's real metabolize loop (codeome = [:attack])
+      # against a live defending victim. The old bug credited +damage inside
+      # apply_world_action before the async reward arrived, so each defended
+      # cycle produced a net energy GAIN for the attacker. The new code charges
+      # only the synchronous penalty, and the reward arrives later; each cycle
+      # therefore produces a net energy LOSS (or at best break-even after reward)
+      # equal to -(attack_cost + penalty) + half_damage.
+      #
+      # With default config (attack_cost=5, penalty=5, half_damage=5):
+      #   New code per cycle: -5 - 5 + 5 = -5  (attacker loses energy)
+      #   Old bug per cycle:  -5 + 10 - 5 + 5 = +5  (attacker gains energy!)
+      #
+      # After many cycles the energy trends diverge by N * attack_damage, making
+      # this an unambiguous regression detector without needing to intercept the
+      # exact synchronous intermediate state.
+      attack_cost = 5.0
       penalty = Application.get_env(:lenies, :defense_attacker_penalty, 5)
       attack_damage = Application.get_env(:lenies, :attack_damage, 10)
       half_damage = div(attack_damage, 2)
 
-      # Build an interpreter state directly
-      interp = Lenies.Interpreter.State.new(energy: 100.0, pos: {0, 0}, dir: :e)
+      # Verify the expected per-cycle delta is negative under new code —
+      # if someone changes the config so this is no longer true the test
+      # would be vacuous, so we guard it explicitly.
+      per_cycle_new = -attack_cost - penalty + half_damage
+      per_cycle_old = -attack_cost + attack_damage - penalty + half_damage
 
-      # Mock: simulate apply_world_action's defended branch with old code vs new code.
-      # Old code: energy + damage - penalty
-      # New code: energy - penalty
-      energy_after_new = interp.energy - penalty
-      energy_after_old = interp.energy + half_damage - penalty
+      assert per_cycle_new < 0,
+             "Config must produce negative per-cycle delta for this test to distinguish old from new code"
 
-      assert energy_after_new < energy_after_old,
-             "New defended branch should cost more (no pre-credit): new=#{energy_after_new} vs old=#{energy_after_old}"
+      assert per_cycle_old > 0,
+             "Config must produce positive per-cycle delta under the old bug for this test to be meaningful"
 
-      # The new code leaves energy = 100 - 5 = 95 (not 100 + 5 - 5 = 100)
-      assert energy_after_new == 100.0 - penalty
+      # Victim: big energy (won't die), permanently defending.
+      # Attacker: only [:attack] opcode, runs live (not paused) with enough
+      # initial energy for many cycles before dying.
+      # Spawn victim first and set defending state before launching the attacker,
+      # so every attack the attacker fires sees the victim as defending.
+      victim_pid = spawn_lenie("VIC_SYNC", {21, 24}, 10_000.0, dir: :w)
+
+      victim_before = Lenie.inspect_state(victim_pid).energy
+
+      # Set victim as permanently defending (must happen before attacker spawns).
+      [{"VIC_SYNC", record}] = :ets.lookup(:lenies, "VIC_SYNC")
+      :ets.insert(:lenies, {"VIC_SYNC", Map.put(record, :defending_until, 999_999)})
+
+      attacker_pid = spawn_lenie("ATK_SYNC", {20, 24}, 500.0, dir: :e, paused?: false, codeome: [:attack])
+
+      attacker_before = Lenie.inspect_state(attacker_pid).energy
+
+      # Wait until at least 5 defended attacks have landed on the victim
+      # (victim lost >= 5 * half_damage). This is deterministic: we poll
+      # victim energy rather than sleeping blindly.
+      min_cycles = 5
+      min_victim_loss = min_cycles * half_damage
+
+      deadline = System.monotonic_time(:millisecond) + 2_000
+
+      Stream.repeatedly(fn ->
+        Process.sleep(10)
+        Lenie.inspect_state(victim_pid).energy
+      end)
+      |> Enum.reduce_while(:waiting, fn victim_energy, _ ->
+        if victim_before - victim_energy >= min_victim_loss do
+          {:halt, :done}
+        else
+          if System.monotonic_time(:millisecond) >= deadline do
+            flunk("Victim did not absorb #{min_cycles} attacks within deadline")
+          else
+            {:cont, :waiting}
+          end
+        end
+      end)
+
+      attacker_after = Lenie.inspect_state(attacker_pid).energy
+
+      # With new code the attacker must have LOST energy overall.
+      # With the old bug it would have GAINED energy (per_cycle_old > 0).
+      assert attacker_after < attacker_before,
+             "Attacker should have lost energy over many defended cycles " <>
+               "(per_cycle_delta=#{per_cycle_new}): " <>
+               "before=#{attacker_before}, after=#{attacker_after}"
+
+      GenServer.stop(attacker_pid)
+      GenServer.stop(victim_pid)
     end
   end
 
@@ -252,6 +334,8 @@ defmodule Lenies.AttackEnergyConservationTest do
       _fake_attacker =
         spawn(fn ->
           {:ok, _} = Lenies.Registry.register(attacker_id)
+          # Signal the test that registration is complete so there is no race.
+          send(test_pid, {:registered, attacker_id})
 
           receive do
             {:attack_reward, actual} -> send(test_pid, {:proxied_reward, actual})
@@ -260,8 +344,8 @@ defmodule Lenies.AttackEnergyConservationTest do
           end
         end)
 
-      # Give fake attacker time to register
-      Process.sleep(20)
+      # Wait for the fake attacker to be registered before triggering damage.
+      assert_receive {:registered, ^attacker_id}, 1_000
 
       # Send take_damage with amount > victim's energy
       send(victim_pid, {:take_damage, 100, attacker_id})
@@ -307,6 +391,8 @@ defmodule Lenies.AttackEnergyConservationTest do
       _fake_attacker =
         spawn(fn ->
           {:ok, _} = Lenies.Registry.register(attacker_id)
+          # Signal the test that registration is complete so there is no race.
+          send(test_pid, {:registered, attacker_id})
 
           receive do
             {:attack_reward, actual} -> send(test_pid, {:proxied_reward, actual})
@@ -315,8 +401,8 @@ defmodule Lenies.AttackEnergyConservationTest do
           end
         end)
 
-      # Give fake attacker time to register
-      Process.sleep(20)
+      # Wait for the fake attacker to be registered before triggering damage.
+      assert_receive {:registered, ^attacker_id}, 1_000
 
       send(victim_pid, {:take_damage, damage, attacker_id})
 

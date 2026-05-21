@@ -259,6 +259,10 @@ defmodule Lenies.Lenie do
     # never reward the attacker more than the victim actually had.
     actual = min(amount, max(state.interp.energy, 0))
 
+    # new_energy uses the full unclamped amount (not `actual`) intentionally:
+    # this drives energy below zero when the hit exceeds what the victim has,
+    # triggering the lethality check below. The reward uses `actual` (clamped)
+    # so the attacker only gains what the victim truly possessed.
     new_energy = state.interp.energy - amount
     new_interp = %{state.interp | energy: new_energy}
     new_state = %{state | interp: new_interp}
