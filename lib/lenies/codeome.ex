@@ -39,8 +39,14 @@ defmodule Lenies.Codeome do
   def to_list(%__MODULE__{opcodes: ops}), do: Tuple.to_list(ops)
 
   @doc """
-  Structural hash of the Codeome (64-bit xxhash). Same input → same hash.
+  Structural hash of the Codeome, as a hex string. Same input → same hash.
   Used as `codeome_hash` for species clustering.
+
+  Implemented with `:erlang.phash2/2` over the 0..2^32 range (a 32-bit hash,
+  not 64-bit). `phash2` is not guaranteed stable across Erlang/OTP major
+  versions, so persisted snapshots from a different OTP major may cluster
+  differently — fine for live clustering, but don't treat the value as a
+  durable cross-version identifier.
   """
   @spec hash(t()) :: binary()
   def hash(%__MODULE__{opcodes: ops}) do

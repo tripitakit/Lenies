@@ -8,8 +8,32 @@ defmodule Lenies.Snippets.Store do
   in an `Agent`. Mirrors `Lenies.Seeds.CustomStore`.
 
   A snippet is `%{id, name, opcodes}`. `id` is the caller-supplied slug;
-  `save/1` upserts by `id`. Snippets are fragments — no length validation.
+  `save/1` upserts by `id`. Snippets are fragments — `opcodes` is subject to
+  a generous cap of `@max_snippet_opcodes` (1000) for DoS hardening.
   `id` is required; `all/0` returns most-recently-saved first.
+
+  ## File format (MH4 versioned envelope)
+
+  The JSON file is written in a versioned envelope format:
+
+      {"version": 1, "items": [...]}
+
+  **Backward compatibility**: old bare-array files (`[{...}, ...]`) are still
+  read correctly and upgraded to the envelope format on the next write. This
+  means existing `priv/user_snippets.json` files from before this change load
+  with zero data loss.
+
+  **Unknown future versions**: if the file carries a `version` number greater
+  than `@schema_version`, the store logs a warning and starts fresh. This
+  prevents an old build from silently mangling a file written by a newer build
+  that uses a different schema.
+
+  ## Payload-size cap (MH1 DoS hardening)
+
+  During load, rows whose `opcodes` list exceeds `@max_snippet_opcodes` (1000)
+  are dropped before the expensive `String.to_existing_atom/1` conversion.
+  This prevents a hand-crafted multi-million-element array from blocking the
+  supervisor start.
 
   ## Concurrency and atomicity
 
@@ -26,6 +50,16 @@ defmodule Lenies.Snippets.Store do
   """
 
   use Agent, restart: :transient
+
+  # Schema version written to disk. Bump when the JSON shape changes in a
+  # backward-incompatible way. Files with an unknown (higher) version are
+  # refused and the store starts fresh rather than silently mangling foreign data.
+  @schema_version 1
+
+  # Generous cap for snippet opcodes fragments (DoS hardening, MH1).
+  # Snippets are editor fragments, not full codeomes, but we still cap at
+  # the same value as the codeome upper bound for consistency.
+  @max_snippet_opcodes 1000
 
   @type snippet :: %{id: String.t(), name: String.t(), opcodes: [atom()]}
 
@@ -83,7 +117,10 @@ defmodule Lenies.Snippets.Store do
   defp validate_name(%{name: name, id: id}) when is_binary(name) and is_binary(id) do
     cond do
       String.trim(name) == "" -> {:error, :invalid_name}
+      # Defensive: slugs are always non-empty, but this function is public and
+      # could be called directly with an arbitrary map.
       id == "" -> {:error, :invalid_name}
+      not String.match?(name, ~r/[a-zA-Z0-9]/) -> {:error, :invalid_name}
       true -> :ok
     end
   end
@@ -129,7 +166,24 @@ defmodule Lenies.Snippets.Store do
   end
 
   defp parse_contents(contents, path) do
+    require Logger
+
     case Jason.decode(contents) do
+      # New versioned envelope: {"version": N, "items": [...]}
+      {:ok, %{"version" => v, "items" => list}} when is_list(list) and v == @schema_version ->
+        list |> Enum.map(&decode_snippet/1) |> Enum.filter(& &1)
+
+      # Unknown/future version: refuse to decode to avoid silent data mangling.
+      {:ok, %{"version" => v, "items" => _}} ->
+        Logger.warning(
+          "Lenies.Snippets.Store: unknown schema version #{inspect(v)} " <>
+            "(this build supports v#{@schema_version}); starting fresh"
+        )
+
+        []
+
+      # Old bare-array format: backward-compatible load with zero data loss.
+      # The next write will upgrade the file to the envelope format.
       {:ok, list} when is_list(list) ->
         list |> Enum.map(&decode_snippet/1) |> Enum.filter(& &1)
 
@@ -141,18 +195,42 @@ defmodule Lenies.Snippets.Store do
   end
 
   defp decode_snippet(%{} = m) do
-    try do
-      ops = Enum.map(m["opcodes"] || [], &String.to_existing_atom/1)
-      %{id: m["id"], name: m["name"], opcodes: ops}
-    rescue
-      ArgumentError ->
-        require Logger
+    require Logger
 
+    # MH1: Early payload-size guard — reject non-list opcodes and lists that
+    # exceed @max_snippet_opcodes BEFORE calling String.to_existing_atom/1.
+    # This prevents a hand-crafted multi-million-element array from blocking
+    # the supervisor start during Agent init.
+    raw_opcodes = m["opcodes"]
+
+    cond do
+      not is_list(raw_opcodes) ->
         Logger.warning(
-          "Lenies.Snippets.Store: dropping snippet #{inspect(m["id"])} — unknown opcode(s)"
+          "Lenies.Snippets.Store: dropping snippet #{inspect(m["id"])} — opcodes is not a list"
         )
 
         nil
+
+      length(raw_opcodes) > @max_snippet_opcodes ->
+        Logger.warning(
+          "Lenies.Snippets.Store: dropping snippet #{inspect(m["id"])} — " <>
+            "opcodes length #{length(raw_opcodes)} exceeds cap #{@max_snippet_opcodes}"
+        )
+
+        nil
+
+      true ->
+        try do
+          ops = Enum.map(raw_opcodes, &String.to_existing_atom/1)
+          %{id: m["id"], name: m["name"], opcodes: ops}
+        rescue
+          ArgumentError ->
+            Logger.warning(
+              "Lenies.Snippets.Store: dropping snippet #{inspect(m["id"])} — unknown opcode(s)"
+            )
+
+            nil
+        end
     end
   end
 
@@ -162,12 +240,14 @@ defmodule Lenies.Snippets.Store do
     path = file_path()
     File.mkdir_p!(Path.dirname(path))
 
-    json =
-      snips
-      |> Enum.map(fn s ->
+    # MH4: Write the versioned envelope. Old bare-array files are upgraded to
+    # this format on the next write after being loaded by parse_contents/2.
+    items =
+      Enum.map(snips, fn s ->
         %{"id" => s.id, "name" => s.name, "opcodes" => Enum.map(s.opcodes, &Atom.to_string/1)}
       end)
-      |> Jason.encode!(pretty: true)
+
+    json = Jason.encode!(%{"version" => @schema_version, "items" => items}, pretty: true)
 
     # Unique suffix avoids any cross-process or cross-store tmp collision
     # and prevents stale-tmp reuse even if two OS processes share the dir.

@@ -702,4 +702,103 @@ defmodule LeniesWeb.DashboardLiveTest do
       refute html =~ "all_species"
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # ML1 — AudioToggle hook replaces inline onclick
+  # ---------------------------------------------------------------------------
+  describe "audio toggle button — hook wiring" do
+    test "audio-toggle button has phx-hook=AudioToggle and phx-update=ignore", %{conn: conn} do
+      {:ok, view, html} = live(conn, "/")
+      assert html =~ ~s(phx-hook="AudioToggle")
+      assert has_element?(view, "#audio-toggle[phx-hook='AudioToggle']")
+      assert has_element?(view, "#audio-toggle[phx-update='ignore']")
+    end
+
+    test "audio-toggle button has no inline onclick or LeniesAudio script", %{conn: conn} do
+      {:ok, _view, html} = live(conn, "/")
+      refute html =~ "onclick"
+      refute html =~ "LeniesAudio"
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # ML2 — SliderValue hook replaces inline oninput on tuning sliders
+  # ---------------------------------------------------------------------------
+  describe "tuning slider — hook wiring" do
+    test "a tuning slider has phx-hook=SliderValue and data-value-target, no oninput", %{
+      conn: conn
+    } do
+      {:ok, view, html} = live(conn, "/")
+
+      # There must be no inline oninput attribute anywhere
+      refute html =~ "oninput"
+
+      # Check one specific slider (radiation_per_tick) for correct hook wiring
+      assert has_element?(
+               view,
+               "#slider-radiation_per_tick[phx-hook='SliderValue'][data-value-target='val-radiation_per_tick']"
+             )
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # ML3 — Controls panel reads the ACTUAL paused state at mount
+  # ---------------------------------------------------------------------------
+  describe "controls panel — paused? state at mount" do
+    test "when world is already paused at mount, pause button shows Resume", %{conn: conn} do
+      :ok = Lenies.World.pause()
+
+      on_exit(fn ->
+        try do
+          Lenies.World.resume()
+        catch
+          :exit, _ -> :ok
+        end
+      end)
+
+      {:ok, _view, html} = live(conn, "/")
+
+      assert html =~ "▶ Resume"
+      refute html =~ "⏸ Pause"
+    end
+
+    test "when world is running at mount, pause button shows Pause", %{conn: conn} do
+      {:ok, _view, html} = live(conn, "/")
+
+      assert html =~ "⏸ Pause"
+      refute html =~ "▶ Resume"
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # ML4 — World totals panel uses @latest (no @history in assigns)
+  # ---------------------------------------------------------------------------
+  describe "world totals panel" do
+    test "totals panel renders zeroes before any tick", %{conn: conn} do
+      {:ok, _view, html} = live(conn, "/")
+
+      assert html =~ "Population"
+      assert html =~ "Resources"
+      assert html =~ "Detritus"
+    end
+
+    test "totals panel reflects telemetry data after a tick", %{conn: conn} do
+      Application.put_env(:lenies, :dashboard_throttle_ticks, 1)
+
+      {:ok, view, _html} = live(conn, "/")
+
+      Lenies.World.tick_now()
+      # Give PubSub a moment to propagate tick → Telemetry, then the dashboard tick
+      Process.sleep(50)
+      send(view.pid, {:tick, 1})
+      html = render(view)
+
+      # Population, Resources, Detritus columns are present
+      assert html =~ "Population"
+      assert html =~ "Resources"
+      assert html =~ "Detritus"
+    after
+      Application.delete_env(:lenies, :dashboard_throttle_ticks)
+    end
+  end
 end

@@ -469,14 +469,7 @@ defmodule Lenies.Lenie do
   end
 
   defp front_cell({x, y}, dir) do
-    {w, h} = Lenies.Config.grid_size()
-
-    case dir do
-      :n -> {x, Integer.mod(y - 1, h)}
-      :s -> {x, Integer.mod(y + 1, h)}
-      :e -> {Integer.mod(x + 1, w), y}
-      :w -> {Integer.mod(x - 1, w), y}
-    end
+    Lenies.World.Geometry.step({x, y}, dir, Lenies.Config.grid_size())
   end
 
   # Read the seed_origin of a Lenie from the :lenies ETS snapshot. Lenies

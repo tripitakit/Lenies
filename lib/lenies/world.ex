@@ -883,23 +883,14 @@ defmodule Lenies.World do
   end
 
   defp consume_eat(cell, eat_amount) do
-    # Consume carcass first with 1.5x efficiency.
-    # remaining_quota is in raw food units; if carcass_energy already covers it
-    # (thanks to the 1.5x bonus), skip the resource phase entirely.
+    # Carcass is consumed first (preferentially), then resource fills any remaining quota.
+    # Both sources yield energy 1:1 — no bonus multiplier — so energy gained always equals
+    # units consumed. This preserves the simulation's energy-conservation invariant:
+    # energy enters only via radiation and leaves only via starvation.
     carcass_taken = min(cell.carcass, eat_amount)
-    carcass_energy = trunc(carcass_taken * 1.5)
     remaining_quota = eat_amount - carcass_taken
-
-    # Only draw on biomass when carcass energy falls short of the remaining quota
-    {resource_taken, resource_energy} =
-      if carcass_energy >= remaining_quota do
-        {0, 0}
-      else
-        taken = min(cell.resource, remaining_quota)
-        {taken, taken}
-      end
-
-    total_energy = carcass_energy + resource_energy
+    resource_taken = min(cell.resource, remaining_quota)
+    total_energy = carcass_taken + resource_taken
 
     new_carcass = cell.carcass - carcass_taken
     new_carcass_hue = if new_carcass == 0, do: 0, else: cell.carcass_hue
@@ -915,12 +906,7 @@ defmodule Lenies.World do
   end
 
   defp front_cell({x, y}, dir, {w, h}) do
-    case dir do
-      :n -> {x, Integer.mod(y - 1, h)}
-      :e -> {Integer.mod(x + 1, w), y}
-      :s -> {x, Integer.mod(y + 1, h)}
-      :w -> {Integer.mod(x - 1, w), y}
-    end
+    Lenies.World.Geometry.step({x, y}, dir, {w, h})
   end
 
   defp current_copy_rates do
@@ -944,7 +930,7 @@ defmodule Lenies.World do
   defp apply_copy_outcome(slot_id, child_addr, opcode, :insert) do
     # Insert a random opcode AT child_addr, shifting subsequent positions
     {:ok, slot} = ChildSlots.get(slot_id)
-    new_opcodes = insert_at(slot.opcodes, child_addr, Mutator.random_opcode(), slot.size)
+    new_opcodes = Mutator.insert_at(slot.opcodes, child_addr, Mutator.random_opcode(), slot.size)
     :ets.insert(:child_slots, {slot_id, %{slot | opcodes: new_opcodes}})
     # Then write the requested opcode at the next position (the original target shifted by 1)
     ChildSlots.set_opcode(slot_id, child_addr + 1, opcode)
@@ -956,18 +942,6 @@ defmodule Lenies.World do
     # whatever they were (initialized to :nop_0). This effectively shortens
     # the executed program by 1.
     :ok
-  end
-
-  # Insert `op` at position `idx` in the tuple, shifting elements rightward.
-  # Last element is dropped to keep tuple size constant.
-  defp insert_at(opcodes_tuple, idx, op, size) do
-    idx = Integer.mod(idx, size)
-
-    list = Tuple.to_list(opcodes_tuple)
-    {head, tail} = Enum.split(list, idx)
-    # Drop the last element of tail to keep size constant
-    new_tail = [op | tail] |> Enum.take(length(tail))
-    (head ++ new_tail) |> List.to_tuple()
   end
 
   defp mutate_plasmids(plasmids) when is_list(plasmids) do

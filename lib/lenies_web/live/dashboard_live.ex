@@ -51,7 +51,7 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:tick_count, 0)
       |> assign(:layers_visible, %{lenies: true, resource: true, carcass: true})
       |> assign(:throttle_counter, 0)
-      |> assign(:history, [])
+      |> assign(:latest, nil)
       |> assign(:species, species)
       |> assign(:species_total, species_total)
       |> assign(:all_species, all_species)
@@ -137,10 +137,10 @@ defmodule LeniesWeb.DashboardLive do
           </span>
           <button
             id="audio-toggle"
+            phx-hook="AudioToggle"
             phx-update="ignore"
             type="button"
             title="Toggle audio feedback"
-            onclick="(function(b){var m=window.LeniesAudio&&window.LeniesAudio.isMuted();if(m){window.LeniesAudio.unmute();b.textContent='♪ AUDIO';b.dataset.muted='';}else{window.LeniesAudio&&window.LeniesAudio.mute();b.textContent='∅ MUTE';b.dataset.muted='1';}})(this)"
             class="text-[10px] px-2 py-1 border border-cyan-500/40 hover:border-cyan-300 hover:text-cyan-200"
           >
             ♪ AUDIO
@@ -220,9 +220,7 @@ defmodule LeniesWeb.DashboardLive do
             <div class="flex-1 grid grid-rows-[auto_minmax(0,1fr)] gap-3 min-h-0 min-w-0">
               <div class="panel p-3 flex flex-col gap-2 min-h-0">
                 <h2 class="text-xs">▮ World totals</h2>
-                <% latest =
-                  List.last(@history) ||
-                    %{population: 0, total_resource: 0, total_carcass: 0} %>
+                <% latest = @latest || %{population: 0, total_resource: 0, total_carcass: 0} %>
                 <div class="grid grid-cols-3 gap-2 text-[11px]">
                   <div class="border border-cyan-500/30 px-2 py-1">
                     <div class="opacity-60">Population</div>
@@ -502,7 +500,7 @@ defmodule LeniesWeb.DashboardLive do
 
       socket =
         socket
-        |> assign(:history, Lenies.Telemetry.history(:last_n, 1))
+        |> assign(:latest, List.last(Lenies.Telemetry.history(:last_n, 1)))
         |> assign(:species, species)
         |> assign(:species_total, species_total)
         |> assign(:all_species, all_species)

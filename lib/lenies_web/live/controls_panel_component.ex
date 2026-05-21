@@ -41,10 +41,17 @@ defmodule LeniesWeb.ControlsPanelComponent do
 
   @impl true
   def mount(socket) do
+    paused? =
+      try do
+        Lenies.World.paused?()
+      catch
+        :exit, _ -> false
+      end
+
     {:ok,
      socket
      |> assign(:sterilize_confirming, false)
-     |> assign(:paused?, false)
+     |> assign(:paused?, paused?)
      |> assign(:snapshot_status, nil)
      |> assign(:show_custom_manage, false)
      |> assign(:custom_seeds, custom_seeds())}
@@ -276,13 +283,15 @@ defmodule LeniesWeb.ControlsPanelComponent do
                   </span>
                 </div>
                 <input
+                  id={"slider-#{p.key}"}
                   type="range"
                   name="value"
                   min={p.min}
                   max={p.max}
                   step={p.step}
                   value={Application.get_env(:lenies, p.key, p.min)}
-                  oninput={"document.getElementById('val-" <> Atom.to_string(p.key) <> "').textContent = this.value"}
+                  phx-hook="SliderValue"
+                  data-value-target={"val-#{Atom.to_string(p.key)}"}
                   phx-debounce="100"
                 />
                 <input type="hidden" name="key" value={Atom.to_string(p.key)} />

@@ -68,8 +68,7 @@ defmodule Lenies.Manual do
 
     cond do
       File.dir?(priv) -> priv
-      File.dir?("docs/manual") -> Path.expand("docs/manual")
-      true -> priv
+      true -> Path.expand(Path.join(__DIR__, "../../docs/manual"))
     end
   end
 
@@ -91,7 +90,7 @@ defmodule Lenies.Manual do
     |> List.first()
     |> case do
       "# " <> rest -> String.trim(rest)
-      _ -> Path.basename("(untitled)", ".md")
+      _ -> "(untitled)"
     end
   end
 end

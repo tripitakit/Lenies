@@ -124,6 +124,15 @@ defmodule Lenies.Seeds.CustomStoreTest do
       assert {:error, :invalid_name} = CustomStore.save(seed)
     end
 
+    test "rejects an all-symbol name (no alphanumeric content)" do
+      seed = valid_seed(%{id: "x", name: "###"})
+      assert {:error, :invalid_name} = CustomStore.save(seed)
+    end
+
+    test "accepts a name with alphanumeric content" do
+      assert :ok = CustomStore.save(valid_seed(%{id: "my-seed-2", name: "My Custom Seed"}))
+    end
+
     test "rejects a malformed color_hex" do
       assert {:error, :invalid_color} = CustomStore.save(valid_seed(%{color_hex: "red"}))
     end
@@ -227,6 +236,184 @@ defmodule Lenies.Seeds.CustomStoreTest do
   describe "save/1 empty-opcodes guard" do
     test "save with opcodes: [] returns {:error, :invalid_opcodes}" do
       assert {:error, :invalid_opcodes} = CustomStore.save(valid_seed(%{opcodes: []}))
+    end
+  end
+
+  # ---------------------------------------------------------------
+  # MH4 — Versioned envelope tests
+  # ---------------------------------------------------------------
+
+  describe "MH4 versioned envelope (write)" do
+    test "save writes the new envelope shape to disk", %{tmp_path: tmp_path} do
+      :ok = CustomStore.save(valid_seed())
+      {:ok, raw} = File.read(tmp_path)
+      decoded = Jason.decode!(raw)
+      assert %{"version" => 1, "items" => items} = decoded
+      assert is_list(items)
+      assert length(items) == 1
+      assert hd(items)["id"] == "my-seed"
+    end
+  end
+
+  describe "MH4 backward-compat read (old bare-array format)" do
+    test "bare-array file loads without data loss", %{tmp_path: tmp_path} do
+      # Write old bare-array format by hand
+      File.write!(tmp_path, Jason.encode!([valid_json_row()]))
+      Agent.stop(CustomStore)
+      {:ok, _} = CustomStore.start_link([])
+
+      assert %{id: "json-seed", name: "JSON Seed"} = CustomStore.get("json-seed")
+    end
+
+    test "after a save following bare-array load, file is upgraded to envelope", %{
+      tmp_path: tmp_path
+    } do
+      # Write old bare-array format
+      File.write!(tmp_path, Jason.encode!([valid_json_row()]))
+      Agent.stop(CustomStore)
+      {:ok, _} = CustomStore.start_link([])
+
+      # Now trigger a write via delete (or save a new one)
+      :ok = CustomStore.save(valid_seed(%{id: "extra", name: "Extra Seed"}))
+
+      # File should now be in envelope format
+      {:ok, raw} = File.read(tmp_path)
+      decoded = Jason.decode!(raw)
+      assert %{"version" => 1, "items" => _} = decoded
+    end
+  end
+
+  describe "MH4 unknown future version" do
+    test "v999 envelope logs a warning and starts fresh (no items loaded)", %{
+      tmp_path: tmp_path
+    } do
+      # A file from a hypothetical future build with schema version 999
+      future_file = %{
+        "version" => 999,
+        "items" => [valid_json_row()]
+      }
+
+      File.write!(tmp_path, Jason.encode!(future_file))
+      Agent.stop(CustomStore)
+
+      # Should not crash; chosen behavior: start fresh and log a warning
+      {:ok, _} = CustomStore.start_link([])
+      assert CustomStore.all() == []
+      # An unknown-version file is NOT renamed to .bak — that's reserved for
+      # corrupt JSON. This refute distinguishes the two branches.
+      refute File.exists?(tmp_path <> ".bak")
+    end
+  end
+
+  # ---------------------------------------------------------------
+  # MH1 — Payload-size cap tests
+  # ---------------------------------------------------------------
+
+  describe "MH1 payload-size cap (opcodes length)" do
+    # The cap for CustomStore is 1000 (codeome_length_bounds max).
+    # We use cap+1 entries to exercise the boundary cheaply.
+    @cap 1000
+
+    test "cap follows runtime config (Application.put_env)", %{tmp_path: tmp_path} do
+      # Temporarily lower the cap to 3 via Application env.
+      original_bounds = Application.get_env(:lenies, :codeome_length_bounds)
+
+      on_exit(fn ->
+        if original_bounds do
+          Application.put_env(:lenies, :codeome_length_bounds, original_bounds)
+        else
+          Application.delete_env(:lenies, :codeome_length_bounds)
+        end
+      end)
+
+      Application.put_env(:lenies, :codeome_length_bounds, {5, 3})
+
+      # Row with 4 opcodes: exceeds the new cap of 3 → must be DROPPED.
+      over_cap_row =
+        valid_json_row(%{
+          "id" => "over-cap",
+          "opcodes" => List.duplicate("nop_1", 4)
+        })
+
+      # Row with 2 opcodes: within the new cap → must LOAD.
+      under_cap_row =
+        valid_json_row(%{
+          "id" => "under-cap",
+          "opcodes" => ["nop_1", "push0"]
+        })
+
+      File.write!(tmp_path, Jason.encode!([over_cap_row, under_cap_row]))
+      Agent.stop(CustomStore)
+      {:ok, _} = CustomStore.start_link([])
+
+      assert CustomStore.get("over-cap") == nil,
+             "4-opcode row should be dropped with cap=3 (runtime config)"
+
+      assert %{id: "under-cap"} = CustomStore.get("under-cap"),
+             "2-opcode row should load with cap=3 (runtime config)"
+    end
+
+    test "row with opcodes length > cap is DROPPED on load", %{tmp_path: tmp_path} do
+      oversized_row =
+        valid_json_row(%{
+          "id" => "oversized",
+          "opcodes" => List.duplicate("nop_1", @cap + 1)
+        })
+
+      normal_row = valid_json_row(%{"id" => "normal"})
+
+      File.write!(tmp_path, Jason.encode!([oversized_row, normal_row]))
+      Agent.stop(CustomStore)
+      {:ok, _} = CustomStore.start_link([])
+
+      assert CustomStore.get("oversized") == nil,
+             "oversized row should have been dropped"
+
+      assert %{id: "normal"} = CustomStore.get("normal"),
+             "normal sibling should still load"
+    end
+
+    test "row with opcodes length == cap is ACCEPTED", %{tmp_path: tmp_path} do
+      at_cap_row =
+        valid_json_row(%{
+          "id" => "at-cap",
+          "opcodes" => List.duplicate("nop_1", @cap)
+        })
+
+      File.write!(tmp_path, Jason.encode!([at_cap_row]))
+      Agent.stop(CustomStore)
+      {:ok, _} = CustomStore.start_link([])
+
+      assert %{id: "at-cap"} = CustomStore.get("at-cap"),
+             "row at exactly the cap should load"
+    end
+
+    test "row with non-list opcodes field is DROPPED", %{tmp_path: tmp_path} do
+      bad_row = valid_json_row(%{"id" => "non-list", "opcodes" => "not_a_list"})
+
+      File.write!(tmp_path, Jason.encode!([bad_row]))
+      Agent.stop(CustomStore)
+      {:ok, _} = CustomStore.start_link([])
+
+      assert CustomStore.get("non-list") == nil
+    end
+
+    test "cap check works with envelope format too", %{tmp_path: tmp_path} do
+      oversized_row =
+        valid_json_row(%{
+          "id" => "oversized-env",
+          "opcodes" => List.duplicate("nop_1", @cap + 1)
+        })
+
+      normal_row = valid_json_row(%{"id" => "normal-env"})
+
+      envelope = %{"version" => 1, "items" => [oversized_row, normal_row]}
+      File.write!(tmp_path, Jason.encode!(envelope))
+      Agent.stop(CustomStore)
+      {:ok, _} = CustomStore.start_link([])
+
+      assert CustomStore.get("oversized-env") == nil
+      assert %{id: "normal-env"} = CustomStore.get("normal-env")
     end
   end
 

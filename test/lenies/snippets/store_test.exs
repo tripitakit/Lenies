@@ -62,6 +62,14 @@ defmodule Lenies.Snippets.StoreTest do
     assert {:error, :invalid_name} = Store.save(snippet(%{name: "  ", id: "x"}))
   end
 
+  test "rejects an all-symbol name (no alphanumeric content)" do
+    assert {:error, :invalid_name} = Store.save(snippet(%{name: "###", id: "x"}))
+  end
+
+  test "accepts a name with alphanumeric content" do
+    assert :ok = Store.save(snippet(%{name: "My Loop", id: "my-loop"}))
+  end
+
   test "rejects unknown opcodes" do
     assert {:error, :invalid_opcodes} = Store.save(snippet(%{opcodes: [:not_a_real_op]}))
   end
@@ -111,6 +119,141 @@ defmodule Lenies.Snippets.StoreTest do
     {:ok, _} = Store.start_link([])
     ids = Store.all() |> Enum.map(& &1.id)
     assert ids == ["good"]
+  end
+
+  # ---------------------------------------------------------------
+  # MH4 — Versioned envelope tests
+  # ---------------------------------------------------------------
+
+  describe "MH4 versioned envelope (write)" do
+    test "save writes the new envelope shape to disk", %{tmp_path: tmp_path} do
+      :ok = Store.save(snippet())
+      {:ok, raw} = File.read(tmp_path)
+      decoded = Jason.decode!(raw)
+      assert %{"version" => 1, "items" => items} = decoded
+      assert is_list(items)
+      assert length(items) == 1
+      assert hd(items)["id"] == "loop"
+    end
+  end
+
+  describe "MH4 backward-compat read (old bare-array format)" do
+    test "bare-array file loads without data loss", %{tmp_path: tmp_path} do
+      Agent.stop(Store)
+      File.write!(
+        tmp_path,
+        Jason.encode!([%{"id" => "loop", "name" => "Loop", "opcodes" => ["nop_0", "eat"]}])
+      )
+
+      {:ok, _} = Store.start_link([])
+      assert %{id: "loop", name: "Loop", opcodes: [:nop_0, :eat]} = Store.get("loop")
+    end
+
+    test "after a save following bare-array load, file is upgraded to envelope", %{
+      tmp_path: tmp_path
+    } do
+      Agent.stop(Store)
+      File.write!(
+        tmp_path,
+        Jason.encode!([%{"id" => "loop", "name" => "Loop", "opcodes" => ["nop_0"]}])
+      )
+
+      {:ok, _} = Store.start_link([])
+      :ok = Store.save(snippet(%{id: "extra", name: "Extra"}))
+
+      {:ok, raw} = File.read(tmp_path)
+      decoded = Jason.decode!(raw)
+      assert %{"version" => 1, "items" => _} = decoded
+    end
+  end
+
+  describe "MH4 unknown future version" do
+    test "v999 envelope logs a warning and starts fresh (no items loaded)", %{
+      tmp_path: tmp_path
+    } do
+      future_file = %{
+        "version" => 999,
+        "items" => [%{"id" => "loop", "name" => "Loop", "opcodes" => ["nop_0"]}]
+      }
+
+      Agent.stop(Store)
+      File.write!(tmp_path, Jason.encode!(future_file))
+      {:ok, _} = Store.start_link([])
+
+      assert Store.all() == []
+      # An unknown-version file is NOT renamed to .bak — that's reserved for
+      # corrupt JSON. This refute distinguishes the two branches.
+      refute File.exists?(tmp_path <> ".bak")
+    end
+  end
+
+  # ---------------------------------------------------------------
+  # MH1 — Payload-size cap tests
+  # ---------------------------------------------------------------
+
+  describe "MH1 payload-size cap (opcodes length)" do
+    # The cap for Snippets.Store is @max_snippet_opcodes = 1000.
+    @cap 1000
+
+    test "row with opcodes length > cap is DROPPED on load", %{tmp_path: tmp_path} do
+      oversized =
+        %{
+          "id" => "oversized",
+          "name" => "Oversized",
+          "opcodes" => List.duplicate("nop_0", @cap + 1)
+        }
+
+      normal = %{"id" => "normal", "name" => "Normal", "opcodes" => ["nop_0", "eat"]}
+
+      Agent.stop(Store)
+      File.write!(tmp_path, Jason.encode!([oversized, normal]))
+      {:ok, _} = Store.start_link([])
+
+      assert Store.get("oversized") == nil, "oversized row should be dropped"
+      assert %{id: "normal"} = Store.get("normal"), "normal sibling should load"
+    end
+
+    test "row with opcodes length == cap is ACCEPTED", %{tmp_path: tmp_path} do
+      at_cap = %{
+        "id" => "at-cap",
+        "name" => "At Cap",
+        "opcodes" => List.duplicate("nop_0", @cap)
+      }
+
+      Agent.stop(Store)
+      File.write!(tmp_path, Jason.encode!([at_cap]))
+      {:ok, _} = Store.start_link([])
+
+      assert %{id: "at-cap"} = Store.get("at-cap")
+    end
+
+    test "row with non-list opcodes field is DROPPED", %{tmp_path: tmp_path} do
+      bad = %{"id" => "bad", "name" => "Bad", "opcodes" => "not_a_list"}
+
+      Agent.stop(Store)
+      File.write!(tmp_path, Jason.encode!([bad]))
+      {:ok, _} = Store.start_link([])
+
+      assert Store.get("bad") == nil
+    end
+
+    test "cap check works with envelope format too", %{tmp_path: tmp_path} do
+      oversized = %{
+        "id" => "oversized-env",
+        "name" => "Oversized Env",
+        "opcodes" => List.duplicate("nop_0", @cap + 1)
+      }
+
+      normal = %{"id" => "normal-env", "name" => "Normal Env", "opcodes" => ["nop_0"]}
+
+      envelope = %{"version" => 1, "items" => [oversized, normal]}
+      Agent.stop(Store)
+      File.write!(tmp_path, Jason.encode!(envelope))
+      {:ok, _} = Store.start_link([])
+
+      assert Store.get("oversized-env") == nil
+      assert %{id: "normal-env"} = Store.get("normal-env")
+    end
   end
 
   describe "concurrency safety (I10)" do

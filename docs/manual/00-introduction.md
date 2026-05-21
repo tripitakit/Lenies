@@ -91,8 +91,9 @@ Each cell holds at most one of the following:
   from radiation (see below) and are depleted by `:eat`.
 - **Detritus.** The remains of a Lenie that has died. Detritus contains
   energy — roughly half of what the dead Lenie had left — and can also be
-  eaten. Detritus is slightly more nutritious per unit than raw resource.
-  Over time detritus decays and disappears.
+  eaten. Detritus yields energy 1:1 per unit consumed, the same as raw
+  resource; no bonus multiplier applies, so the total energy in the world is
+  conserved. Over time detritus decays and disappears.
 - **A Lenie.** A living organism occupying the cell.
 
 A cell can hold resource *and* detritus simultaneously, but only one Lenie
