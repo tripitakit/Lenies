@@ -53,7 +53,7 @@ defmodule Lenies.ConjugationTest do
     :ok
   end
 
-  test "receive_plasmid appends to codeome and replaces plasmid buffer" do
+  test "receive_plasmid appends to codeome and adds to the plasmid list" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
     [{key, cell}] = :ets.lookup(:cells, {128, 128})
@@ -268,5 +268,115 @@ defmodule Lenies.ConjugationTest do
     assert length(new_ops) == 30
     diff = Enum.zip(original_ops, new_ops) |> Enum.count(fn {a, b} -> a != b end)
     assert diff > 0, "expected at least one opcode to differ after 50 background mutations; got diff=#{diff}"
+  end
+
+  test "receive_plasmid accumulates distinct plasmids (multi-plasmid carry)" do
+    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+
+    [{key, cell}] = :ets.lookup(:cells, {128, 128})
+    :ets.insert(:cells, {key, %{cell | lenie_id: "RX"}})
+
+    {:ok, pid} =
+      Lenie.start_link(
+        id: "RX",
+        codeome: Codeome.from_list([:eat, :move, :turn_left]),
+        energy: 5_000.0,
+        pos: {128, 128},
+        dir: :n,
+        lineage: {nil, 0}
+      )
+
+    Process.unlink(pid)
+
+    assert Lenie.receive_plasmid(pid, [:turn_right, :defend]) == :ok
+    assert Lenie.receive_plasmid(pid, [:move, :eat]) == :ok
+
+    snap = :sys.get_state(pid)
+
+    assert [
+             %Plasmid{opcodes: [:turn_right, :defend]},
+             %Plasmid{opcodes: [:move, :eat]}
+           ] = snap.plasmids
+
+    assert Codeome.to_list(snap.codeome) ==
+             [:eat, :move, :turn_left, :turn_right, :defend, :move, :eat]
+  end
+
+  test "receive_plasmid is a no-op for an already-carried plasmid (:already_present)" do
+    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+
+    [{key, cell}] = :ets.lookup(:cells, {128, 128})
+    :ets.insert(:cells, {key, %{cell | lenie_id: "RX"}})
+
+    {:ok, pid} =
+      Lenie.start_link(
+        id: "RX",
+        codeome: Codeome.from_list([:eat, :move, :turn_left]),
+        energy: 5_000.0,
+        pos: {128, 128},
+        dir: :n,
+        lineage: {nil, 0}
+      )
+
+    Process.unlink(pid)
+
+    assert Lenie.receive_plasmid(pid, [:defend, :defend]) == :ok
+    size_after_first = :sys.get_state(pid).codeome |> Codeome.size()
+
+    # Second delivery of the same plasmid: no-op, no codeome growth.
+    assert Lenie.receive_plasmid(pid, [:defend, :defend]) == :already_present
+
+    snap = :sys.get_state(pid)
+    assert Codeome.size(snap.codeome) == size_after_first
+    assert [%Plasmid{opcodes: [:defend, :defend]}] = snap.plasmids
+  end
+
+  test ":conjugate transfers one of the donor's carried plasmids (random pick within the set)" do
+    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+
+    [{key1, c1}] = :ets.lookup(:cells, {128, 128})
+    :ets.insert(:cells, {key1, %{c1 | lenie_id: "TX"}})
+    [{key2, c2}] = :ets.lookup(:cells, {129, 128})
+    :ets.insert(:cells, {key2, %{c2 | lenie_id: "RX"}})
+
+    {:ok, recipient_pid} =
+      Lenie.start_link(
+        id: "RX",
+        codeome: Codeome.from_list([:eat, :move]),
+        energy: 5_000.0,
+        pos: {129, 128},
+        dir: :w,
+        lineage: {nil, 0}
+      )
+
+    {:ok, donor_pid} =
+      Lenie.start_link(
+        id: "TX",
+        codeome: Codeome.from_list([:conjugate, :nop_0]),
+        energy: 5_000.0,
+        pos: {128, 128},
+        dir: :e,
+        lineage: {nil, 0},
+        plasmids: [Plasmid.new([:turn_left, :defend]), Plasmid.new([:turn_right, :eat])]
+      )
+
+    Process.unlink(donor_pid)
+    Process.unlink(recipient_pid)
+
+    Process.sleep(400)
+
+    recipient_snap = :sys.get_state(recipient_pid)
+
+    # The recipient acquired at least one plasmid, and every acquired plasmid
+    # is a member of the donor's set (proves :conjugate sends a real element,
+    # not garbage; over ticks it may accumulate both).
+    assert recipient_snap.plasmids != []
+
+    for %Plasmid{opcodes: ops} <- recipient_snap.plasmids do
+      assert ops in [[:turn_left, :defend], [:turn_right, :eat]]
+    end
+
+    # Donor keeps its full set.
+    assert length(:sys.get_state(donor_pid).plasmids) == 2
   end
 end

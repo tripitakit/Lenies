@@ -46,11 +46,14 @@ defmodule Lenies.Lenie do
 
   @doc """
   Synchronous call invoked by another Lenie's `:conjugate` opcode. Appends
-  the plasmid opcodes to this Lenie's codeome and replaces its plasmid
-  buffer. Returns `:ok` on success, `{:error, :too_large}` if appending
-  would exceed `codeome_length_bounds`.
+  the plasmid opcodes to this Lenie's codeome and adds the plasmid to its
+  (multi-plasmid) buffer. Returns `:ok` on a real transfer,
+  `:already_present` if the Lenie already carries that exact plasmid (a
+  no-op — limits a transfer to once per plasmid per encounter), or
+  `{:error, :too_large}` if appending would exceed `codeome_length_bounds`.
   """
-  @spec receive_plasmid(pid(), [atom()], timeout()) :: :ok | {:error, :too_large}
+  @spec receive_plasmid(pid(), [atom()], timeout()) ::
+          :ok | :already_present | {:error, :too_large}
   def receive_plasmid(pid, plasmid_opcodes, timeout \\ 5_000)
       when is_pid(pid) and is_list(plasmid_opcodes) do
     GenServer.call(pid, {:receive_plasmid, plasmid_opcodes}, timeout)
@@ -157,7 +160,7 @@ defmodule Lenies.Lenie do
   @impl true
   def handle_call({:receive_plasmid, plasmid_opcodes}, _from, state) do
     already_carries =
-      match?([%Lenies.Plasmid{opcodes: ^plasmid_opcodes} | _], state.plasmids)
+      Enum.any?(state.plasmids, fn %Lenies.Plasmid{opcodes: ops} -> ops == plasmid_opcodes end)
 
     current_size = Lenies.Codeome.size(state.codeome)
     new_size = current_size + length(plasmid_opcodes)
@@ -165,8 +168,10 @@ defmodule Lenies.Lenie do
 
     cond do
       already_carries ->
-        # Already infected with this exact plasmid — no-op, avoid codeome bloat.
-        {:reply, :ok, state}
+        # Already carries this exact plasmid — report the no-op so the donor
+        # stops re-broadcasting the same transfer each tick, and avoid
+        # codeome bloat from re-appending it.
+        {:reply, :already_present, state}
 
       new_size > max ->
         {:reply, {:error, :too_large}, state}
@@ -179,7 +184,11 @@ defmodule Lenies.Lenie do
           |> Lenies.Codeome.from_list()
 
         new_plasmid = Lenies.Plasmid.new(plasmid_opcodes)
-        new_plasmids = [new_plasmid]
+        # Accumulate: a Lenie can carry several distinct plasmids. The
+        # codeome already runs all of them (they're appended above); this
+        # list also drives the dashboard species annotation and the random
+        # outgoing pick in `:conjugate`.
+        new_plasmids = state.plasmids ++ [new_plasmid]
         new_interp = %{state.interp | plasmids: new_plasmids}
         new_state = %{state | codeome: new_codeome, plasmids: new_plasmids, interp: new_interp}
 
@@ -512,6 +521,13 @@ defmodule Lenies.Lenie do
           )
 
         {:ok, new_interp}
+
+      :already_present ->
+        # Recipient already carries this plasmid — nothing transferred, no
+        # broadcast. Donor pays only the base cost and reads failure (push
+        # 0), so a tight forage loop stops re-conjugating the same neighbour
+        # every tick (one transfer per plasmid per encounter).
+        conjugate_failure(interp, 0)
 
       {:error, :too_large} ->
         conjugate_failure(interp, 0)

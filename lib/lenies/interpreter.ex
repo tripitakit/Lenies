@@ -343,10 +343,13 @@ defmodule Lenies.Interpreter do
   end
 
   defp dispatch(:conjugate, state, _codeome, size) do
+    # Transfer one carried plasmid, chosen uniformly at random among those
+    # the Lenie holds (so a multi-plasmid carrier spreads each of them over
+    # repeated encounters rather than only ever its first).
     plasmid_opcodes =
       case state.plasmids do
-        [%Lenies.Plasmid{opcodes: ops} | _] -> ops
-        _ -> []
+        [] -> []
+        plasmids -> Enum.random(plasmids).opcodes
       end
 
     # IP advances; cost is applied by apply_world_action based on outcome.
