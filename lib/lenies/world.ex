@@ -100,6 +100,8 @@ defmodule Lenies.World do
     tick_interval = Keyword.get(opts, :tick_interval_ms, Config.tick_interval_ms())
     hotspots = Hotspots.initial(grid, Config.hotspot_count())
 
+    {total_resource, total_carcass} = sum_cells()
+
     state = %{
       grid: grid,
       hotspots: hotspots,
@@ -107,10 +109,15 @@ defmodule Lenies.World do
       tick_ref: nil,
       tick_count: 0,
       paused?: false,
-      reconcile_ref: nil
+      reconcile_ref: nil,
+      total_resource: total_resource,
+      total_carcass: total_carcass
     }
 
     state = prewarm_radiation(state)
+    # After prewarm, recompute totals to reflect the radiation deposited.
+    {r, c} = sum_cells()
+    state = %{state | total_resource: r, total_carcass: c}
     state = maybe_schedule_tick(state)
     state = schedule_reconcile(state)
     {:ok, state}
@@ -118,11 +125,14 @@ defmodule Lenies.World do
 
   @impl true
   def handle_call(:snapshot_stats, _from, state) do
+    # total_resource and total_carcass are maintained as cached values in state,
+    # updated once per tick in decay_and_sum_cells/0. Between ticks the values
+    # may be up to one tick stale, which is acceptable for a stats display.
     stats = %{
       cells: :ets.info(:cells, :size),
       population: :ets.info(:lenies, :size),
-      total_resource: sum_cell_field(:resource),
-      total_carcass: sum_cell_field(:carcass),
+      total_resource: state.total_resource,
+      total_carcass: state.total_carcass,
       tick_count: state.tick_count
     }
 
@@ -141,8 +151,22 @@ defmodule Lenies.World do
     Tables.clear_all()
     init_cells(state.grid)
     hotspots = Hotspots.initial(state.grid, Config.hotspot_count())
-    new_state = %{state | hotspots: hotspots, tick_count: 0, tick_ref: nil, reconcile_ref: nil}
+    {total_resource, total_carcass} = sum_cells()
+
+    new_state = %{
+      state
+      | hotspots: hotspots,
+        tick_count: 0,
+        tick_ref: nil,
+        reconcile_ref: nil,
+        total_resource: total_resource,
+        total_carcass: total_carcass
+    }
+
     new_state = prewarm_radiation(new_state)
+    # Recompute totals after prewarm radiation has deposited resources.
+    {r, c} = sum_cells()
+    new_state = %{new_state | total_resource: r, total_carcass: c}
     new_state = maybe_schedule_tick(new_state)
     new_state = schedule_reconcile(new_state)
 
@@ -184,6 +208,10 @@ defmodule Lenies.World do
 
     case result do
       :ok ->
+        # Recompute totals from the freshly loaded :cells table.
+        {r, c} = sum_cells()
+        new_state = %{new_state | total_resource: r, total_carcass: c}
+
         Phoenix.PubSub.broadcast(
           Lenies.PubSub,
           "world:control",
@@ -199,6 +227,8 @@ defmodule Lenies.World do
         # recreate all 4 as fresh empty tables and re-initialise the :cells grid
         # to leave the world in a valid, consistent (empty) state.
         recover_tables(state.grid)
+        {r, c} = sum_cells()
+        new_state = %{new_state | total_resource: r, total_carcass: c}
         {:reply, err, new_state}
     end
   end
@@ -352,7 +382,9 @@ defmodule Lenies.World do
 
   defp do_tick(state) do
     apply_radiation(state)
-    apply_carcass_decay()
+    # Single fold: apply carcass decay AND accumulate {total_resource, total_carcass}.
+    # Runs AFTER radiation so total_resource reflects post-radiation state.
+    {total_resource, total_carcass} = decay_and_sum_cells()
     maybe_background_mutation(state)
 
     hotspots = Hotspots.drift(state.hotspots, state.grid)
@@ -363,7 +395,13 @@ defmodule Lenies.World do
       {:tick, state.tick_count + 1}
     )
 
-    %{state | hotspots: hotspots, tick_count: state.tick_count + 1}
+    %{
+      state
+      | hotspots: hotspots,
+        tick_count: state.tick_count + 1,
+        total_resource: total_resource,
+        total_carcass: total_carcass
+    }
   end
 
   defp apply_radiation(state) do
@@ -386,22 +424,36 @@ defmodule Lenies.World do
     end)
   end
 
-  defp apply_carcass_decay do
+  # Single fold over :cells that:
+  #   1. Applies carcass decay (when rate > 0, only to cells with carcass > 0).
+  #   2. Accumulates {total_resource, total_carcass} in one pass.
+  #
+  # The carcass total is accumulated from the POST-decay value so the cached
+  # total reflects what a fresh sum would return immediately after decay.
+  # Resource is unchanged by decay, so it is summed as-is.
+  #
+  # Inserting into :cells during the foldl (for a :set table, updating the
+  # same key) is the established pattern here — this is safe for a :set as
+  # long as we are only updating existing keys, not inserting new ones.
+  defp decay_and_sum_cells do
     rate = Config.carcass_decay()
 
-    if rate > 0 do
-      :ets.foldl(
-        fn {key, cell}, _acc ->
-          if cell.carcass > 0 do
-            :ets.insert(:cells, {key, Cell.decay_carcass(cell, rate)})
+    :ets.foldl(
+      fn {key, cell}, {sum_r, sum_c} ->
+        effective_cell =
+          if rate > 0 and cell.carcass > 0 do
+            decayed = Cell.decay_carcass(cell, rate)
+            :ets.insert(:cells, {key, decayed})
+            decayed
+          else
+            cell
           end
 
-          nil
-        end,
-        nil,
-        :cells
-      )
-    end
+        {sum_r + effective_cell.resource, sum_c + effective_cell.carcass}
+      end,
+      {0, 0},
+      :cells
+    )
   end
 
   # Background mutations are configured as a RATE — N mutations per 1000
@@ -439,10 +491,12 @@ defmodule Lenies.World do
     end
   end
 
-  defp sum_cell_field(field) do
+  # One fold returning {total_resource, total_carcass} without side effects.
+  # Used at init, sterilize, and restore_tables to seed the cached totals.
+  defp sum_cells do
     :ets.foldl(
-      fn {_key, cell}, acc -> acc + Map.get(cell, field, 0) end,
-      0,
+      fn {_key, cell}, {r, c} -> {r + cell.resource, c + cell.carcass} end,
+      {0, 0},
       :cells
     )
   end

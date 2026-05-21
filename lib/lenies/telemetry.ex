@@ -79,13 +79,19 @@ defmodule Lenies.Telemetry do
     current_size = :ets.info(:history, :size)
 
     if current_size > state.max_entries do
-      # remove oldest entries (lowest counter)
+      # Contiguity invariant: keys are a contiguous range [oldest, counter-1].
+      # The counter is incremented after each insert and reset to 0 on
+      # {:sterilized, _} (which also clears :history). Entries are evicted only
+      # from the bottom of the range (oldest first), never from the middle.
+      # Therefore: oldest_key = counter - current_size, and we can evict the
+      # `to_remove` lowest keys without scanning the table — O(to_remove) instead
+      # of O(n log n).
       to_remove = current_size - state.max_entries
+      oldest = state.counter - current_size
 
-      :ets.tab2list(:history)
-      |> Enum.sort_by(fn {k, _} -> k end)
-      |> Enum.take(to_remove)
-      |> Enum.each(fn {k, _} -> :ets.delete(:history, k) end)
+      Enum.each(oldest..(oldest + to_remove - 1), fn k ->
+        :ets.delete(:history, k)
+      end)
     end
 
     state
