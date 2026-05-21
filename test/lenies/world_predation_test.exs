@@ -155,7 +155,7 @@ defmodule Lenies.WorldPredationTest do
       Process.unlink(pid)
       ref = Process.monitor(pid)
 
-      send(pid, {:take_damage, 100})
+      send(pid, {:take_damage, 100, "no_attacker"})
 
       assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 500
       # Allow time for the lenie_died cast to be processed

@@ -52,7 +52,7 @@ defmodule Lenies.LenieTakeDamageTest do
         lineage: {nil, 0}
       )
 
-    send(pid, {:take_damage, 30})
+    send(pid, {:take_damage, 30, "no_attacker"})
     Process.sleep(50)
 
     snap = Lenie.inspect_state(pid)
@@ -81,7 +81,7 @@ defmodule Lenies.LenieTakeDamageTest do
     Process.unlink(pid)
     ref = Process.monitor(pid)
 
-    send(pid, {:take_damage, 100})
+    send(pid, {:take_damage, 100, "no_attacker"})
 
     assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 500
 
@@ -109,7 +109,7 @@ defmodule Lenies.LenieTakeDamageTest do
     Process.unlink(pid)
     ref = Process.monitor(pid)
 
-    send(pid, {:take_damage, 50})
+    send(pid, {:take_damage, 50, "no_attacker"})
 
     assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 500
 

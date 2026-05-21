@@ -254,16 +254,32 @@ defmodule Lenies.Lenie do
     {:noreply, %{state | codeome: new_codeome, plasmids: new_plasmids, interp: new_interp}}
   end
 
-  def handle_info({:take_damage, amount}, state) do
+  def handle_info({:take_damage, amount, attacker_id}, state) do
+    # Compute what energy the victim can actually lose — clamped so we
+    # never reward the attacker more than the victim actually had.
+    actual = min(amount, max(state.interp.energy, 0))
+
     new_energy = state.interp.energy - amount
     new_interp = %{state.interp | energy: new_energy}
     new_state = %{state | interp: new_interp}
+
+    # Reward the attacker with exactly what this victim lost.
+    # Do this BEFORE returning {:stop, ...} so a dying victim still pays out.
+    case Lenies.Registry.whereis(attacker_id) do
+      pid when is_pid(pid) -> send(pid, {:attack_reward, actual})
+      _ -> :ok
+    end
 
     if new_energy <= 0 do
       {:stop, :killed, new_state}
     else
       {:noreply, new_state}
     end
+  end
+
+  def handle_info({:attack_reward, amount}, state) do
+    new_interp = %{state.interp | energy: state.interp.energy + amount}
+    {:noreply, %{state | interp: new_interp}}
   end
 
   def handle_info(_msg, state), do: {:noreply, state}
@@ -392,12 +408,17 @@ defmodule Lenies.Lenie do
 
   defp apply_world_action({:attack, _pos, _dir}, id, interp) do
     case World.action({:attack, interp.pos, interp.dir, id}) do
-      {:ok, {:attacked, damage}} ->
-        {:ok, %{interp | energy: interp.energy + damage}}
+      {:ok, {:attacked, _damage}} ->
+        # Reward arrives asynchronously via {:attack_reward, amount}.
+        # Do NOT credit damage here — that was the energy-from-nothing bug.
+        {:ok, interp}
 
-      {:ok, {:defended, damage}} ->
+      {:ok, {:defended, _damage}} ->
+        # Apply the attacker penalty synchronously (metabolic cost of a
+        # failed strike against a defender); the actual reward for the
+        # damage dealt arrives asynchronously via {:attack_reward, amount}.
         penalty = Application.get_env(:lenies, :defense_attacker_penalty, 5)
-        {:ok, %{interp | energy: interp.energy + damage - penalty}}
+        {:ok, %{interp | energy: interp.energy - penalty}}
 
       {:ok, :no_target} ->
         {:ok, interp}

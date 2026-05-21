@@ -494,12 +494,12 @@ defmodule Lenies.World do
     end
   end
 
-  defp do_action({:attack, {x, y}, dir, _attacker_id}, state) do
+  defp do_action({:attack, {x, y}, dir, attacker_id}, state) do
     target_cell = front_cell({x, y}, dir, state.grid)
 
     case :ets.lookup(:cells, target_cell) do
       [{_, %{lenie_id: target_id}}] when is_binary(target_id) ->
-        resolve_attack(target_id, state)
+        resolve_attack(target_id, attacker_id, state)
 
       _ ->
         {{:ok, :no_target}, state}
@@ -508,7 +508,7 @@ defmodule Lenies.World do
 
   defp do_action(_unknown, state), do: {{:ok, {:error, :unknown_action}}, state}
 
-  defp resolve_attack(target_id, state) do
+  defp resolve_attack(target_id, attacker_id, state) do
     base_damage = Application.get_env(:lenies, :attack_damage, 10)
 
     case :ets.lookup(:lenies, target_id) do
@@ -522,9 +522,11 @@ defmodule Lenies.World do
             {base_damage, :attacked}
           end
 
-        # Send async damage message to the target Lenie
+        # Send async damage message to the target Lenie, including the
+        # attacker id so the victim can reward the attacker with exactly
+        # what it actually lost (energy conservation fix).
         case Lenies.Registry.whereis(target_id) do
-          pid when is_pid(pid) -> send(pid, {:take_damage, damage})
+          pid when is_pid(pid) -> send(pid, {:take_damage, damage, attacker_id})
           _ -> :ok
         end
 
