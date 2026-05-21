@@ -36,11 +36,11 @@ defmodule Lenies.Seeds.CustomStore do
 
   ## Payload-size cap (MH1 DoS hardening)
 
-  During load, rows whose `opcodes` list exceeds `@max_opcodes_from_config`
-  (derived from `Lenies.Config.codeome_length_bounds/0`, currently 1000) are
-  dropped before the expensive `String.to_existing_atom/1` conversion. This
-  prevents a hand-crafted multi-million-element array from blocking the
-  supervisor start.
+  During load, rows whose `opcodes` list exceeds the upper bound returned by
+  `Lenies.Config.codeome_length_bounds/0` (read at load time, so it tracks
+  runtime config) are dropped before the expensive `String.to_existing_atom/1`
+  conversion. This prevents a hand-crafted multi-million-element array from
+  blocking the supervisor start.
 
   ## Concurrency and atomicity
 
@@ -63,10 +63,6 @@ defmodule Lenies.Seeds.CustomStore do
   # old bare-array format. Files with an unknown (higher) version are refused
   # and the store starts fresh rather than silently mangling foreign data.
   @schema_version 1
-
-  # Opcodes cap: derived from the codeome upper bound so the guard is always
-  # consistent with the rest of the system. Evaluated at compile time.
-  @max_opcodes_from_config elem(Lenies.Config.codeome_length_bounds(), 1)
 
   @type seed :: %{
           id: String.t(),
@@ -235,8 +231,11 @@ defmodule Lenies.Seeds.CustomStore do
 
     # MH1: Early payload-size guard — reject non-list opcodes and lists that
     # exceed the codeome upper bound BEFORE calling String.to_existing_atom/1.
+    # Read the cap at call time so it reflects any runtime config set in
+    # config/runtime.exs (which is applied after compilation).
     # This prevents a hand-crafted multi-million-element array from blocking
     # the supervisor start during Agent init.
+    cap = elem(Lenies.Config.codeome_length_bounds(), 1)
     raw_opcodes = m["opcodes"]
 
     cond do
@@ -247,10 +246,10 @@ defmodule Lenies.Seeds.CustomStore do
 
         nil
 
-      length(raw_opcodes) > @max_opcodes_from_config ->
+      length(raw_opcodes) > cap ->
         Logger.warning(
           "Lenies.Seeds.CustomStore: dropping seed #{inspect(m["id"])} — " <>
-            "opcodes length #{length(raw_opcodes)} exceeds cap #{@max_opcodes_from_config}"
+            "opcodes length #{length(raw_opcodes)} exceeds cap #{cap}"
         )
 
         nil

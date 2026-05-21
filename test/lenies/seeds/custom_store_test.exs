@@ -299,6 +299,9 @@ defmodule Lenies.Seeds.CustomStoreTest do
       # Should not crash; chosen behavior: start fresh and log a warning
       {:ok, _} = CustomStore.start_link([])
       assert CustomStore.all() == []
+      # An unknown-version file is NOT renamed to .bak — that's reserved for
+      # corrupt JSON. This refute distinguishes the two branches.
+      refute File.exists?(tmp_path <> ".bak")
     end
   end
 
@@ -310,6 +313,45 @@ defmodule Lenies.Seeds.CustomStoreTest do
     # The cap for CustomStore is 1000 (codeome_length_bounds max).
     # We use cap+1 entries to exercise the boundary cheaply.
     @cap 1000
+
+    test "cap follows runtime config (Application.put_env)", %{tmp_path: tmp_path} do
+      # Temporarily lower the cap to 3 via Application env.
+      original_bounds = Application.get_env(:lenies, :codeome_length_bounds)
+
+      on_exit(fn ->
+        if original_bounds do
+          Application.put_env(:lenies, :codeome_length_bounds, original_bounds)
+        else
+          Application.delete_env(:lenies, :codeome_length_bounds)
+        end
+      end)
+
+      Application.put_env(:lenies, :codeome_length_bounds, {5, 3})
+
+      # Row with 4 opcodes: exceeds the new cap of 3 → must be DROPPED.
+      over_cap_row =
+        valid_json_row(%{
+          "id" => "over-cap",
+          "opcodes" => List.duplicate("nop_1", 4)
+        })
+
+      # Row with 2 opcodes: within the new cap → must LOAD.
+      under_cap_row =
+        valid_json_row(%{
+          "id" => "under-cap",
+          "opcodes" => ["nop_1", "push0"]
+        })
+
+      File.write!(tmp_path, Jason.encode!([over_cap_row, under_cap_row]))
+      Agent.stop(CustomStore)
+      {:ok, _} = CustomStore.start_link([])
+
+      assert CustomStore.get("over-cap") == nil,
+             "4-opcode row should be dropped with cap=3 (runtime config)"
+
+      assert %{id: "under-cap"} = CustomStore.get("under-cap"),
+             "2-opcode row should load with cap=3 (runtime config)"
+    end
 
     test "row with opcodes length > cap is DROPPED on load", %{tmp_path: tmp_path} do
       oversized_row =

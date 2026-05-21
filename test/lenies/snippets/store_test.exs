@@ -181,6 +181,9 @@ defmodule Lenies.Snippets.StoreTest do
       {:ok, _} = Store.start_link([])
 
       assert Store.all() == []
+      # An unknown-version file is NOT renamed to .bak — that's reserved for
+      # corrupt JSON. This refute distinguishes the two branches.
+      refute File.exists?(tmp_path <> ".bak")
     end
   end
 
