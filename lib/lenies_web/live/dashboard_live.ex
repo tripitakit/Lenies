@@ -390,11 +390,14 @@ defmodule LeniesWeb.DashboardLive do
     {:noreply, socket}
   end
 
-  def handle_event("toggle_layer", %{"layer" => layer}, socket) do
+  def handle_event("toggle_layer", %{"layer" => layer}, socket)
+      when layer in ~w(lenies resource carcass) do
     layer_atom = String.to_existing_atom(layer)
     new_visible = Map.update!(socket.assigns.layers_visible, layer_atom, &(!&1))
     {:noreply, assign(socket, :layers_visible, new_visible)}
   end
+
+  def handle_event("toggle_layer", _params, socket), do: {:noreply, socket}
 
   def handle_event("sort_species", %{"col" => col}, socket) do
     case Map.fetch(@sortable_columns, col) do
@@ -436,6 +439,8 @@ defmodule LeniesWeb.DashboardLive do
     payload = lenie_hover_payload(x, y)
     {:noreply, push_event(socket, "lenie_hover_info", payload)}
   end
+
+  def handle_event(_event, _params, socket), do: {:noreply, socket}
 
   defp lookup_lenie_at_cell(x, y) do
     with [{_, %{lenie_id: id}}] when is_binary(id) <- :ets.lookup(:cells, {x, y}),

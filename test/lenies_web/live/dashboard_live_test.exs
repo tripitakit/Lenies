@@ -490,6 +490,41 @@ defmodule LeniesWeb.DashboardLiveTest do
     end
   end
 
+  describe "event payload resilience — malformed inputs are no-ops" do
+    test "toggle_layer with unknown layer string survives", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/")
+      render_hook(view, "toggle_layer", %{"layer" => "bogus"})
+      assert render(view) =~ "id=\"grid-canvas\""
+    end
+
+    test "toggle_layer with valid layer still toggles", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/")
+      html_before = render(view)
+      assert html_before =~ ~r/data-show-lenies=""/
+      render_hook(view, "toggle_layer", %{"layer" => "lenies"})
+      html_after = render(view)
+      refute html_after =~ ~r/data-show-lenies/
+    end
+
+    test "select_lenie_at_cell with non-integer coords survives", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/")
+      render_hook(view, "select_lenie_at_cell", %{"x" => "5", "y" => 0})
+      assert render(view) =~ "id=\"grid-canvas\""
+    end
+
+    test "request_lenie_hover with non-integer coords survives", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/")
+      render_hook(view, "request_lenie_hover", %{"x" => "bad", "y" => "also_bad"})
+      assert render(view) =~ "id=\"grid-canvas\""
+    end
+
+    test "unknown event name is a no-op", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "/")
+      render_hook(view, "no_such_event", %{})
+      assert render(view) =~ "id=\"grid-canvas\""
+    end
+  end
+
   describe "species table sorting" do
     defp row_pos(html, hash), do: html |> :binary.match("species-row-#{hash}") |> elem(0)
 
