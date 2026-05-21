@@ -369,7 +369,7 @@ defmodule Lenies.Interpreter do
       new_plasmid = Lenies.Plasmid.new(ops)
       cost = Costs.cost(:make_plasmid, length)
 
-      new_state = %{s2 | plasmids: [new_plasmid]}
+      new_state = %{s2 | plasmids: s2.plasmids ++ [new_plasmid]}
 
       new_state
       |> State.push(1)
@@ -422,29 +422,19 @@ defmodule Lenies.Interpreter do
     {template, t_len} = Template.extract(codeome, state.ip + 1, template_max_len())
     skip_to = Integer.mod(state.ip + 1 + t_len, size)
 
-    should_jump =
+    # Pop exactly once for conditional jumps; no pop for :always.
+    {should_jump, state_after_pop} =
       case condition do
         :always ->
-          true
+          {true, state}
 
         :zero ->
-          {top, _} = State.pop(state)
-          top == 0
+          {top, s} = State.pop(state)
+          {top == 0, s}
 
         :nonzero ->
-          {top, _} = State.pop(state)
-          top != 0
-      end
-
-    # For conditional jumps, consume the stack value
-    state_after_pop =
-      case condition do
-        :always ->
-          state
-
-        _ ->
-          {_, s} = State.pop(state)
-          s
+          {top, s} = State.pop(state)
+          {top != 0, s}
       end
 
     target_ip =

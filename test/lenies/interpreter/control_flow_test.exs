@@ -94,4 +94,56 @@ defmodule Lenies.Interpreter.ControlFlowTest do
     # base 0.2 + 0.05 * 4 = 0.4
     assert_in_delta s.energy, 100.0 - 0.4, 0.0001
   end
+
+  # I11 — single-pop semantics for conditional jumps
+
+  test ":jmp_t (:always) does not consume any stack value" do
+    c = Codeome.from_list([:jmp_t, :push0])
+    state = State.new(energy: 100.0) |> State.push(42) |> State.push(7)
+    {:cont, s} = Interpreter.step(state, c)
+    # Stack depth unchanged: :always pops nothing
+    # push(42) then push(7) → [7, 42] (7 on top)
+    assert length(s.stack) == 2
+    assert s.stack == [7, 42]
+  end
+
+  test ":jz_t consumes exactly one stack value on jump taken" do
+    # top = 0 → jump taken
+    c = Codeome.from_list([:jz_t, :nop_0, :push0, :nop_1, :sub])
+    state = State.new(energy: 100.0) |> State.push(99) |> State.push(0)
+    {:cont, s} = Interpreter.step(state, c)
+    assert s.ip == 4
+    # Only the top (0) was consumed; 99 remains
+    assert s.stack == [99]
+  end
+
+  test ":jz_t consumes exactly one stack value on fall-through" do
+    # top != 0 → fall through
+    c = Codeome.from_list([:jz_t, :nop_0, :push0, :nop_1, :sub])
+    state = State.new(energy: 100.0) |> State.push(99) |> State.push(5)
+    {:cont, s} = Interpreter.step(state, c)
+    assert s.ip == 2
+    # Only the top (5) was consumed; 99 remains
+    assert s.stack == [99]
+  end
+
+  test ":jnz_t consumes exactly one stack value on jump taken" do
+    # top != 0 → jump taken
+    c = Codeome.from_list([:jnz_t, :nop_0, :push0, :nop_1, :sub])
+    state = State.new(energy: 100.0) |> State.push(99) |> State.push(3)
+    {:cont, s} = Interpreter.step(state, c)
+    assert s.ip == 4
+    # Only the top (3) was consumed; 99 remains
+    assert s.stack == [99]
+  end
+
+  test ":jnz_t consumes exactly one stack value on fall-through" do
+    # top = 0 → fall through
+    c = Codeome.from_list([:jnz_t, :nop_0, :push0, :nop_1, :sub])
+    state = State.new(energy: 100.0) |> State.push(99) |> State.push(0)
+    {:cont, s} = Interpreter.step(state, c)
+    assert s.ip == 2
+    # Only the top (0) was consumed; 99 remains
+    assert s.stack == [99]
+  end
 end
