@@ -294,6 +294,11 @@ defmodule LeniesWeb.EditorLive do
     {:noreply, put_caret(socket, new_pair)}
   end
 
+  def handle_event("move_caret_end", %{"to" => to}, socket) do
+    gap = if to == "start", do: 0, else: length(socket.assigns.buffer)
+    {:noreply, put_caret(socket, EditorCaret.place(gap))}
+  end
+
   def handle_event("clear_selection", _params, socket) do
     {:noreply, put_caret(socket, EditorCaret.place(socket.assigns.caret))}
   end

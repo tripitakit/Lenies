@@ -478,4 +478,13 @@ defmodule LeniesWeb.EditorLiveTest do
     render_hook(view, "move_caret", %{"dir" => "down", "extend" => false})
     assert has_element?(view, "[data-caret-at='1']")
   end
+
+  test "Home and End place the caret at the buffer ends", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+    render_hook(view, "move_caret_end", %{"to" => "start"})
+    assert has_element?(view, "[data-caret-at='0']")
+    render_hook(view, "move_caret_end", %{"to" => "end"})
+    assert has_element?(view, "[data-caret-at='3']")
+  end
 end
