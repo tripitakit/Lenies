@@ -1010,3 +1010,13 @@
   transform: rotate(180deg);
   background: rgba(34, 211, 238, 0.15);
 }
+
+.codeome-gap { height: 6px; cursor: text; }
+.codeome-gap-end { min-height: 24px; flex: 1; }
+.codeome-gap-caret { position: relative; }
+.codeome-gap-caret::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 2px; height: 2px;
+  background: var(--cyan-400, #22d3ee);
+  animation: codeome-caret-blink 1s step-end infinite;
+}
+@keyframes codeome-caret-blink { 50% { opacity: 0; } }

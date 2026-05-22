@@ -451,4 +451,28 @@ defmodule LeniesWeb.EditorLiveTest do
       refute render(view) =~ ~r/phx-click="undo"[^>]*disabled/
     end
   end
+
+  test "clicking a gap places a collapsed caret", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "place_caret", %{"gap" => 0})
+    assert has_element?(view, "[data-caret-at='0']")
+  end
+
+  test "clicking a block selects exactly that block", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+    render_hook(view, "select_block", %{"index" => 1, "shift" => false})
+    assert has_element?(view, ".codeome-block-selected[data-idx='1']")
+    refute has_element?(view, ".codeome-block-selected[data-idx='0']")
+  end
+
+  test "arrow-down moves the caret one gap", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
+    render_hook(view, "move_caret", %{"dir" => "up", "extend" => false})
+    render_hook(view, "move_caret", %{"dir" => "up", "extend" => false})
+    assert has_element?(view, "[data-caret-at='0']")
+    render_hook(view, "move_caret", %{"dir" => "down", "extend" => false})
+    assert has_element?(view, "[data-caret-at='1']")
+  end
 end
