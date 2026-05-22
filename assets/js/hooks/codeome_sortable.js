@@ -1,6 +1,7 @@
 // CodeomeSortable hook: enables drag-and-drop reorder of codeome blocks in
 // the EditorLive listing pane, plus accepts drops from the palette
-// (CodeomePalette hook, same SortableJS group "codeome").
+// (CodeomePalette hook) and snippets (SnippetDrag hook, same SortableJS
+// group "codeome").
 //
 // Uses `pushEvent` (not `pushEventTo`): the hook is attached to a plain
 // element inside a LiveView (EditorLive), not a LiveComponent, so there
