@@ -39,8 +39,9 @@ import ManualLinkInterceptor from "./hooks/manual_link_interceptor"
 import EditorKeyboard from "./hooks/editor_keyboard"
 import AudioToggle from "./hooks/audio_toggle"
 import SliderValue from "./hooks/slider_value"
+import SnippetDrag from "./hooks/snippet_drag"
 
-const Hooks = {GridCanvas, ActionFeedback, CodeomeSortable, ConfirmAction, CodeomePalette, RememberManualState, ManualLinkInterceptor, EditorKeyboard, AudioToggle, SliderValue, ...colocatedHooks}
+const Hooks = {GridCanvas, ActionFeedback, CodeomeSortable, ConfirmAction, CodeomePalette, RememberManualState, ManualLinkInterceptor, EditorKeyboard, AudioToggle, SliderValue, SnippetDrag, ...colocatedHooks}
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {

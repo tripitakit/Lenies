@@ -18,6 +18,15 @@ const EditorKeyboard = {
       // The per-block action buttons (e.g. the ⨯ delete button) carry their
       // own phx-click — clicking them must not also fire select_block.
       if (e.target.closest(".codeome-action-btn")) return;
+
+      const gap = e.target.closest(".codeome-gap");
+      if (gap && this.el.contains(gap)) {
+        const g = parseInt(gap.dataset.gap, 10);
+        if (Number.isNaN(g)) return;
+        this.pushEvent("place_caret", { gap: g, shift: e.shiftKey === true });
+        return;
+      }
+
       const block = e.target.closest(".codeome-block-editable");
       if (!block || !this.el.contains(block)) return;
       const idx = parseInt(block.dataset.idx, 10);
@@ -29,6 +38,19 @@ const EditorKeyboard = {
       if (isTextTarget(e.target)) return;
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
+
+      if (key === "arrowup" || key === "arrowdown") {
+        e.preventDefault();
+        const dir = key === "arrowup" ? "up" : "down";
+        if (e.altKey) {
+          this.pushEvent("move_range_step", { dir });
+        } else {
+          this.pushEvent("move_caret", { dir, extend: e.shiftKey === true });
+        }
+        return;
+      }
+      if (key === "home") { e.preventDefault(); this.pushEvent("move_caret_end", { to: "start" }); return; }
+      if (key === "end") { e.preventDefault(); this.pushEvent("move_caret_end", { to: "end" }); return; }
 
       let event = null;
       if (mod && key === "c") event = "copy_selection";
@@ -57,6 +79,17 @@ const EditorKeyboard = {
       }
     };
 
+    this.onDblClick = (e) => {
+      if (e.target.closest(".codeome-drag-handle")) return;
+      if (e.target.closest(".codeome-action-btn")) return;
+      const block = e.target.closest(".codeome-block-editable");
+      if (!block || !this.el.contains(block)) return;
+      const idx = parseInt(block.dataset.idx, 10);
+      if (Number.isNaN(idx)) return;
+      this.pushEvent("start_inline_edit", { index: idx });
+    };
+    this.el.addEventListener("dblclick", this.onDblClick);
+
     this.el.addEventListener("click", this.onClick);
     // keydown binds to `document` (not this.el) so shortcuts work without
     // focusing the grid; removed in destroyed(). Assumes a single
@@ -67,8 +100,10 @@ const EditorKeyboard = {
   destroyed() {
     if (this.onClick) this.el.removeEventListener("click", this.onClick);
     if (this.onKeydown) document.removeEventListener("keydown", this.onKeydown);
+    if (this.onDblClick) this.el.removeEventListener("dblclick", this.onDblClick);
     this.onClick = null;
     this.onKeydown = null;
+    this.onDblClick = null;
   },
 };
 

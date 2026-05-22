@@ -15,6 +15,7 @@ defmodule LeniesWeb.EditorLive do
   alias LeniesWeb.Disassembler
   alias LeniesWeb.CodeomeBuffer
   alias LeniesWeb.EditorHistory
+  alias LeniesWeb.EditorCaret
 
   @default_chapter "02-opcode-reference.md"
 
@@ -37,12 +38,15 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:manual_collapsed?, false)
       |> assign(:text_input_value, "")
       |> assign(:text_input_error, nil)
-      |> assign(:selection, nil)
-      |> assign(:sel_anchor, nil)
+      |> assign(:caret, length(buffer))
+      |> assign(:anchor, length(buffer))
       |> assign(:clipboard, [])
       |> assign(:history, EditorHistory.new(100))
       |> assign(:snippets, Lenies.Snippets.Store.all())
       |> assign(:show_snippet_form, false)
+      |> assign(:editing_index, nil)
+      |> assign(:inline_edit_error, nil)
+      |> assign(:jump_targets, LeniesWeb.JumpTargets.targets(buffer))
 
     {:ok, socket}
   end
@@ -113,7 +117,7 @@ defmodule LeniesWeb.EditorLive do
 
     {:noreply,
      socket
-     |> assign(selection: nil, sel_anchor: nil)
+     |> put_caret(EditorCaret.place(length(new_buffer)))
      |> commit_buffer_change(new_buffer)}
   end
 
@@ -122,7 +126,7 @@ defmodule LeniesWeb.EditorLive do
 
     {:noreply,
      socket
-     |> assign(selection: nil, sel_anchor: nil)
+     |> put_caret(EditorCaret.place(length(new_buffer)))
      |> commit_buffer_change(new_buffer)}
   end
 
@@ -132,12 +136,10 @@ defmodule LeniesWeb.EditorLive do
       opcode = String.to_existing_atom(opcode_str)
 
       if Lenies.Codeome.Opcodes.known?(opcode) do
-        new_buffer = LeniesWeb.CodeomeBuffer.insert(socket.assigns.buffer, index, opcode)
-
-        {:noreply,
-         socket
-         |> assign(selection: nil, sel_anchor: nil)
-         |> commit_buffer_change(new_buffer)}
+        # `index` from a palette drop is authoritative for placement: move the
+        # caret there first, then insert at the caret.
+        socket = put_caret(socket, EditorCaret.place(index))
+        {:noreply, insert_at_caret(socket, [opcode])}
       else
         {:noreply, socket}
       end
@@ -230,12 +232,9 @@ defmodule LeniesWeb.EditorLive do
         {:noreply, assign(socket, text_input_value: "", text_input_error: nil)}
 
       {:ok, opcodes} ->
-        new_buffer = socket.assigns.buffer ++ opcodes
-
         {:noreply,
          socket
-         |> assign(selection: nil, sel_anchor: nil)
-         |> commit_buffer_change(new_buffer)
+         |> insert_at_caret(opcodes)
          |> assign(text_input_value: "", text_input_error: nil)}
 
       {:error, invalid} ->
@@ -251,26 +250,59 @@ defmodule LeniesWeb.EditorLive do
     if index < 0 or index >= len do
       {:noreply, socket}
     else
-      # shift arrives as a boolean from the JS hook / render_hook; accept the
-      # "true" string form too for robustness.
-      {selection, anchor} =
-        if shift in [true, "true"] and is_integer(socket.assigns.sel_anchor) do
-          a = socket.assigns.sel_anchor
-          {{min(a, index), max(a, index)}, a}
+      pair = caret_pair(socket)
+
+      new_pair =
+        if shift in [true, "true"] do
+          EditorCaret.extend_to_block(pair, index)
         else
-          {{index, index}, index}
+          EditorCaret.select_block(index)
         end
 
-      {:noreply, assign(socket, selection: selection, sel_anchor: anchor)}
+      {:noreply, put_caret(socket, new_pair)}
     end
   end
 
+  def handle_event("place_caret", %{"gap" => gap} = params, socket) do
+    gap = to_int(gap) |> max(0) |> min(length(socket.assigns.buffer))
+    shift = params["shift"]
+
+    new_pair =
+      if shift in [true, "true"] do
+        EditorCaret.extend_to_gap(caret_pair(socket), gap)
+      else
+        EditorCaret.place(gap)
+      end
+
+    {:noreply, put_caret(socket, new_pair)}
+  end
+
+  def handle_event("move_caret", %{"dir" => dir} = params, socket) do
+    len = length(socket.assigns.buffer)
+    d = if dir == "up", do: :up, else: :down
+    pair = caret_pair(socket)
+
+    new_pair =
+      if params["extend"] in [true, "true"] do
+        EditorCaret.extend(pair, d, len)
+      else
+        EditorCaret.move(pair, d, len)
+      end
+
+    {:noreply, put_caret(socket, new_pair)}
+  end
+
+  def handle_event("move_caret_end", %{"to" => to}, socket) do
+    gap = if to == "start", do: 0, else: length(socket.assigns.buffer)
+    {:noreply, put_caret(socket, EditorCaret.place(gap))}
+  end
+
   def handle_event("clear_selection", _params, socket) do
-    {:noreply, assign(socket, selection: nil, sel_anchor: nil)}
+    {:noreply, put_caret(socket, EditorCaret.place(socket.assigns.caret))}
   end
 
   def handle_event("copy_selection", _params, socket) do
-    case socket.assigns.selection do
+    case current_range(socket) do
       nil -> {:noreply, socket}
       range ->
         {:noreply, assign(socket, :clipboard, CodeomeBuffer.slice(socket.assigns.buffer, range))}
@@ -278,7 +310,7 @@ defmodule LeniesWeb.EditorLive do
   end
 
   def handle_event("cut_selection", _params, socket) do
-    case socket.assigns.selection do
+    case current_range(socket) do
       nil ->
         {:noreply, socket}
 
@@ -289,32 +321,20 @@ defmodule LeniesWeb.EditorLive do
         {:noreply,
          socket
          |> assign(:clipboard, clip)
-         |> assign(selection: nil, sel_anchor: nil)
+         |> put_caret(EditorCaret.after_delete_range(range))
          |> commit_buffer_change(new_buffer)}
     end
   end
 
   def handle_event("paste_clipboard", _params, socket) do
     case socket.assigns.clipboard do
-      [] ->
-        {:noreply, socket}
-
-      clip ->
-        # Paste inserts AFTER the selection (it does not replace it), then
-        # selects the inserted range. This matches the editor's chosen rule.
-        at = paste_index(socket.assigns.selection, length(socket.assigns.buffer))
-        new_buffer = CodeomeBuffer.insert_many(socket.assigns.buffer, at, clip)
-        pasted = {at, at + length(clip) - 1}
-
-        {:noreply,
-         socket
-         |> assign(selection: pasted, sel_anchor: at)
-         |> commit_buffer_change(new_buffer)}
+      [] -> {:noreply, socket}
+      clip -> {:noreply, insert_at_caret(socket, clip)}
     end
   end
 
   def handle_event("duplicate_selection", _params, socket) do
-    case socket.assigns.selection do
+    case current_range(socket) do
       nil ->
         {:noreply, socket}
 
@@ -322,17 +342,17 @@ defmodule LeniesWeb.EditorLive do
         clip = CodeomeBuffer.slice(socket.assigns.buffer, range)
         at = hi + 1
         new_buffer = CodeomeBuffer.insert_many(socket.assigns.buffer, at, clip)
-        dup = {at, at + length(clip) - 1}
+        dup = EditorCaret.select_inserted(at, length(clip))
 
         {:noreply,
          socket
-         |> assign(selection: dup, sel_anchor: at)
+         |> put_caret(dup)
          |> commit_buffer_change(new_buffer)}
     end
   end
 
   def handle_event("delete_selection", _params, socket) do
-    case socket.assigns.selection do
+    case current_range(socket) do
       nil ->
         {:noreply, socket}
 
@@ -341,8 +361,52 @@ defmodule LeniesWeb.EditorLive do
 
         {:noreply,
          socket
-         |> assign(selection: nil, sel_anchor: nil)
+         |> put_caret(EditorCaret.after_delete_range(range))
          |> commit_buffer_change(new_buffer)}
+    end
+  end
+
+  def handle_event("move_range", %{"to" => to}, socket) do
+    case current_range(socket) do
+      nil ->
+        {:noreply, socket}
+
+      {lo, hi} = range ->
+        to_gap = to_int(to) |> max(0) |> min(length(socket.assigns.buffer))
+        new_buffer = CodeomeBuffer.move_range(socket.assigns.buffer, range, to_gap)
+        n = hi - lo + 1
+        new_lo = if to_gap <= lo, do: to_gap, else: to_gap - n
+        new_lo = if to_gap > lo and to_gap <= hi + 1, do: lo, else: new_lo
+
+        {:noreply,
+         socket
+         |> put_caret(EditorCaret.select_inserted(new_lo, n))
+         |> commit_buffer_change(new_buffer)}
+    end
+  end
+
+  def handle_event("move_range_step", %{"dir" => dir}, socket) do
+    len = length(socket.assigns.buffer)
+
+    case current_range(socket) do
+      nil ->
+        {:noreply, socket}
+
+      {lo, hi} = range ->
+        to_gap = if dir == "up", do: max(lo - 1, 0), else: min(hi + 2, len)
+
+        if (dir == "up" and lo == 0) or (dir == "down" and hi + 1 >= len) do
+          {:noreply, socket}
+        else
+          new_buffer = CodeomeBuffer.move_range(socket.assigns.buffer, range, to_gap)
+          n = hi - lo + 1
+          new_lo = if dir == "up", do: lo - 1, else: lo + 1
+
+          {:noreply,
+           socket
+           |> put_caret(EditorCaret.select_inserted(new_lo, n))
+           |> commit_buffer_change(new_buffer)}
+        end
     end
   end
 
@@ -355,7 +419,7 @@ defmodule LeniesWeb.EditorLive do
         {:noreply,
          socket
          |> assign(:history, history)
-         |> assign(selection: nil, sel_anchor: nil)
+         |> put_caret(EditorCaret.place(length(prev_buffer)))
          |> apply_buffer_change(prev_buffer)}
     end
   end
@@ -369,7 +433,7 @@ defmodule LeniesWeb.EditorLive do
         {:noreply,
          socket
          |> assign(:history, history)
-         |> assign(selection: nil, sel_anchor: nil)
+         |> put_caret(EditorCaret.place(length(next_buffer)))
          |> apply_buffer_change(next_buffer)}
     end
   end
@@ -383,7 +447,7 @@ defmodule LeniesWeb.EditorLive do
   end
 
   def handle_event("submit_snippet", %{"snippet_name" => name}, socket) do
-    with range when not is_nil(range) <- socket.assigns.selection,
+    with range when not is_nil(range) <- current_range(socket),
          opcodes <- CodeomeBuffer.slice(socket.assigns.buffer, range),
          id <- Lenies.Slug.slugify(name),
          :ok <- Lenies.Snippets.Store.save(%{id: id, name: name, opcodes: opcodes}) do
@@ -405,15 +469,18 @@ defmodule LeniesWeb.EditorLive do
 
   def handle_event("insert_snippet", %{"id" => id}, socket) do
     case Lenies.Snippets.Store.get(id) do
-      %{opcodes: ops} when ops != [] ->
-        at = paste_index(socket.assigns.selection, length(socket.assigns.buffer))
-        new_buffer = CodeomeBuffer.insert_many(socket.assigns.buffer, at, ops)
-        inserted = {at, at + length(ops) - 1}
+      %{opcodes: ops} when ops != [] -> {:noreply, insert_at_caret(socket, ops)}
+      _ -> {:noreply, socket}
+    end
+  end
 
-        {:noreply,
-         socket
-         |> assign(selection: inserted, sel_anchor: at)
-         |> commit_buffer_change(new_buffer)}
+  def handle_event("insert_snippet_at", %{"id" => id, "index" => index}, socket) do
+    at = to_int(index) |> max(0) |> min(length(socket.assigns.buffer))
+
+    case Lenies.Snippets.Store.get(id) do
+      %{opcodes: ops} when ops != [] ->
+        socket = put_caret(socket, EditorCaret.place(at))
+        {:noreply, insert_at_caret(socket, ops)}
 
       _ ->
         {:noreply, socket}
@@ -423,6 +490,37 @@ defmodule LeniesWeb.EditorLive do
   def handle_event("delete_snippet", %{"id" => id}, socket) do
     Lenies.Snippets.Store.delete(id)
     {:noreply, assign(socket, :snippets, Lenies.Snippets.Store.all())}
+  end
+
+  def handle_event("submit_replace", %{"index" => index, "opcode" => opcode_str}, socket) do
+    idx = to_int(index)
+
+    cond do
+      idx < 0 or idx >= length(socket.assigns.buffer) ->
+        {:noreply, assign(socket, editing_index: nil, inline_edit_error: nil)}
+
+      true ->
+        case to_known_opcode(String.downcase(to_string(opcode_str))) do
+          {:ok, opcode} ->
+            new_buffer = CodeomeBuffer.replace(socket.assigns.buffer, idx, opcode)
+
+            {:noreply,
+             socket
+             |> assign(editing_index: nil, inline_edit_error: nil)
+             |> commit_buffer_change(new_buffer)}
+
+          :error ->
+            {:noreply, assign(socket, editing_index: idx, inline_edit_error: "unknown opcode")}
+        end
+    end
+  end
+
+  def handle_event("start_inline_edit", %{"index" => index}, socket) do
+    {:noreply, assign(socket, editing_index: to_int(index), inline_edit_error: nil)}
+  end
+
+  def handle_event("cancel_inline_edit", _params, socket) do
+    {:noreply, assign(socket, editing_index: nil, inline_edit_error: nil)}
   end
 
   @impl true
@@ -649,9 +747,9 @@ defmodule LeniesWeb.EditorLive do
             <%= if @snippets == [] do %>
               <p class="codeome-snippets-empty">no snippets — select blocks and press Save as snippet</p>
             <% else %>
-              <div class="codeome-snippets-list">
+              <div class="codeome-snippets-list" id="codeome-snippets-list" phx-hook="SnippetDrag">
                 <%= for s <- @snippets do %>
-                  <div class="codeome-snippet-row">
+                  <div class="codeome-snippet-row" data-snippet-id={s.id}>
                     <button
                       type="button"
                       phx-click="insert_snippet"
@@ -714,19 +812,27 @@ defmodule LeniesWeb.EditorLive do
               </div>
             </div>
           </div>
+          <% range = EditorCaret.derive_range({@caret, @anchor}) %>
+          <% len = length(@buffer) %>
+          <% template_nops = template_nop_indices(@buffer) %>
           <div class="codeome-toolbar">
-            <button type="button" phx-click="copy_selection" disabled={!has_selection?(@selection)} class="codeome-tool-btn" title="Copy (Ctrl/Cmd+C)">Copy</button>
-            <button type="button" phx-click="cut_selection" disabled={!has_selection?(@selection)} class="codeome-tool-btn" title="Cut (Ctrl/Cmd+X)">Cut</button>
+            <button type="button" phx-click="copy_selection" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Copy (Ctrl/Cmd+C)">Copy</button>
+            <button type="button" phx-click="cut_selection" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Cut (Ctrl/Cmd+X)">Cut</button>
             <button type="button" phx-click="paste_clipboard" disabled={!has_clipboard?(@clipboard)} class="codeome-tool-btn" title="Paste (Ctrl/Cmd+V)">Paste</button>
-            <button type="button" phx-click="duplicate_selection" disabled={!has_selection?(@selection)} class="codeome-tool-btn" title="Duplicate (Ctrl/Cmd+D)">Duplicate</button>
-            <button type="button" phx-click="delete_selection" disabled={!has_selection?(@selection)} class="codeome-tool-btn" title="Delete (Del)">Delete</button>
+            <button type="button" phx-click="duplicate_selection" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Duplicate (Ctrl/Cmd+D)">Duplicate</button>
+            <button type="button" phx-click="delete_selection" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Delete (Del)">Delete</button>
             <span class="codeome-toolbar-sep"></span>
             <button type="button" phx-click="undo" disabled={!EditorHistory.can_undo?(@history)} class="codeome-tool-btn" title="Undo (Ctrl/Cmd+Z)">Undo</button>
             <button type="button" phx-click="redo" disabled={!EditorHistory.can_redo?(@history)} class="codeome-tool-btn" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
             <span class="codeome-toolbar-sep"></span>
-            <button type="button" phx-click="open_snippet_form" disabled={!has_selection?(@selection)} class="codeome-tool-btn" title="Save selection as snippet">Save as snippet</button>
+            <button type="button" phx-click="open_snippet_form" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Save selection as snippet">Save as snippet</button>
           </div>
-          <div class="codeome-listing-pane-title">Codeome — {length(@buffer)} ops</div>
+          <div class="codeome-listing-pane-title">Codeome — {len} ops</div>
+          <datalist id="opcode-datalist">
+            <%= for op <- Lenies.Codeome.Opcodes.all() do %>
+              <option value={Atom.to_string(op)}></option>
+            <% end %>
+          </datalist>
           <div
             class="codeome-blocks"
             id={"codeome-blocks-#{@mode}-#{@selected_hash || "new"}"}
@@ -734,10 +840,19 @@ defmodule LeniesWeb.EditorLive do
           >
             <%= for {opcode, idx} <- Enum.with_index(@buffer) do %>
               <div
+                class={["codeome-gap", caret_here?(@caret, idx) && "codeome-gap-caret"]}
+                data-gap={idx}
+                data-caret-at={(caret_here?(@caret, idx) && idx) || nil}
+                phx-click="place_caret"
+                phx-value-gap={idx}
+              >
+              </div>
+              <div
                 class={[
                   "codeome-block codeome-block-editable op op-" <>
                     Atom.to_string(Disassembler.opcode_class(opcode)),
-                  selected?(@selection, idx) && "codeome-block-selected"
+                  selected?(range, idx) && "codeome-block-selected",
+                  MapSet.member?(template_nops, idx) && "codeome-template-nop"
                 ]}
                 data-idx={idx}
               >
@@ -745,7 +860,44 @@ defmodule LeniesWeb.EditorLive do
                 <span class="codeome-block-idx">
                   {String.pad_leading(Integer.to_string(idx), 3, "0")}
                 </span>
-                <span class="codeome-block-name">{Atom.to_string(opcode) |> String.upcase()}</span>
+                <%= if idx == @editing_index do %>
+                  <form phx-submit="submit_replace" class="codeome-inline-edit">
+                    <input type="hidden" name="index" value={idx} />
+                    <input
+                      type="text"
+                      name="opcode"
+                      value={Atom.to_string(opcode)}
+                      list="opcode-datalist"
+                      autocomplete="off"
+                      spellcheck="false"
+                      phx-blur="cancel_inline_edit"
+                      phx-keydown="cancel_inline_edit"
+                      phx-key="Escape"
+                      phx-mounted={JS.focus()}
+                      class="codeome-inline-input"
+                    />
+                    <%= if @inline_edit_error do %>
+                      <span class="codeome-inline-error" title={@inline_edit_error}>⚠</span>
+                    <% end %>
+                  </form>
+                <% else %>
+                  <span class="codeome-block-name">{Atom.to_string(opcode) |> String.upcase()}</span>
+                <% end %>
+                <%= case Map.get(@jump_targets, idx) do %>
+                  <% {:ok, target} -> %>
+                    <button
+                      type="button"
+                      phx-click="place_caret"
+                      phx-value-gap={target}
+                      class="codeome-jump-badge"
+                      title={"Jumps to ##{target}"}
+                    >
+                      → {String.pad_leading(Integer.to_string(target), 3, "0")}
+                    </button>
+                  <% :not_found -> %>
+                    <span class="codeome-jump-badge codeome-jump-badge-missing" title="No template match">→ ✕</span>
+                  <% nil -> %>
+                <% end %>
                 <span class="codeome-block-actions">
                   <button
                     type="button"
@@ -759,12 +911,26 @@ defmodule LeniesWeb.EditorLive do
                 </span>
               </div>
             <% end %>
+            <div
+              class={["codeome-gap codeome-gap-end", caret_here?(@caret, len) && "codeome-gap-caret"]}
+              data-gap={len}
+              data-caret-at={(caret_here?(@caret, len) && len) || nil}
+              phx-click="place_caret"
+              phx-value-gap={len}
+            >
+            </div>
           </div>
         </section>
       </div>
     </div>
     """
   end
+
+  defp caret_pair(socket), do: {socket.assigns.caret, socket.assigns.anchor}
+
+  defp put_caret(socket, {c, a}), do: assign(socket, caret: c, anchor: a)
+
+  defp current_range(socket), do: EditorCaret.derive_range(caret_pair(socket))
 
   defp maybe_assign(socket, _key, nil), do: socket
   defp maybe_assign(socket, key, value), do: assign(socket, key, value)
@@ -787,6 +953,8 @@ defmodule LeniesWeb.EditorLive do
 
   defp selected?(nil, _idx), do: false
   defp selected?({lo, hi}, idx), do: idx >= lo and idx <= hi
+
+  defp caret_here?(caret, gap), do: caret == gap
 
   defp has_selection?(nil), do: false
   defp has_selection?({_lo, _hi}), do: true
@@ -816,6 +984,7 @@ defmodule LeniesWeb.EditorLive do
     |> assign(:dirty, dirty)
     |> assign(:validation, LeniesWeb.CodeomeBuffer.validate(new_buffer))
     |> assign(:economics, current_economics(new_buffer))
+    |> assign(:jump_targets, LeniesWeb.JumpTargets.targets(new_buffer))
   end
 
   # Reads `eat_amount` / `attack_damage` from Application env at the
@@ -829,9 +998,25 @@ defmodule LeniesWeb.EditorLive do
     LeniesWeb.CodeomeBuffer.economics(buffer, eat_amount, attack_damage)
   end
 
-  # Paste lands right after the selection; with no selection, at the end.
-  defp paste_index(nil, len), do: len
-  defp paste_index({_lo, hi}, _len), do: hi + 1
+  # Inserts `opcodes` at the caret. If a selection is active, deletes it first
+  # (replace-on-insert), then inserts at the range start, leaving a collapsed
+  # caret immediately after the inserted run.
+  defp insert_at_caret(socket, opcodes) when is_list(opcodes) do
+    {buffer, at} =
+      case current_range(socket) do
+        nil ->
+          {socket.assigns.buffer, socket.assigns.caret}
+
+        {lo, _hi} = range ->
+          {CodeomeBuffer.delete_range(socket.assigns.buffer, range), lo}
+      end
+
+    new_buffer = CodeomeBuffer.insert_many(buffer, at, opcodes)
+
+    socket
+    |> put_caret(EditorCaret.after_insert(at, length(opcodes)))
+    |> commit_buffer_change(new_buffer)
+  end
 
   # `select_block` indices come from the editor's own JS hook (always
   # numeric), but parse defensively: unparseable input becomes -1, which
@@ -916,6 +1101,29 @@ defmodule LeniesWeb.EditorLive do
     rescue
       ArgumentError -> :error
     end
+  end
+
+  @jump_opcodes LeniesWeb.JumpTargets.jump_opcodes()
+
+  # Indices of nop_0/nop_1 that form the template immediately following a jump.
+  defp template_nop_indices(buffer) do
+    max_len = Application.get_env(:lenies, :template_max_len, 8)
+
+    buffer
+    |> Enum.with_index()
+    |> Enum.flat_map(fn
+      {op, i} when op in @jump_opcodes ->
+        Enum.reduce_while((i + 1)..(i + max_len)//1, [], fn j, acc ->
+          case Enum.at(buffer, j) do
+            n when n in [:nop_0, :nop_1] -> {:cont, [j | acc]}
+            _ -> {:halt, acc}
+          end
+        end)
+
+      _ ->
+        []
+    end)
+    |> MapSet.new()
   end
 
   defp grouped_opcodes do

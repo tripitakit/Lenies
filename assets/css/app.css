@@ -1010,3 +1010,19 @@
   transform: rotate(180deg);
   background: rgba(34, 211, 238, 0.15);
 }
+
+.codeome-gap { height: 6px; cursor: text; }
+.codeome-gap-end { min-height: 24px; flex: 1; }
+.codeome-gap-caret { position: relative; }
+.codeome-gap-caret::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 2px; height: 2px;
+  background: var(--cyan-400, #22d3ee);
+  animation: codeome-caret-blink 1s step-end infinite;
+}
+@keyframes codeome-caret-blink { 50% { opacity: 0; } }
+.codeome-jump-badge { font-size: 10px; padding: 0 4px; margin-left: 6px; border: 1px solid var(--cyan-500, #06b6d4); color: var(--cyan-300, #67e8f9); background: transparent; cursor: pointer; }
+.codeome-jump-badge-missing { border-color: #f59e0b; color: #fbbf24; cursor: default; }
+.codeome-inline-edit { display: inline-flex; align-items: center; gap: 4px; }
+.codeome-inline-input { font-size: 12px; width: 9ch; background: #0a0f1a; color: #e2e8f0; border: 1px solid var(--cyan-500, #06b6d4); padding: 0 4px; }
+.codeome-inline-error { color: #fbbf24; font-size: 11px; }
+.codeome-template-nop { outline: 1px dashed rgba(103, 232, 249, 0.5); outline-offset: -1px; }

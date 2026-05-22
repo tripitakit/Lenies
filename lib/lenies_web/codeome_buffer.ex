@@ -85,6 +85,28 @@ defmodule LeniesWeb.CodeomeBuffer do
     before ++ opcodes ++ rest
   end
 
+  @doc """
+  Move the inclusive block range `{lo, hi}` so it lands at gap `to_gap`
+  (gap coordinates of the *original* buffer). Dropping inside the moved range
+  is a no-op.
+  """
+  @spec move_range(buffer(), {non_neg_integer(), non_neg_integer()}, non_neg_integer()) ::
+          buffer()
+  def move_range(buffer, {lo, hi}, to_gap) when lo >= 0 and hi >= lo and to_gap >= 0 do
+    slice = Enum.slice(buffer, lo..hi)
+    without = delete_range(buffer, {lo, hi})
+    removed = hi - lo + 1
+
+    adj =
+      cond do
+        to_gap <= lo -> to_gap
+        to_gap <= hi + 1 -> lo
+        true -> to_gap - removed
+      end
+
+    insert_many(without, adj, slice)
+  end
+
   @spec validate(buffer()) ::
           {:ok, %{len: non_neg_integer(), non_nops: non_neg_integer()}}
           | {:error, [validation_error()]}

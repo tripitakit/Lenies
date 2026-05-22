@@ -229,16 +229,18 @@ defmodule LeniesWeb.EditorLiveTest do
       |> Enum.map(fn [_, name] -> name end)
     end
 
-    test "copy then paste duplicates the range after the selection", %{conn: conn} do
+    test "copy then paste replaces the active selection with the clipboard", %{conn: conn} do
       view = seeded_editor2(conn)
+      # Select blocks 0..1 (PUSH0, PUSH1) and copy them.
       render_hook(view, "select_block", %{"index" => 0, "shift" => false})
       render_hook(view, "select_block", %{"index" => 1, "shift" => true})
       render_hook(view, "copy_selection", %{})
+      # Paste with the selection still active: replaces selected blocks with the clipboard.
+      # clipboard=[push0,push1], delete {0,1} → [add,move,eat], insert at 0 → [push0,push1,add,move,eat]
       html = render_hook(view, "paste_clipboard", %{})
-      assert listing_opcodes(html) ==
-               ["PUSH0", "PUSH1", "PUSH0", "PUSH1", "ADD", "MOVE", "EAT"]
-      # paste selects the inserted range (PUSH0 PUSH1 at idx 2..3)
-      assert (Regex.scan(~r/codeome-block-selected/, html) |> length()) == 2
+      assert listing_opcodes(html) == ["PUSH0", "PUSH1", "ADD", "MOVE", "EAT"]
+      # caret collapsed just after inserted run (gap 2), no selection
+      refute html =~ "codeome-block-selected"
     end
 
     test "cut removes the range and fills the clipboard", %{conn: conn} do
@@ -248,8 +250,11 @@ defmodule LeniesWeb.EditorLiveTest do
       html = render_hook(view, "cut_selection", %{})
       assert listing_opcodes(html) == ["PUSH0", "MOVE", "EAT"]
       refute html =~ "codeome-block-selected"
+      # After cut, caret collapses to the deletion site (gap 1 = between PUSH0 and
+      # MOVE). Paste inserts the clipboard [PUSH1, ADD] at gap 1, yielding:
+      # [PUSH0, PUSH1, ADD, MOVE, EAT].
       html2 = render_hook(view, "paste_clipboard", %{})
-      assert listing_opcodes(html2) == ["PUSH0", "MOVE", "EAT", "PUSH1", "ADD"]
+      assert listing_opcodes(html2) == ["PUSH0", "PUSH1", "ADD", "MOVE", "EAT"]
     end
 
     test "delete_selection removes the range", %{conn: conn} do
@@ -331,10 +336,12 @@ defmodule LeniesWeb.EditorLiveTest do
 
     test "paste is undoable", %{conn: conn} do
       view = seeded_editor3(conn)
+      # Copy block 0, clear the selection, then paste at end (gap 3).
       render_hook(view, "select_block", %{"index" => 0, "shift" => false})
       render_hook(view, "copy_selection", %{})
+      render_hook(view, "move_caret_end", %{"to" => "end"})
       pasted = render_hook(view, "paste_clipboard", %{})
-      assert names(pasted) == ["PUSH0", "PUSH0", "PUSH1", "ADD"]
+      assert names(pasted) == ["PUSH0", "PUSH1", "ADD", "PUSH0"]
 
       undone = render_hook(view, "undo", %{})
       assert names(undone) == ["PUSH0", "PUSH1", "ADD"]
@@ -382,7 +389,8 @@ defmodule LeniesWeb.EditorLiveTest do
       assert html =~ "Pair"
       assert [%{name: "Pair", opcodes: [:push0, :push1]}] = Lenies.Snippets.Store.all()
 
-      render_hook(view, "clear_selection", %{})
+      # Move caret to end so the snippet inserts after the existing ops.
+      render_hook(view, "move_caret_end", %{"to" => "end"})
       html2 = render_hook(view, "insert_snippet", %{"id" => "pair"})
       assert names4(html2) == ["PUSH0", "PUSH1", "ADD", "PUSH0", "PUSH1"]
     end
@@ -450,5 +458,189 @@ defmodule LeniesWeb.EditorLiveTest do
       render_hook(view, "submit_opcode_text", %{"opcodes" => "push0"})
       refute render(view) =~ ~r/phx-click="undo"[^>]*disabled/
     end
+  end
+
+  test "clicking a gap places a collapsed caret", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0"})
+    # buffer len 1; caret defaults to end (gap 1). Click gap 0.
+    render_hook(view, "place_caret", %{"gap" => 0})
+    assert has_element?(view, "[data-caret-at='0']")
+    refute has_element?(view, "[data-caret-at='1']")
+  end
+
+  test "clicking a block selects exactly that block", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+    render_hook(view, "select_block", %{"index" => 1, "shift" => false})
+    assert has_element?(view, ".codeome-block-selected[data-idx='1']")
+    refute has_element?(view, ".codeome-block-selected[data-idx='0']")
+  end
+
+  test "move_caret up and down navigate through gaps", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
+    render_hook(view, "move_caret", %{"dir" => "up", "extend" => false})
+    render_hook(view, "move_caret", %{"dir" => "up", "extend" => false})
+    assert has_element?(view, "[data-caret-at='0']")
+    render_hook(view, "move_caret", %{"dir" => "down", "extend" => false})
+    assert has_element?(view, "[data-caret-at='1']")
+  end
+
+  test "Home and End place the caret at the buffer ends", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+    render_hook(view, "move_caret_end", %{"to" => "start"})
+    assert has_element?(view, "[data-caret-at='0']")
+    render_hook(view, "move_caret_end", %{"to" => "end"})
+    assert has_element?(view, "[data-caret-at='3']")
+  end
+
+  test "palette insert lands at the caret, not at the end", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 add"})
+    render_hook(view, "place_caret", %{"gap" => 1})
+    render_hook(view, "edit_insert", %{"index" => 1, "opcode" => "push1"})
+    assert render(view) =~ "PUSH1"
+    assert has_element?(view, "[data-caret-at='2']")
+  end
+
+  test "inserting with an active selection replaces it", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+    render_hook(view, "select_block", %{"index" => 1, "shift" => false})
+    render_hook(view, "select_block", %{"index" => 2, "shift" => true})
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "eat"})
+    html = render(view)
+    assert html =~ "2 ops"
+    block_names =
+      Regex.scan(~r/codeome-block-name">([A-Z0-9_]+)</, html)
+      |> Enum.map(fn [_, n] -> n end)
+    assert block_names == ["PUSH0", "EAT"]
+  end
+
+  test "snippet inserts at the caret", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    :ok = Lenies.Snippets.Store.save(%{id: "twoops", name: "twoops", opcodes: [:push0, :push1]})
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "add eat"})
+    render_hook(view, "place_caret", %{"gap" => 1})
+    render_hook(view, "insert_snippet", %{"id" => "twoops"})
+    assert has_element?(view, "[data-caret-at='3']")
+  end
+
+  test "dropping a snippet at a gap inserts it there", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    :ok = Lenies.Snippets.Store.save(%{id: "pp", name: "pp", opcodes: [:push0, :push1]})
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "add eat"})
+    render_hook(view, "insert_snippet_at", %{"id" => "pp", "index" => 1})
+    assert render(view) =~ "4 ops"
+    assert has_element?(view, "[data-caret-at='3']")
+  end
+
+  # Helper: extract the ordered list of opcode names from the listing pane blocks.
+  # Regex targets .codeome-block-name spans which only appear in the listing, not
+  # the palette chips (which use class "palette-chip", not "codeome-block-name").
+  defp listing_names(html) do
+    Regex.scan(~r/codeome-block-name">([A-Z0-9_]+)</, html)
+    |> Enum.map(fn [_, name] -> name end)
+  end
+
+  test "move_range relocates the selected block range", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add eat"})
+    render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+    render_hook(view, "select_block", %{"index" => 1, "shift" => true})
+    render_hook(view, "move_range", %{"to" => 4})
+    html = render(view)
+    # Buffer should be [add, eat, push0, push1] after moving range {0,1} to gap 4.
+    # Using listing_names to verify buffer order — avoids matching palette chip text.
+    assert listing_names(html) == ["ADD", "EAT", "PUSH0", "PUSH1"]
+  end
+
+  test "Alt+arrow nudges the selection down by one", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+    render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+    render_hook(view, "move_range_step", %{"dir" => "down"})
+    html = render(view)
+    # Buffer should be [push1, push0, add] after nudging push0 down by one.
+    assert listing_names(html) == ["PUSH1", "PUSH0", "ADD"]
+  end
+
+  test "duplicate copies the selection after itself and selects the copy", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
+    render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+    render_hook(view, "duplicate_selection", %{})
+    assert render(view) =~ "3 ops"
+    # The copy is at index 1 (immediately after the original at index 0).
+    assert has_element?(view, ".codeome-block-selected[data-idx='1']")
+  end
+
+  test "undo collapses the caret to the end of the restored buffer", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+    render_hook(view, "place_caret", %{"gap" => 3})
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "eat"})
+    render_hook(view, "undo", %{})
+    assert has_element?(view, "[data-caret-at='3']")
+    refute has_element?(view, "[data-caret-at='4']")
+  end
+
+  # Note: we use listing_names/1 (already defined above) to check the buffer
+  # order in the listing pane — this avoids false positives from palette chips
+  # (e.g. PUSH1 appears in the palette regardless of buffer contents).
+  test "submit_replace swaps the opcode at an index", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+    render_hook(view, "submit_replace", %{"index" => 1, "opcode" => "eat"})
+    html = render(view)
+    assert listing_names(html) == ["PUSH0", "EAT", "ADD"]
+  end
+
+  test "submit_replace with an unknown opcode keeps the editor open and shows an error", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
+    render_hook(view, "start_inline_edit", %{"index" => 0})
+    render_hook(view, "submit_replace", %{"index" => 0, "opcode" => "notreal"})
+    html = render(view)
+    assert html =~ "Codeome — 2 ops"                    # buffer unchanged (still 2 ops)
+    assert html =~ "codeome-inline-input"               # editor still open
+    assert html =~ "codeome-inline-error"               # error shown
+    # block at idx 0 is being edited (input, not span); idx 1 still shows its name
+    assert listing_names(html) == ["PUSH1"]
+  end
+
+  test "submit_replace with a valid opcode closes the editor", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+    render_hook(view, "start_inline_edit", %{"index" => 1})
+    render_hook(view, "submit_replace", %{"index" => 1, "opcode" => "eat"})
+    html = render(view)
+    assert listing_names(html) == ["PUSH0", "EAT", "ADD"]
+    refute html =~ "codeome-inline-input"
+  end
+
+  test "cancel_inline_edit closes the inline editor", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
+    render_hook(view, "start_inline_edit", %{"index" => 0})
+    assert render(view) =~ "codeome-inline-input"
+    render_hook(view, "cancel_inline_edit", %{})
+    refute render(view) =~ "codeome-inline-input"
+  end
+
+  test "a jump block shows its target index badge", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "jmp_t nop_0 add nop_1 eat"})
+    html = render(view)
+    assert html =~ "codeome-jump-badge"
+    assert html =~ "003"
+  end
+
+  test "an unresolved jump shows the not-found badge", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "jmp_t nop_0 add eat"})
+    assert render(view) =~ "codeome-jump-badge-missing"
   end
 end

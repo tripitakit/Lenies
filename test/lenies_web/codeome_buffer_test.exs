@@ -290,4 +290,22 @@ defmodule LeniesWeb.CodeomeBufferTest do
       assert e.net == -10.0
     end
   end
+
+  describe "move_range/3" do
+    test "moves a range forward, adjusting for the removed elements" do
+      assert CodeomeBuffer.move_range([:a, :b, :c, :d, :e], {1, 2}, 4) == [:a, :d, :b, :c, :e]
+    end
+
+    test "moves a range to the start" do
+      assert CodeomeBuffer.move_range([:a, :b, :c, :d, :e], {1, 2}, 0) == [:b, :c, :a, :d, :e]
+    end
+
+    test "dropping inside the moved range is a no-op" do
+      assert CodeomeBuffer.move_range([:a, :b, :c, :d, :e], {1, 2}, 2) == [:a, :b, :c, :d, :e]
+    end
+
+    test "moves a single-element range to the end" do
+      assert CodeomeBuffer.move_range([:a, :b, :c], {0, 0}, 3) == [:b, :c, :a]
+    end
+  end
 end
