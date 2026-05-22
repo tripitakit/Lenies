@@ -1090,7 +1090,7 @@ defmodule LeniesWeb.EditorLive do
     end
   end
 
-  @jump_opcodes [:jmp_t, :jz_t, :jnz_t, :call_t]
+  @jump_opcodes LeniesWeb.JumpTargets.jump_opcodes()
 
   # Indices of nop_0/nop_1 that form the template immediately following a jump.
   defp template_nop_indices(buffer) do

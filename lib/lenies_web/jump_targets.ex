@@ -11,6 +11,10 @@ defmodule LeniesWeb.JumpTargets do
 
   @jumps [:jmp_t, :jz_t, :jnz_t, :call_t]
 
+  @doc "The template-jump opcodes (`:jmp_t`, `:jz_t`, `:jnz_t`, `:call_t`)."
+  @spec jump_opcodes() :: [atom()]
+  def jump_opcodes, do: @jumps
+
   @doc """
   Map of `jump_index => {:ok, target_index} | :not_found` for every template
   jump in `buffer`. The target is computed exactly as the interpreter does:
