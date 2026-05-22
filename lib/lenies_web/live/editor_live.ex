@@ -133,12 +133,10 @@ defmodule LeniesWeb.EditorLive do
       opcode = String.to_existing_atom(opcode_str)
 
       if Lenies.Codeome.Opcodes.known?(opcode) do
-        new_buffer = LeniesWeb.CodeomeBuffer.insert(socket.assigns.buffer, index, opcode)
-
-        {:noreply,
-         socket
-         |> put_caret(EditorCaret.place(length(new_buffer)))
-         |> commit_buffer_change(new_buffer)}
+        # `index` from a palette drop is authoritative for placement: move the
+        # caret there first, then insert at the caret.
+        socket = put_caret(socket, EditorCaret.place(index))
+        {:noreply, insert_at_caret(socket, [opcode])}
       else
         {:noreply, socket}
       end
@@ -231,12 +229,9 @@ defmodule LeniesWeb.EditorLive do
         {:noreply, assign(socket, text_input_value: "", text_input_error: nil)}
 
       {:ok, opcodes} ->
-        new_buffer = socket.assigns.buffer ++ opcodes
-
         {:noreply,
          socket
-         |> put_caret(EditorCaret.place(length(new_buffer)))
-         |> commit_buffer_change(new_buffer)
+         |> insert_at_caret(opcodes)
          |> assign(text_input_value: "", text_input_error: nil)}
 
       {:error, invalid} ->
@@ -330,20 +325,8 @@ defmodule LeniesWeb.EditorLive do
 
   def handle_event("paste_clipboard", _params, socket) do
     case socket.assigns.clipboard do
-      [] ->
-        {:noreply, socket}
-
-      clip ->
-        # Paste inserts AFTER the selection (it does not replace it), then
-        # selects the inserted range. This matches the editor's chosen rule.
-        at = paste_index(current_range(socket), length(socket.assigns.buffer))
-        new_buffer = CodeomeBuffer.insert_many(socket.assigns.buffer, at, clip)
-        pasted = EditorCaret.select_inserted(at, length(clip))
-
-        {:noreply,
-         socket
-         |> put_caret(pasted)
-         |> commit_buffer_change(new_buffer)}
+      [] -> {:noreply, socket}
+      clip -> {:noreply, insert_at_caret(socket, clip)}
     end
   end
 
@@ -439,18 +422,8 @@ defmodule LeniesWeb.EditorLive do
 
   def handle_event("insert_snippet", %{"id" => id}, socket) do
     case Lenies.Snippets.Store.get(id) do
-      %{opcodes: ops} when ops != [] ->
-        at = paste_index(current_range(socket), length(socket.assigns.buffer))
-        new_buffer = CodeomeBuffer.insert_many(socket.assigns.buffer, at, ops)
-        inserted = EditorCaret.select_inserted(at, length(ops))
-
-        {:noreply,
-         socket
-         |> put_caret(inserted)
-         |> commit_buffer_change(new_buffer)}
-
-      _ ->
-        {:noreply, socket}
+      %{opcodes: ops} when ops != [] -> {:noreply, insert_at_caret(socket, ops)}
+      _ -> {:noreply, socket}
     end
   end
 
@@ -889,9 +862,25 @@ defmodule LeniesWeb.EditorLive do
     LeniesWeb.CodeomeBuffer.economics(buffer, eat_amount, attack_damage)
   end
 
-  # Paste lands right after the selection; with no selection, at the end.
-  defp paste_index(nil, len), do: len
-  defp paste_index({_lo, hi}, _len), do: hi + 1
+  # Inserts `opcodes` at the caret. If a selection is active, deletes it first
+  # (replace-on-insert), then inserts at the range start, leaving a collapsed
+  # caret immediately after the inserted run.
+  defp insert_at_caret(socket, opcodes) when is_list(opcodes) do
+    {buffer, at} =
+      case current_range(socket) do
+        nil ->
+          {socket.assigns.buffer, socket.assigns.caret}
+
+        {lo, _hi} = range ->
+          {CodeomeBuffer.delete_range(socket.assigns.buffer, range), lo}
+      end
+
+    new_buffer = CodeomeBuffer.insert_many(buffer, at, opcodes)
+
+    socket
+    |> put_caret(EditorCaret.after_insert(at, length(opcodes)))
+    |> commit_buffer_change(new_buffer)
+  end
 
   # `select_block` indices come from the editor's own JS hook (always
   # numeric), but parse defensively: unparseable input becomes -1, which

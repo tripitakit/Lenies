@@ -229,16 +229,18 @@ defmodule LeniesWeb.EditorLiveTest do
       |> Enum.map(fn [_, name] -> name end)
     end
 
-    test "copy then paste duplicates the range after the selection", %{conn: conn} do
+    test "copy then paste replaces the active selection with the clipboard", %{conn: conn} do
       view = seeded_editor2(conn)
+      # Select blocks 0..1 (PUSH0, PUSH1) and copy them.
       render_hook(view, "select_block", %{"index" => 0, "shift" => false})
       render_hook(view, "select_block", %{"index" => 1, "shift" => true})
       render_hook(view, "copy_selection", %{})
+      # Paste with the selection still active: replaces selected blocks with the clipboard.
+      # clipboard=[push0,push1], delete {0,1} → [add,move,eat], insert at 0 → [push0,push1,add,move,eat]
       html = render_hook(view, "paste_clipboard", %{})
-      assert listing_opcodes(html) ==
-               ["PUSH0", "PUSH1", "PUSH0", "PUSH1", "ADD", "MOVE", "EAT"]
-      # paste selects the inserted range (PUSH0 PUSH1 at idx 2..3)
-      assert (Regex.scan(~r/codeome-block-selected/, html) |> length()) == 2
+      assert listing_opcodes(html) == ["PUSH0", "PUSH1", "ADD", "MOVE", "EAT"]
+      # caret collapsed just after inserted run (gap 2), no selection
+      refute html =~ "codeome-block-selected"
     end
 
     test "cut removes the range and fills the clipboard", %{conn: conn} do
@@ -331,10 +333,12 @@ defmodule LeniesWeb.EditorLiveTest do
 
     test "paste is undoable", %{conn: conn} do
       view = seeded_editor3(conn)
+      # Copy block 0, clear the selection, then paste at end (gap 3).
       render_hook(view, "select_block", %{"index" => 0, "shift" => false})
       render_hook(view, "copy_selection", %{})
+      render_hook(view, "move_caret_end", %{"to" => "end"})
       pasted = render_hook(view, "paste_clipboard", %{})
-      assert names(pasted) == ["PUSH0", "PUSH0", "PUSH1", "ADD"]
+      assert names(pasted) == ["PUSH0", "PUSH1", "ADD", "PUSH0"]
 
       undone = render_hook(view, "undo", %{})
       assert names(undone) == ["PUSH0", "PUSH1", "ADD"]
@@ -382,7 +386,8 @@ defmodule LeniesWeb.EditorLiveTest do
       assert html =~ "Pair"
       assert [%{name: "Pair", opcodes: [:push0, :push1]}] = Lenies.Snippets.Store.all()
 
-      render_hook(view, "clear_selection", %{})
+      # Move caret to end so the snippet inserts after the existing ops.
+      render_hook(view, "move_caret_end", %{"to" => "end"})
       html2 = render_hook(view, "insert_snippet", %{"id" => "pair"})
       assert names4(html2) == ["PUSH0", "PUSH1", "ADD", "PUSH0", "PUSH1"]
     end
@@ -485,6 +490,38 @@ defmodule LeniesWeb.EditorLiveTest do
     render_hook(view, "move_caret_end", %{"to" => "start"})
     assert has_element?(view, "[data-caret-at='0']")
     render_hook(view, "move_caret_end", %{"to" => "end"})
+    assert has_element?(view, "[data-caret-at='3']")
+  end
+
+  test "palette insert lands at the caret, not at the end", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 add"})
+    render_hook(view, "place_caret", %{"gap" => 1})
+    render_hook(view, "edit_insert", %{"index" => 1, "opcode" => "push1"})
+    assert render(view) =~ "PUSH1"
+    assert has_element?(view, "[data-caret-at='2']")
+  end
+
+  test "inserting with an active selection replaces it", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+    render_hook(view, "select_block", %{"index" => 1, "shift" => false})
+    render_hook(view, "select_block", %{"index" => 2, "shift" => true})
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "eat"})
+    html = render(view)
+    assert html =~ "2 ops"
+    block_names =
+      Regex.scan(~r/codeome-block-name">([A-Z0-9_]+)</, html)
+      |> Enum.map(fn [_, n] -> n end)
+    assert block_names == ["PUSH0", "EAT"]
+  end
+
+  test "snippet inserts at the caret", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    :ok = Lenies.Snippets.Store.save(%{id: "twoops", name: "twoops", opcodes: [:push0, :push1]})
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "add eat"})
+    render_hook(view, "place_caret", %{"gap" => 1})
+    render_hook(view, "insert_snippet", %{"id" => "twoops"})
     assert has_element?(view, "[data-caret-at='3']")
   end
 end
