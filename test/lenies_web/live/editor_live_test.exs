@@ -454,8 +454,11 @@ defmodule LeniesWeb.EditorLiveTest do
 
   test "clicking a gap places a collapsed caret", %{conn: conn} do
     {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0"})
+    # buffer len 1; caret defaults to end (gap 1). Click gap 0.
     render_hook(view, "place_caret", %{"gap" => 0})
     assert has_element?(view, "[data-caret-at='0']")
+    refute has_element?(view, "[data-caret-at='1']")
   end
 
   test "clicking a block selects exactly that block", %{conn: conn} do
@@ -466,7 +469,7 @@ defmodule LeniesWeb.EditorLiveTest do
     refute has_element?(view, ".codeome-block-selected[data-idx='0']")
   end
 
-  test "arrow-down moves the caret one gap", %{conn: conn} do
+  test "move_caret up and down navigate through gaps", %{conn: conn} do
     {:ok, view, _} = live(conn, "/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
     render_hook(view, "move_caret", %{"dir" => "up", "extend" => false})

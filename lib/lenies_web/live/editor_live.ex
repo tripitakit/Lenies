@@ -743,21 +743,21 @@ defmodule LeniesWeb.EditorLive do
               </div>
             </div>
           </div>
-          <% toolbar_range = LeniesWeb.EditorCaret.derive_range({@caret, @anchor}) %>
+          <% range = EditorCaret.derive_range({@caret, @anchor}) %>
+          <% len = length(@buffer) %>
           <div class="codeome-toolbar">
-            <button type="button" phx-click="copy_selection" disabled={!has_selection?(toolbar_range)} class="codeome-tool-btn" title="Copy (Ctrl/Cmd+C)">Copy</button>
-            <button type="button" phx-click="cut_selection" disabled={!has_selection?(toolbar_range)} class="codeome-tool-btn" title="Cut (Ctrl/Cmd+X)">Cut</button>
+            <button type="button" phx-click="copy_selection" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Copy (Ctrl/Cmd+C)">Copy</button>
+            <button type="button" phx-click="cut_selection" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Cut (Ctrl/Cmd+X)">Cut</button>
             <button type="button" phx-click="paste_clipboard" disabled={!has_clipboard?(@clipboard)} class="codeome-tool-btn" title="Paste (Ctrl/Cmd+V)">Paste</button>
-            <button type="button" phx-click="duplicate_selection" disabled={!has_selection?(toolbar_range)} class="codeome-tool-btn" title="Duplicate (Ctrl/Cmd+D)">Duplicate</button>
-            <button type="button" phx-click="delete_selection" disabled={!has_selection?(toolbar_range)} class="codeome-tool-btn" title="Delete (Del)">Delete</button>
+            <button type="button" phx-click="duplicate_selection" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Duplicate (Ctrl/Cmd+D)">Duplicate</button>
+            <button type="button" phx-click="delete_selection" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Delete (Del)">Delete</button>
             <span class="codeome-toolbar-sep"></span>
             <button type="button" phx-click="undo" disabled={!EditorHistory.can_undo?(@history)} class="codeome-tool-btn" title="Undo (Ctrl/Cmd+Z)">Undo</button>
             <button type="button" phx-click="redo" disabled={!EditorHistory.can_redo?(@history)} class="codeome-tool-btn" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
             <span class="codeome-toolbar-sep"></span>
-            <button type="button" phx-click="open_snippet_form" disabled={!has_selection?(toolbar_range)} class="codeome-tool-btn" title="Save selection as snippet">Save as snippet</button>
+            <button type="button" phx-click="open_snippet_form" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Save selection as snippet">Save as snippet</button>
           </div>
-          <div class="codeome-listing-pane-title">Codeome — {length(@buffer)} ops</div>
-          <% range = toolbar_range %>
+          <div class="codeome-listing-pane-title">Codeome — {len} ops</div>
           <div
             class="codeome-blocks"
             id={"codeome-blocks-#{@mode}-#{@selected_hash || "new"}"}
@@ -767,7 +767,7 @@ defmodule LeniesWeb.EditorLive do
               <div
                 class={["codeome-gap", caret_here?(@caret, idx) && "codeome-gap-caret"]}
                 data-gap={idx}
-                data-caret-at={caret_here?(@caret, idx) && idx}
+                data-caret-at={(caret_here?(@caret, idx) && idx) || nil}
                 phx-click="place_caret"
                 phx-value-gap={idx}
               >
@@ -799,11 +799,11 @@ defmodule LeniesWeb.EditorLive do
               </div>
             <% end %>
             <div
-              class={["codeome-gap codeome-gap-end", caret_here?(@caret, length(@buffer)) && "codeome-gap-caret"]}
-              data-gap={length(@buffer)}
-              data-caret-at={caret_here?(@caret, length(@buffer)) && length(@buffer)}
+              class={["codeome-gap codeome-gap-end", caret_here?(@caret, len) && "codeome-gap-caret"]}
+              data-gap={len}
+              data-caret-at={(caret_here?(@caret, len) && len) || nil}
               phx-click="place_caret"
-              phx-value-gap={length(@buffer)}
+              phx-value-gap={len}
             >
             </div>
           </div>
