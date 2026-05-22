@@ -586,4 +586,23 @@ defmodule LeniesWeb.EditorLiveTest do
     assert has_element?(view, "[data-caret-at='3']")
     refute has_element?(view, "[data-caret-at='4']")
   end
+
+  # Note: we use listing_names/1 (already defined above) to check the buffer
+  # order in the listing pane — this avoids false positives from palette chips
+  # (e.g. PUSH1 appears in the palette regardless of buffer contents).
+  test "submit_replace swaps the opcode at an index", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+    render_hook(view, "submit_replace", %{"index" => 1, "opcode" => "eat"})
+    html = render(view)
+    assert listing_names(html) == ["PUSH0", "EAT", "ADD"]
+  end
+
+  test "submit_replace with an unknown opcode is a no-op", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
+    render_hook(view, "submit_replace", %{"index" => 0, "opcode" => "notreal"})
+    html = render(view)
+    assert listing_names(html) == ["PUSH0", "PUSH1"]
+  end
 end

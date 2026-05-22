@@ -79,6 +79,17 @@ const EditorKeyboard = {
       }
     };
 
+    this.onDblClick = (e) => {
+      if (e.target.closest(".codeome-drag-handle")) return;
+      if (e.target.closest(".codeome-action-btn")) return;
+      const block = e.target.closest(".codeome-block-editable");
+      if (!block || !this.el.contains(block)) return;
+      const idx = parseInt(block.dataset.idx, 10);
+      if (Number.isNaN(idx)) return;
+      this.pushEvent("start_inline_edit", { index: idx });
+    };
+    this.el.addEventListener("dblclick", this.onDblClick);
+
     this.el.addEventListener("click", this.onClick);
     // keydown binds to `document` (not this.el) so shortcuts work without
     // focusing the grid; removed in destroyed(). Assumes a single
@@ -89,8 +100,10 @@ const EditorKeyboard = {
   destroyed() {
     if (this.onClick) this.el.removeEventListener("click", this.onClick);
     if (this.onKeydown) document.removeEventListener("keydown", this.onKeydown);
+    if (this.onDblClick) this.el.removeEventListener("dblclick", this.onDblClick);
     this.onClick = null;
     this.onKeydown = null;
+    this.onDblClick = null;
   },
 };
 

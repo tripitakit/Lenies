@@ -44,6 +44,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:history, EditorHistory.new(100))
       |> assign(:snippets, Lenies.Snippets.Store.all())
       |> assign(:show_snippet_form, false)
+      |> assign(:editing_index, nil)
 
     {:ok, socket}
   end
@@ -489,6 +490,30 @@ defmodule LeniesWeb.EditorLive do
     {:noreply, assign(socket, :snippets, Lenies.Snippets.Store.all())}
   end
 
+  def handle_event("submit_replace", %{"index" => index, "opcode" => opcode_str}, socket) do
+    idx = to_int(index)
+
+    with true <- idx >= 0 and idx < length(socket.assigns.buffer),
+         {:ok, opcode} <- to_known_opcode(String.downcase(to_string(opcode_str))) do
+      new_buffer = CodeomeBuffer.replace(socket.assigns.buffer, idx, opcode)
+
+      {:noreply,
+       socket
+       |> assign(:editing_index, nil)
+       |> commit_buffer_change(new_buffer)}
+    else
+      _ -> {:noreply, assign(socket, :editing_index, nil)}
+    end
+  end
+
+  def handle_event("start_inline_edit", %{"index" => index}, socket) do
+    {:noreply, assign(socket, :editing_index, to_int(index))}
+  end
+
+  def handle_event("cancel_inline_edit", _params, socket) do
+    {:noreply, assign(socket, :editing_index, nil)}
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -793,6 +818,11 @@ defmodule LeniesWeb.EditorLive do
             <button type="button" phx-click="open_snippet_form" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Save selection as snippet">Save as snippet</button>
           </div>
           <div class="codeome-listing-pane-title">Codeome — {len} ops</div>
+          <datalist id="opcode-datalist">
+            <%= for op <- Lenies.Codeome.Opcodes.all() do %>
+              <option value={Atom.to_string(op)}></option>
+            <% end %>
+          </datalist>
           <div
             class="codeome-blocks"
             id={"codeome-blocks-#{@mode}-#{@selected_hash || "new"}"}
@@ -819,7 +849,23 @@ defmodule LeniesWeb.EditorLive do
                 <span class="codeome-block-idx">
                   {String.pad_leading(Integer.to_string(idx), 3, "0")}
                 </span>
-                <span class="codeome-block-name">{Atom.to_string(opcode) |> String.upcase()}</span>
+                <%= if idx == @editing_index do %>
+                  <form phx-submit="submit_replace" class="codeome-inline-edit">
+                    <input type="hidden" name="index" value={idx} />
+                    <input
+                      type="text"
+                      name="opcode"
+                      value={Atom.to_string(opcode)}
+                      list="opcode-datalist"
+                      autocomplete="off"
+                      spellcheck="false"
+                      phx-blur="cancel_inline_edit"
+                      class="codeome-inline-input"
+                    />
+                  </form>
+                <% else %>
+                  <span class="codeome-block-name">{Atom.to_string(opcode) |> String.upcase()}</span>
+                <% end %>
                 <span class="codeome-block-actions">
                   <button
                     type="button"
