@@ -598,12 +598,36 @@ defmodule LeniesWeb.EditorLiveTest do
     assert listing_names(html) == ["PUSH0", "EAT", "ADD"]
   end
 
-  test "submit_replace with an unknown opcode is a no-op", %{conn: conn} do
+  test "submit_replace with an unknown opcode keeps the editor open and shows an error", %{conn: conn} do
     {:ok, view, _} = live(conn, "/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
+    render_hook(view, "start_inline_edit", %{"index" => 0})
     render_hook(view, "submit_replace", %{"index" => 0, "opcode" => "notreal"})
     html = render(view)
-    assert listing_names(html) == ["PUSH0", "PUSH1"]
+    assert html =~ "Codeome — 2 ops"                    # buffer unchanged (still 2 ops)
+    assert html =~ "codeome-inline-input"               # editor still open
+    assert html =~ "codeome-inline-error"               # error shown
+    # block at idx 0 is being edited (input, not span); idx 1 still shows its name
+    assert listing_names(html) == ["PUSH1"]
+  end
+
+  test "submit_replace with a valid opcode closes the editor", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+    render_hook(view, "start_inline_edit", %{"index" => 1})
+    render_hook(view, "submit_replace", %{"index" => 1, "opcode" => "eat"})
+    html = render(view)
+    assert listing_names(html) == ["PUSH0", "EAT", "ADD"]
+    refute html =~ "codeome-inline-input"
+  end
+
+  test "cancel_inline_edit closes the inline editor", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
+    render_hook(view, "start_inline_edit", %{"index" => 0})
+    assert render(view) =~ "codeome-inline-input"
+    render_hook(view, "cancel_inline_edit", %{})
+    refute render(view) =~ "codeome-inline-input"
   end
 
   test "a jump block shows its target index badge", %{conn: conn} do

@@ -1022,4 +1022,7 @@
 @keyframes codeome-caret-blink { 50% { opacity: 0; } }
 .codeome-jump-badge { font-size: 10px; padding: 0 4px; margin-left: 6px; border: 1px solid var(--cyan-500, #06b6d4); color: var(--cyan-300, #67e8f9); background: transparent; cursor: pointer; }
 .codeome-jump-badge-missing { border-color: #f59e0b; color: #fbbf24; cursor: default; }
+.codeome-inline-edit { display: inline-flex; align-items: center; gap: 4px; }
+.codeome-inline-input { font-size: 12px; width: 9ch; background: #0a0f1a; color: #e2e8f0; border: 1px solid var(--cyan-500, #06b6d4); padding: 0 4px; }
+.codeome-inline-error { color: #fbbf24; font-size: 11px; }
 .codeome-template-nop { outline: 1px dashed rgba(103, 232, 249, 0.5); outline-offset: -1px; }

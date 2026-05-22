@@ -45,6 +45,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:snippets, Lenies.Snippets.Store.all())
       |> assign(:show_snippet_form, false)
       |> assign(:editing_index, nil)
+      |> assign(:inline_edit_error, nil)
       |> assign(:jump_targets, LeniesWeb.JumpTargets.targets(buffer))
 
     {:ok, socket}
@@ -494,25 +495,32 @@ defmodule LeniesWeb.EditorLive do
   def handle_event("submit_replace", %{"index" => index, "opcode" => opcode_str}, socket) do
     idx = to_int(index)
 
-    with true <- idx >= 0 and idx < length(socket.assigns.buffer),
-         {:ok, opcode} <- to_known_opcode(String.downcase(to_string(opcode_str))) do
-      new_buffer = CodeomeBuffer.replace(socket.assigns.buffer, idx, opcode)
+    cond do
+      idx < 0 or idx >= length(socket.assigns.buffer) ->
+        {:noreply, assign(socket, editing_index: nil, inline_edit_error: nil)}
 
-      {:noreply,
-       socket
-       |> assign(:editing_index, nil)
-       |> commit_buffer_change(new_buffer)}
-    else
-      _ -> {:noreply, assign(socket, :editing_index, nil)}
+      true ->
+        case to_known_opcode(String.downcase(to_string(opcode_str))) do
+          {:ok, opcode} ->
+            new_buffer = CodeomeBuffer.replace(socket.assigns.buffer, idx, opcode)
+
+            {:noreply,
+             socket
+             |> assign(editing_index: nil, inline_edit_error: nil)
+             |> commit_buffer_change(new_buffer)}
+
+          :error ->
+            {:noreply, assign(socket, editing_index: idx, inline_edit_error: "unknown opcode")}
+        end
     end
   end
 
   def handle_event("start_inline_edit", %{"index" => index}, socket) do
-    {:noreply, assign(socket, :editing_index, to_int(index))}
+    {:noreply, assign(socket, editing_index: to_int(index), inline_edit_error: nil)}
   end
 
   def handle_event("cancel_inline_edit", _params, socket) do
-    {:noreply, assign(socket, :editing_index, nil)}
+    {:noreply, assign(socket, editing_index: nil, inline_edit_error: nil)}
   end
 
   @impl true
@@ -863,9 +871,14 @@ defmodule LeniesWeb.EditorLive do
                       autocomplete="off"
                       spellcheck="false"
                       phx-blur="cancel_inline_edit"
+                      phx-keydown="cancel_inline_edit"
+                      phx-key="Escape"
                       phx-mounted={JS.focus()}
                       class="codeome-inline-input"
                     />
+                    <%= if @inline_edit_error do %>
+                      <span class="codeome-inline-error" title={@inline_edit_error}>⚠</span>
+                    <% end %>
                   </form>
                 <% else %>
                   <span class="codeome-block-name">{Atom.to_string(opcode) |> String.upcase()}</span>
