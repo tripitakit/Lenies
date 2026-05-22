@@ -860,6 +860,7 @@ defmodule LeniesWeb.EditorLive do
                       autocomplete="off"
                       spellcheck="false"
                       phx-blur="cancel_inline_edit"
+                      phx-mounted={JS.focus()}
                       class="codeome-inline-input"
                     />
                   </form>
