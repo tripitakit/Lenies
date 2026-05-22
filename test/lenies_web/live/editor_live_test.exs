@@ -576,4 +576,14 @@ defmodule LeniesWeb.EditorLiveTest do
     # The copy is at index 1 (immediately after the original at index 0).
     assert has_element?(view, ".codeome-block-selected[data-idx='1']")
   end
+
+  test "undo collapses the caret to the end of the restored buffer", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+    render_hook(view, "place_caret", %{"gap" => 3})
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "eat"})
+    render_hook(view, "undo", %{})
+    assert has_element?(view, "[data-caret-at='3']")
+    refute has_element?(view, "[data-caret-at='4']")
+  end
 end
