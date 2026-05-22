@@ -524,4 +524,13 @@ defmodule LeniesWeb.EditorLiveTest do
     render_hook(view, "insert_snippet", %{"id" => "twoops"})
     assert has_element?(view, "[data-caret-at='3']")
   end
+
+  test "dropping a snippet at a gap inserts it there", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    :ok = Lenies.Snippets.Store.save(%{id: "pp", name: "pp", opcodes: [:push0, :push1]})
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "add eat"})
+    render_hook(view, "insert_snippet_at", %{"id" => "pp", "index" => 1})
+    assert render(view) =~ "4 ops"
+    assert has_element?(view, "[data-caret-at='3']")
+  end
 end

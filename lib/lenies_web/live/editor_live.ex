@@ -427,6 +427,19 @@ defmodule LeniesWeb.EditorLive do
     end
   end
 
+  def handle_event("insert_snippet_at", %{"id" => id, "index" => index}, socket) do
+    at = to_int(index) |> max(0) |> min(length(socket.assigns.buffer))
+
+    case Lenies.Snippets.Store.get(id) do
+      %{opcodes: ops} when ops != [] ->
+        socket = put_caret(socket, EditorCaret.place(at))
+        {:noreply, insert_at_caret(socket, ops)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
   def handle_event("delete_snippet", %{"id" => id}, socket) do
     Lenies.Snippets.Store.delete(id)
     {:noreply, assign(socket, :snippets, Lenies.Snippets.Store.all())}
@@ -656,9 +669,9 @@ defmodule LeniesWeb.EditorLive do
             <%= if @snippets == [] do %>
               <p class="codeome-snippets-empty">no snippets — select blocks and press Save as snippet</p>
             <% else %>
-              <div class="codeome-snippets-list">
+              <div class="codeome-snippets-list" id="codeome-snippets-list" phx-hook="SnippetDrag">
                 <%= for s <- @snippets do %>
-                  <div class="codeome-snippet-row">
+                  <div class="codeome-snippet-row" data-snippet-id={s.id}>
                     <button
                       type="button"
                       phx-click="insert_snippet"

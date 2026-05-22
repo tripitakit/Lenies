@@ -71,22 +71,22 @@ const CodeomeSortable = {
         }
       },
       onAdd: (evt) => {
-        const opcode = evt.item?.dataset?.opcode;
-        // SortableJS's `newDraggableIndex` counts only items matching the
-        // target's `draggable` selector (`.codeome-block-editable`). The
-        // dropped clone is a `.palette-chip`, so newDraggableIndex is
-        // unreliable for cross-list adds (often undefined / NaN). Count
-        // editable siblings that precede the dropped element instead —
-        // that is exactly the buffer index where the opcode should land.
         let index = 0;
         let sibling = evt.item.previousElementSibling;
         while (sibling) {
           if (sibling.classList.contains("codeome-block-editable")) index++;
           sibling = sibling.previousElementSibling;
         }
-        if (opcode) {
-          this.pushEvent("edit_insert", { index, opcode });
+
+        const snippetId = evt.item?.dataset?.snippetId;
+        if (snippetId) {
+          this.pushEvent("insert_snippet_at", { id: snippetId, index });
+          evt.item.remove();
+          return;
         }
+
+        const opcode = evt.item?.dataset?.opcode;
+        if (opcode) this.pushEvent("edit_insert", { index, opcode });
         evt.item.remove();
       },
     });
