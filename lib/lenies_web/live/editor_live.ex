@@ -45,6 +45,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:snippets, Lenies.Snippets.Store.all())
       |> assign(:show_snippet_form, false)
       |> assign(:editing_index, nil)
+      |> assign(:jump_targets, LeniesWeb.JumpTargets.targets(buffer))
 
     {:ok, socket}
   end
@@ -805,6 +806,7 @@ defmodule LeniesWeb.EditorLive do
           </div>
           <% range = EditorCaret.derive_range({@caret, @anchor}) %>
           <% len = length(@buffer) %>
+          <% template_nops = template_nop_indices(@buffer) %>
           <div class="codeome-toolbar">
             <button type="button" phx-click="copy_selection" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Copy (Ctrl/Cmd+C)">Copy</button>
             <button type="button" phx-click="cut_selection" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Cut (Ctrl/Cmd+X)">Cut</button>
@@ -841,7 +843,8 @@ defmodule LeniesWeb.EditorLive do
                 class={[
                   "codeome-block codeome-block-editable op op-" <>
                     Atom.to_string(Disassembler.opcode_class(opcode)),
-                  selected?(range, idx) && "codeome-block-selected"
+                  selected?(range, idx) && "codeome-block-selected",
+                  MapSet.member?(template_nops, idx) && "codeome-template-nop"
                 ]}
                 data-idx={idx}
               >
@@ -866,6 +869,21 @@ defmodule LeniesWeb.EditorLive do
                   </form>
                 <% else %>
                   <span class="codeome-block-name">{Atom.to_string(opcode) |> String.upcase()}</span>
+                <% end %>
+                <%= case Map.get(@jump_targets, idx) do %>
+                  <% {:ok, target} -> %>
+                    <button
+                      type="button"
+                      phx-click="place_caret"
+                      phx-value-gap={target}
+                      class="codeome-jump-badge"
+                      title={"Jumps to ##{target}"}
+                    >
+                      → {String.pad_leading(Integer.to_string(target), 3, "0")}
+                    </button>
+                  <% :not_found -> %>
+                    <span class="codeome-jump-badge codeome-jump-badge-missing" title="No template match">→ ✕</span>
+                  <% nil -> %>
                 <% end %>
                 <span class="codeome-block-actions">
                   <button
@@ -953,6 +971,7 @@ defmodule LeniesWeb.EditorLive do
     |> assign(:dirty, dirty)
     |> assign(:validation, LeniesWeb.CodeomeBuffer.validate(new_buffer))
     |> assign(:economics, current_economics(new_buffer))
+    |> assign(:jump_targets, LeniesWeb.JumpTargets.targets(new_buffer))
   end
 
   # Reads `eat_amount` / `attack_damage` from Application env at the
@@ -1069,6 +1088,29 @@ defmodule LeniesWeb.EditorLive do
     rescue
       ArgumentError -> :error
     end
+  end
+
+  @jump_opcodes [:jmp_t, :jz_t, :jnz_t, :call_t]
+
+  # Indices of nop_0/nop_1 that form the template immediately following a jump.
+  defp template_nop_indices(buffer) do
+    max_len = Application.get_env(:lenies, :template_max_len, 8)
+
+    buffer
+    |> Enum.with_index()
+    |> Enum.flat_map(fn
+      {op, i} when op in @jump_opcodes ->
+        Enum.reduce_while((i + 1)..(i + max_len)//1, [], fn j, acc ->
+          case Enum.at(buffer, j) do
+            n when n in [:nop_0, :nop_1] -> {:cont, [j | acc]}
+            _ -> {:halt, acc}
+          end
+        end)
+
+      _ ->
+        []
+    end)
+    |> MapSet.new()
   end
 
   defp grouped_opcodes do

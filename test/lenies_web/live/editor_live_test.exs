@@ -605,4 +605,18 @@ defmodule LeniesWeb.EditorLiveTest do
     html = render(view)
     assert listing_names(html) == ["PUSH0", "PUSH1"]
   end
+
+  test "a jump block shows its target index badge", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "jmp_t nop_0 add nop_1 eat"})
+    html = render(view)
+    assert html =~ "codeome-jump-badge"
+    assert html =~ "003"
+  end
+
+  test "an unresolved jump shows the not-found badge", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "jmp_t nop_0 add eat"})
+    assert render(view) =~ "codeome-jump-badge-missing"
+  end
 end
