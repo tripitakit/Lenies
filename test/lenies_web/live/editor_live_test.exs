@@ -250,8 +250,11 @@ defmodule LeniesWeb.EditorLiveTest do
       html = render_hook(view, "cut_selection", %{})
       assert listing_opcodes(html) == ["PUSH0", "MOVE", "EAT"]
       refute html =~ "codeome-block-selected"
+      # After cut, caret collapses to the deletion site (gap 1 = between PUSH0 and
+      # MOVE). Paste inserts the clipboard [PUSH1, ADD] at gap 1, yielding:
+      # [PUSH0, PUSH1, ADD, MOVE, EAT].
       html2 = render_hook(view, "paste_clipboard", %{})
-      assert listing_opcodes(html2) == ["PUSH0", "MOVE", "EAT", "PUSH1", "ADD"]
+      assert listing_opcodes(html2) == ["PUSH0", "PUSH1", "ADD", "MOVE", "EAT"]
     end
 
     test "delete_selection removes the range", %{conn: conn} do
@@ -532,5 +535,45 @@ defmodule LeniesWeb.EditorLiveTest do
     render_hook(view, "insert_snippet_at", %{"id" => "pp", "index" => 1})
     assert render(view) =~ "4 ops"
     assert has_element?(view, "[data-caret-at='3']")
+  end
+
+  # Helper: extract the ordered list of opcode names from the listing pane blocks.
+  # Regex targets .codeome-block-name spans which only appear in the listing, not
+  # the palette chips (which use class "palette-chip", not "codeome-block-name").
+  defp listing_names(html) do
+    Regex.scan(~r/codeome-block-name">([A-Z0-9_]+)</, html)
+    |> Enum.map(fn [_, name] -> name end)
+  end
+
+  test "move_range relocates the selected block range", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add eat"})
+    render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+    render_hook(view, "select_block", %{"index" => 1, "shift" => true})
+    render_hook(view, "move_range", %{"to" => 4})
+    html = render(view)
+    # Buffer should be [add, eat, push0, push1] after moving range {0,1} to gap 4.
+    # Using listing_names to verify buffer order — avoids matching palette chip text.
+    assert listing_names(html) == ["ADD", "EAT", "PUSH0", "PUSH1"]
+  end
+
+  test "Alt+arrow nudges the selection down by one", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
+    render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+    render_hook(view, "move_range_step", %{"dir" => "down"})
+    html = render(view)
+    # Buffer should be [push1, push0, add] after nudging push0 down by one.
+    assert listing_names(html) == ["PUSH1", "PUSH0", "ADD"]
+  end
+
+  test "duplicate copies the selection after itself and selects the copy", %{conn: conn} do
+    {:ok, view, _} = live(conn, "/editor/new")
+    render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
+    render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+    render_hook(view, "duplicate_selection", %{})
+    assert render(view) =~ "3 ops"
+    # The copy is at index 1 (immediately after the original at index 0).
+    assert has_element?(view, ".codeome-block-selected[data-idx='1']")
   end
 end

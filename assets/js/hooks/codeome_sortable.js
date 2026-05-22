@@ -65,10 +65,14 @@ const CodeomeSortable = {
           typeof evt.newDraggableIndex === "number" &&
           evt.oldDraggableIndex !== evt.newDraggableIndex
         ) {
-          this.pushEvent("edit_reorder", {
-            from: evt.oldDraggableIndex,
-            to: evt.newDraggableIndex,
-          });
+          if (evt.item.classList.contains("codeome-block-selected")) {
+            this.pushEvent("move_range", { to: evt.newDraggableIndex });
+          } else {
+            this.pushEvent("edit_reorder", {
+              from: evt.oldDraggableIndex,
+              to: evt.newDraggableIndex,
+            });
+          }
         }
       },
       onAdd: (evt) => {

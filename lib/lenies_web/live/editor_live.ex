@@ -318,7 +318,7 @@ defmodule LeniesWeb.EditorLive do
         {:noreply,
          socket
          |> assign(:clipboard, clip)
-         |> put_caret(EditorCaret.place(length(new_buffer)))
+         |> put_caret(EditorCaret.after_delete_range(range))
          |> commit_buffer_change(new_buffer)}
     end
   end
@@ -358,8 +358,52 @@ defmodule LeniesWeb.EditorLive do
 
         {:noreply,
          socket
-         |> put_caret(EditorCaret.place(length(new_buffer)))
+         |> put_caret(EditorCaret.after_delete_range(range))
          |> commit_buffer_change(new_buffer)}
+    end
+  end
+
+  def handle_event("move_range", %{"to" => to}, socket) do
+    case current_range(socket) do
+      nil ->
+        {:noreply, socket}
+
+      {lo, hi} = range ->
+        to_gap = to_int(to) |> max(0) |> min(length(socket.assigns.buffer))
+        new_buffer = CodeomeBuffer.move_range(socket.assigns.buffer, range, to_gap)
+        n = hi - lo + 1
+        new_lo = if to_gap <= lo, do: to_gap, else: to_gap - n
+        new_lo = if to_gap > lo and to_gap <= hi + 1, do: lo, else: new_lo
+
+        {:noreply,
+         socket
+         |> put_caret(EditorCaret.select_inserted(new_lo, n))
+         |> commit_buffer_change(new_buffer)}
+    end
+  end
+
+  def handle_event("move_range_step", %{"dir" => dir}, socket) do
+    len = length(socket.assigns.buffer)
+
+    case current_range(socket) do
+      nil ->
+        {:noreply, socket}
+
+      {lo, hi} = range ->
+        to_gap = if dir == "up", do: max(lo - 1, 0), else: min(hi + 2, len)
+
+        if (dir == "up" and lo == 0) or (dir == "down" and hi + 1 >= len) do
+          {:noreply, socket}
+        else
+          new_buffer = CodeomeBuffer.move_range(socket.assigns.buffer, range, to_gap)
+          n = hi - lo + 1
+          new_lo = if dir == "up", do: lo - 1, else: lo + 1
+
+          {:noreply,
+           socket
+           |> put_caret(EditorCaret.select_inserted(new_lo, n))
+           |> commit_buffer_change(new_buffer)}
+        end
     end
   end
 
