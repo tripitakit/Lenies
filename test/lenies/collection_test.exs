@@ -48,4 +48,56 @@ defmodule Lenies.CollectionTest do
       assert Map.has_key?(errors_on(cs), :opcodes)
     end
   end
+
+  describe "context CRUD, owner-scoped" do
+    import Lenies.AccountsFixtures
+
+    setup do
+      %{user: user_fixture(), other: user_fixture()}
+    end
+
+    test "create_codeome/2 persists for the owner", %{user: user} do
+      assert {:ok, c} = Lenies.Collection.create_codeome(user, @valid_attrs)
+      assert c.owner_id == user.id
+      assert c.opcodes == ["nop_1", "store", "eat"]
+    end
+
+    test "create_codeome/2 returns changeset error on invalid attrs", %{user: user} do
+      assert {:error, %Ecto.Changeset{}} =
+               Lenies.Collection.create_codeome(user, %{@valid_attrs | color_hex: "nope"})
+    end
+
+    test "create_codeome/2 upserts by (owner, name) — second save wins", %{user: user} do
+      {:ok, _} = Lenies.Collection.create_codeome(user, @valid_attrs)
+      {:ok, c2} = Lenies.Collection.create_codeome(user, %{@valid_attrs | opcodes: ["eat", "move"]})
+      assert [only] = Lenies.Collection.list_codeomes(user)
+      assert only.id == c2.id
+      assert only.opcodes == ["eat", "move"]
+    end
+
+    test "list_codeomes/1 returns only the owner's rows", %{user: user, other: other} do
+      {:ok, _} = Lenies.Collection.create_codeome(user, @valid_attrs)
+      {:ok, _} = Lenies.Collection.create_codeome(other, %{@valid_attrs | name: "Theirs"})
+      assert [c] = Lenies.Collection.list_codeomes(user)
+      assert c.name == "My Seed"
+    end
+
+    test "get_codeome/2 is owner-scoped", %{user: user, other: other} do
+      {:ok, c} = Lenies.Collection.create_codeome(user, @valid_attrs)
+      assert Lenies.Collection.get_codeome(user, c.id).id == c.id
+      assert Lenies.Collection.get_codeome(other, c.id) == nil
+    end
+
+    test "delete_codeome/2 removes only the owner's row", %{user: user, other: other} do
+      {:ok, c} = Lenies.Collection.create_codeome(user, @valid_attrs)
+      assert {:error, :not_found} = Lenies.Collection.delete_codeome(other, c.id)
+      assert {:ok, _} = Lenies.Collection.delete_codeome(user, c.id)
+      assert Lenies.Collection.list_codeomes(user) == []
+    end
+
+    test "to_opcode_atoms/1 converts string opcodes to atoms", %{user: user} do
+      {:ok, c} = Lenies.Collection.create_codeome(user, @valid_attrs)
+      assert Lenies.Collection.to_opcode_atoms(c) == [:nop_1, :store, :eat]
+    end
+  end
 end
