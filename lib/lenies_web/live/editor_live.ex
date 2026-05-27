@@ -196,16 +196,15 @@ defmodule LeniesWeb.EditorLive do
       ) do
     case socket.assigns.validation do
       {:ok, _} ->
-        seed = %{
-          id: Lenies.Slug.slugify(name),
+        attrs = %{
           name: name,
           color_hex: color,
           energy_default: parse_clamped(energy_str, 1, 1_000_000, 10_000) * 1.0,
-          opcodes: socket.assigns.buffer
+          opcodes: Enum.map(socket.assigns.buffer, &Atom.to_string/1)
         }
 
-        case Lenies.Seeds.CustomStore.save(seed) do
-          :ok ->
+        case Lenies.Collection.create_codeome(socket.assigns.current_scope.user, attrs) do
+          {:ok, _codeome} ->
             Phoenix.LiveView.send_update(LeniesWeb.ControlsPanelComponent,
               id: "controls",
               refresh_custom_seeds: true
@@ -213,7 +212,7 @@ defmodule LeniesWeb.EditorLive do
 
             {:noreply, push_navigate(socket, to: ~p"/")}
 
-          {:error, _reason} ->
+          {:error, %Ecto.Changeset{}} ->
             {:noreply, socket}
         end
 
