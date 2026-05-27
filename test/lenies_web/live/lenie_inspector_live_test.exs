@@ -6,6 +6,8 @@ defmodule LeniesWeb.LenieInspectorLiveTest do
   alias Lenies.{Codeome, Lenie, World}
   alias Lenies.World.Tables
 
+  setup :register_and_log_in_user
+
   setup do
     case Process.whereis(Lenies.World) do
       nil ->

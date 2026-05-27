@@ -3,6 +3,8 @@ defmodule LeniesWeb.EditorLiveTest do
 
   import Phoenix.LiveViewTest
 
+  setup :register_and_log_in_user
+
   setup do
     case Process.whereis(Lenies.World) do
       nil -> {:ok, _} = Lenies.World.start_link(tick_interval_ms: 0)

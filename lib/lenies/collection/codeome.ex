@@ -1,7 +1,7 @@
 defmodule Lenies.Collection.Codeome do
   @moduledoc """
   A user-owned codeome (the personal-collection equivalent of a seed).
-  Validations mirror the former `Lenies.Seeds.CustomStore`.
+  Validations mirror the global built-in seed definitions.
   """
   use Ecto.Schema
   import Ecto.Changeset

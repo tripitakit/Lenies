@@ -62,7 +62,8 @@ defmodule LeniesWeb.ControlsPanelComponent do
     user = socket.assigns.current_scope && socket.assigns.current_scope.user
 
     socket =
-      if Map.get(assigns, :refresh_custom_seeds) or not Map.has_key?(socket.assigns, :custom_seeds) do
+      if Map.get(assigns, :refresh_custom_seeds, false) or
+           not Map.has_key?(socket.assigns, :custom_seeds) do
         assign(socket, :custom_seeds, custom_seeds(user))
       else
         socket

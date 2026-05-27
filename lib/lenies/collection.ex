@@ -2,7 +2,7 @@ defmodule Lenies.Collection do
   @moduledoc """
   Per-user collection of hand-written codeomes. All queries are scoped to an
   owner (a `Lenies.Accounts.User`); a user can only read/modify their own rows.
-  Replaces the former global `Lenies.Seeds.CustomStore`.
+  Replaces the former global custom-seed store with per-user persistence.
   """
   import Ecto.Query, warn: false
   alias Lenies.Repo

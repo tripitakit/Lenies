@@ -3,6 +3,8 @@ defmodule LeniesWeb.DashboardLiveTest do
 
   import Phoenix.LiveViewTest
 
+  setup :register_and_log_in_user
+
   setup do
     case Process.whereis(Lenies.World) do
       nil ->
@@ -374,56 +376,37 @@ defmodule LeniesWeb.DashboardLiveTest do
   end
 
   describe "controls panel — custom seed catalog" do
-    setup do
-      tmp_path =
-        Path.join(System.tmp_dir!(), "lenies_catalog_#{System.unique_integer([:positive])}.json")
-
-      Application.put_env(:lenies, :__test_user_seeds_file__, tmp_path)
-
-      if Process.whereis(Lenies.Seeds.CustomStore) do
-        Agent.stop(Lenies.Seeds.CustomStore)
-      end
-
-      {:ok, _} = Lenies.Seeds.CustomStore.start_link([])
-
-      on_exit(fn ->
-        if pid = Process.whereis(Lenies.Seeds.CustomStore), do: Agent.stop(pid)
-        File.rm(tmp_path)
-        Application.delete_env(:lenies, :__test_user_seeds_file__)
-      end)
-
-      :ok
-    end
-
-    test "custom seeds appear in the dropdown with a star prefix", %{conn: conn} do
-      :ok =
-        Lenies.Seeds.CustomStore.save(%{
-          id: "my-test",
+    test "custom seeds appear in the dropdown with a star prefix", %{conn: conn, user: user} do
+      {:ok, _} =
+        Lenies.Collection.create_codeome(user, %{
           name: "My Test",
           color_hex: "#abcdef",
           energy_default: 7000.0,
           opcodes: [
-            :nop_1,
-            :nop_1,
-            :get_size,
-            :push0,
-            :store,
-            :nop_1,
-            :nop_1,
-            :nop_1,
-            :nop_1,
-            :nop_1,
-            :nop_1
+            "nop_1",
+            "nop_1",
+            "get_size",
+            "push0",
+            "store",
+            "nop_1",
+            "nop_1",
+            "nop_1",
+            "nop_1",
+            "nop_1",
+            "nop_1"
           ]
         })
 
       {:ok, _view, html} = live(conn, "/")
 
       assert html =~ "★ My Test"
-      assert html =~ ~s(value="custom:my-test")
+      assert html =~ ~s(value="custom:)
     end
 
-    test "spawning a custom seed grows the population AND sets the color override", %{conn: conn} do
+    test "spawning a custom seed grows the population AND sets the color override", %{
+      conn: conn,
+      user: user
+    } do
       buffer = [
         :nop_1,
         :get_size,
@@ -438,13 +421,12 @@ defmodule LeniesWeb.DashboardLiveTest do
         :nop_1
       ]
 
-      :ok =
-        Lenies.Seeds.CustomStore.save(%{
-          id: "spawn-test",
+      {:ok, seed} =
+        Lenies.Collection.create_codeome(user, %{
           name: "Spawn Test",
           color_hex: "#deadbe",
           energy_default: 3000.0,
-          opcodes: buffer
+          opcodes: Enum.map(buffer, &Atom.to_string/1)
         })
 
       {:ok, view, _} = live(conn, "/")
@@ -452,7 +434,10 @@ defmodule LeniesWeb.DashboardLiveTest do
       pop_before = :ets.info(:lenies, :size) || 0
 
       view
-      |> form("form[phx-submit='spawn_seed']", %{seed_id: "custom:spawn-test", count: "2"})
+      |> form("form[phx-submit='spawn_seed']", %{
+        seed_id: "custom:#{seed.id}",
+        count: "2"
+      })
       |> render_submit()
 
       Process.sleep(100)
@@ -465,25 +450,24 @@ defmodule LeniesWeb.DashboardLiveTest do
       assert Lenies.SpeciesColor.override(hash) == "#deadbe"
     end
 
-    test "deleting a custom seed removes it from the dropdown", %{conn: conn} do
-      :ok =
-        Lenies.Seeds.CustomStore.save(%{
-          id: "delete-me",
+    test "deleting a custom seed removes it from the dropdown", %{conn: conn, user: user} do
+      {:ok, seed} =
+        Lenies.Collection.create_codeome(user, %{
           name: "Delete Me",
           color_hex: "#abcdef",
           energy_default: 1000.0,
           opcodes: [
-            :nop_1,
-            :nop_1,
-            :get_size,
-            :push0,
-            :store,
-            :nop_1,
-            :nop_1,
-            :nop_1,
-            :nop_1,
-            :nop_1,
-            :nop_1
+            "nop_1",
+            "nop_1",
+            "get_size",
+            "push0",
+            "store",
+            "nop_1",
+            "nop_1",
+            "nop_1",
+            "nop_1",
+            "nop_1",
+            "nop_1"
           ]
         })
 
@@ -495,7 +479,7 @@ defmodule LeniesWeb.DashboardLiveTest do
       |> render_click()
 
       view
-      |> element("button[phx-value-id='delete-me']")
+      |> element("button[phx-value-id='#{seed.id}']")
       |> render_click()
 
       refute render(view) =~ "★ Delete Me"
