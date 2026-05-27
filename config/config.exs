@@ -7,6 +7,8 @@
 # General application configuration
 import Config
 
+config :lenies, ecto_repos: [Lenies.Repo]
+
 config :lenies,
   generators: [timestamp_type: :utc_datetime]
 
