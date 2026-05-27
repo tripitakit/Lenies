@@ -102,5 +102,14 @@ defmodule Lenies.CollectionTest do
       {:ok, c} = Lenies.Collection.create_codeome(user, @valid_attrs)
       assert Lenies.Collection.to_opcode_atoms(c) == [:nop_1, :store, :eat]
     end
+
+    test "get_codeome/2 returns nil for a non-integer id", %{user: user} do
+      assert Lenies.Collection.get_codeome(user, "garbage") == nil
+      assert Lenies.Collection.get_codeome(user, "5abc") == nil
+    end
+
+    test "delete_codeome/2 returns :not_found for a non-integer id", %{user: user} do
+      assert {:error, :not_found} = Lenies.Collection.delete_codeome(user, "garbage")
+    end
   end
 end

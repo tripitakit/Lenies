@@ -15,7 +15,10 @@ defmodule Lenies.Collection do
 
   @doc "Fetch one codeome by id, scoped to `user`. Returns nil if not theirs."
   def get_codeome(%{id: owner_id}, id) do
-    Repo.one(from c in Codeome, where: c.owner_id == ^owner_id and c.id == ^id)
+    case normalize_id(id) do
+      nil -> nil
+      cid -> Repo.one(from c in Codeome, where: c.owner_id == ^owner_id and c.id == ^cid)
+    end
   end
 
   @doc """
@@ -34,9 +37,11 @@ defmodule Lenies.Collection do
 
   @doc "Delete a codeome by id, scoped to `user`."
   def delete_codeome(%{id: owner_id}, id) do
-    case Repo.one(from c in Codeome, where: c.owner_id == ^owner_id and c.id == ^id) do
-      nil -> {:error, :not_found}
-      %Codeome{} = c -> Repo.delete(c)
+    with cid when not is_nil(cid) <- normalize_id(id),
+         %Codeome{} = c <- Repo.one(from c in Codeome, where: c.owner_id == ^owner_id and c.id == ^cid) do
+      Repo.delete(c)
+    else
+      _ -> {:error, :not_found}
     end
   end
 
@@ -53,4 +58,17 @@ defmodule Lenies.Collection do
   def to_opcode_atoms(%Codeome{opcodes: opcodes}) do
     Enum.map(opcodes, &String.to_existing_atom/1)
   end
+
+  # Normalize a client-supplied id to an integer, or nil if unparseable.
+  # Accepts already-integer ids (internal/tests) and strict integer strings.
+  defp normalize_id(id) when is_integer(id), do: id
+
+  defp normalize_id(id) when is_binary(id) do
+    case Integer.parse(id) do
+      {n, ""} -> n
+      _ -> nil
+    end
+  end
+
+  defp normalize_id(_), do: nil
 end
