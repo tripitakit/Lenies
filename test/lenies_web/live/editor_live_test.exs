@@ -3,6 +3,8 @@ defmodule LeniesWeb.EditorLiveTest do
 
   import Phoenix.LiveViewTest
 
+  setup :register_and_log_in_user
+
   setup do
     case Process.whereis(Lenies.World) do
       nil -> {:ok, _} = Lenies.World.start_link(tick_interval_ms: 0)
@@ -190,6 +192,7 @@ defmodule LeniesWeb.EditorLiveTest do
     test "click selects a single block and highlights it", %{conn: conn} do
       view = seeded_editor(conn)
       html = render_hook(view, "select_block", %{"index" => 2, "shift" => false})
+
       assert html =~ ~r/codeome-block-editable[^"]*codeome-block-selected[^>]*data-idx="2"/ or
                html =~ ~r/data-idx="2"[^>]*codeome-block-selected/
     end
@@ -271,7 +274,7 @@ defmodule LeniesWeb.EditorLiveTest do
       html = render_hook(view, "duplicate_selection", %{})
       assert listing_opcodes(html) == ["PUSH0", "PUSH1", "ADD", "MOVE", "MOVE", "EAT"]
       # the duplicate (single MOVE at idx 4) is selected
-      assert (Regex.scan(~r/codeome-block-selected/, html) |> length()) == 1
+      assert Regex.scan(~r/codeome-block-selected/, html) |> length() == 1
     end
 
     test "copy/paste with empty clipboard is a no-op", %{conn: conn} do
@@ -352,7 +355,12 @@ defmodule LeniesWeb.EditorLiveTest do
     @snip_env :__test_user_snippets_file__
 
     setup do
-      tmp = Path.join(System.tmp_dir!(), "lenies_snips_live_#{System.unique_integer([:positive])}.json")
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "lenies_snips_live_#{System.unique_integer([:positive])}.json"
+        )
+
       orig = Application.get_env(:lenies, @snip_env)
       Application.put_env(:lenies, @snip_env, tmp)
       if Process.whereis(Lenies.Snippets.Store), do: Agent.stop(Lenies.Snippets.Store)
@@ -368,7 +376,10 @@ defmodule LeniesWeb.EditorLiveTest do
         end
 
         File.rm(tmp)
-        if orig, do: Application.put_env(:lenies, @snip_env, orig), else: Application.delete_env(:lenies, @snip_env)
+
+        if orig,
+          do: Application.put_env(:lenies, @snip_env, orig),
+          else: Application.delete_env(:lenies, @snip_env)
       end)
 
       :ok
@@ -410,7 +421,9 @@ defmodule LeniesWeb.EditorLiveTest do
       assert Lenies.Snippets.Store.all() == []
     end
 
-    test "submit_snippet with an invalid name keeps the form open and saves nothing", %{conn: conn} do
+    test "submit_snippet with an invalid name keeps the form open and saves nothing", %{
+      conn: conn
+    } do
       {:ok, view, _} = live(conn, "/editor/new")
       render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
       render_hook(view, "select_block", %{"index" => 0, "shift" => false})
@@ -513,9 +526,11 @@ defmodule LeniesWeb.EditorLiveTest do
     render_hook(view, "submit_opcode_text", %{"opcodes" => "eat"})
     html = render(view)
     assert html =~ "2 ops"
+
     block_names =
       Regex.scan(~r/codeome-block-name">([A-Z0-9_]+)</, html)
       |> Enum.map(fn [_, n] -> n end)
+
     assert block_names == ["PUSH0", "EAT"]
   end
 
@@ -598,15 +613,20 @@ defmodule LeniesWeb.EditorLiveTest do
     assert listing_names(html) == ["PUSH0", "EAT", "ADD"]
   end
 
-  test "submit_replace with an unknown opcode keeps the editor open and shows an error", %{conn: conn} do
+  test "submit_replace with an unknown opcode keeps the editor open and shows an error", %{
+    conn: conn
+  } do
     {:ok, view, _} = live(conn, "/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
     render_hook(view, "start_inline_edit", %{"index" => 0})
     render_hook(view, "submit_replace", %{"index" => 0, "opcode" => "notreal"})
     html = render(view)
-    assert html =~ "Codeome — 2 ops"                    # buffer unchanged (still 2 ops)
-    assert html =~ "codeome-inline-input"               # editor still open
-    assert html =~ "codeome-inline-error"               # error shown
+    # buffer unchanged (still 2 ops)
+    assert html =~ "Codeome — 2 ops"
+    # editor still open
+    assert html =~ "codeome-inline-input"
+    # error shown
+    assert html =~ "codeome-inline-error"
     # block at idx 0 is being edited (input, not span); idx 1 still shows its name
     assert listing_names(html) == ["PUSH1"]
   end

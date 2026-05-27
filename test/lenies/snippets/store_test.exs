@@ -140,6 +140,7 @@ defmodule Lenies.Snippets.StoreTest do
   describe "MH4 backward-compat read (old bare-array format)" do
     test "bare-array file loads without data loss", %{tmp_path: tmp_path} do
       Agent.stop(Store)
+
       File.write!(
         tmp_path,
         Jason.encode!([%{"id" => "loop", "name" => "Loop", "opcodes" => ["nop_0", "eat"]}])
@@ -153,6 +154,7 @@ defmodule Lenies.Snippets.StoreTest do
       tmp_path: tmp_path
     } do
       Agent.stop(Store)
+
       File.write!(
         tmp_path,
         Jason.encode!([%{"id" => "loop", "name" => "Loop", "opcodes" => ["nop_0"]}])

@@ -12,6 +12,7 @@ defmodule Lenies.Interpreter.WorldActionTest do
     # with the base cost already deducted and IP advanced.
     plasmid = Plasmid.new([:turn_left, :defend, :eat])
     c = Codeome.from_list([:conjugate, :nop_0])
+
     state =
       State.new(energy: 100.0, pos: {5, 5}, dir: :e)
       |> Map.put(:plasmids, [plasmid])
@@ -44,6 +45,7 @@ defmodule Lenies.Interpreter.WorldActionTest do
 
     plasmid = Plasmid.new([:eat])
     c = Codeome.from_list([:conjugate, :nop_0])
+
     state =
       State.new(energy: low_energy, pos: {0, 0}, dir: :n)
       |> Map.put(:plasmids, [plasmid])

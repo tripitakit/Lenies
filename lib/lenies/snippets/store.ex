@@ -5,7 +5,7 @@ defmodule Lenies.Snippets.Store do
 
   Backed by a JSON file at `priv/user_snippets.json` (configurable via the
   `:__test_user_snippets_file__` app env key — used by tests). State lives
-  in an `Agent`. Mirrors `Lenies.Seeds.CustomStore`.
+  in an `Agent`.
 
   A snippet is `%{id, name, opcodes}`. `id` is the caller-supplied slug;
   `save/1` upserts by `id`. Snippets are fragments — `opcodes` is subject to

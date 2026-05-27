@@ -196,16 +196,15 @@ defmodule LeniesWeb.EditorLive do
       ) do
     case socket.assigns.validation do
       {:ok, _} ->
-        seed = %{
-          id: Lenies.Slug.slugify(name),
+        attrs = %{
           name: name,
           color_hex: color,
           energy_default: parse_clamped(energy_str, 1, 1_000_000, 10_000) * 1.0,
-          opcodes: socket.assigns.buffer
+          opcodes: Enum.map(socket.assigns.buffer, &Atom.to_string/1)
         }
 
-        case Lenies.Seeds.CustomStore.save(seed) do
-          :ok ->
+        case Lenies.Collection.create_codeome(socket.assigns.current_scope.user, attrs) do
+          {:ok, _codeome} ->
             Phoenix.LiveView.send_update(LeniesWeb.ControlsPanelComponent,
               id: "controls",
               refresh_custom_seeds: true
@@ -213,7 +212,7 @@ defmodule LeniesWeb.EditorLive do
 
             {:noreply, push_navigate(socket, to: ~p"/")}
 
-          {:error, _reason} ->
+          {:error, %Ecto.Changeset{}} ->
             {:noreply, socket}
         end
 
@@ -303,7 +302,9 @@ defmodule LeniesWeb.EditorLive do
 
   def handle_event("copy_selection", _params, socket) do
     case current_range(socket) do
-      nil -> {:noreply, socket}
+      nil ->
+        {:noreply, socket}
+
       range ->
         {:noreply, assign(socket, :clipboard, CodeomeBuffer.slice(socket.assigns.buffer, range))}
     end
@@ -740,12 +741,23 @@ defmodule LeniesWeb.EditorLive do
                   autocomplete="off"
                   class="palette-text-input"
                 />
-                <button type="submit" class="palette-text-input-submit" title="Save snippet">✓</button>
-                <button type="button" phx-click="cancel_snippet_form" class="palette-text-input-submit" title="Cancel">⨯</button>
+                <button type="submit" class="palette-text-input-submit" title="Save snippet">
+                  ✓
+                </button>
+                <button
+                  type="button"
+                  phx-click="cancel_snippet_form"
+                  class="palette-text-input-submit"
+                  title="Cancel"
+                >
+                  ⨯
+                </button>
               </form>
             <% end %>
             <%= if @snippets == [] do %>
-              <p class="codeome-snippets-empty">no snippets — select blocks and press Save as snippet</p>
+              <p class="codeome-snippets-empty">
+                no snippets — select blocks and press Save as snippet
+              </p>
             <% else %>
               <div class="codeome-snippets-list" id="codeome-snippets-list" phx-hook="SnippetDrag">
                 <%= for s <- @snippets do %>
@@ -784,9 +796,9 @@ defmodule LeniesWeb.EditorLive do
             <div class="codeome-energy-panel-head">
               <span class="codeome-energy-panel-title">Energy / pass</span>
               <span class="codeome-energy-panel-note">
-                {@economics.n_eat} eat × {fmt_num(@economics.eat_amount)}
-                + {@economics.n_attack} attack × {fmt_num(@economics.attack_damage)}
-                · allocate sized {@economics.alloc_size}
+                {@economics.n_eat} eat × {fmt_num(@economics.eat_amount)} + {@economics.n_attack} attack × {fmt_num(
+                  @economics.attack_damage
+                )} · allocate sized {@economics.alloc_size}
               </span>
             </div>
             <div class="grid grid-cols-3 gap-2 text-[11px]">
@@ -816,16 +828,80 @@ defmodule LeniesWeb.EditorLive do
           <% len = length(@buffer) %>
           <% template_nops = template_nop_indices(@buffer) %>
           <div class="codeome-toolbar">
-            <button type="button" phx-click="copy_selection" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Copy (Ctrl/Cmd+C)">Copy</button>
-            <button type="button" phx-click="cut_selection" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Cut (Ctrl/Cmd+X)">Cut</button>
-            <button type="button" phx-click="paste_clipboard" disabled={!has_clipboard?(@clipboard)} class="codeome-tool-btn" title="Paste (Ctrl/Cmd+V)">Paste</button>
-            <button type="button" phx-click="duplicate_selection" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Duplicate (Ctrl/Cmd+D)">Duplicate</button>
-            <button type="button" phx-click="delete_selection" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Delete (Del)">Delete</button>
+            <button
+              type="button"
+              phx-click="copy_selection"
+              disabled={!has_selection?(range)}
+              class="codeome-tool-btn"
+              title="Copy (Ctrl/Cmd+C)"
+            >
+              Copy
+            </button>
+            <button
+              type="button"
+              phx-click="cut_selection"
+              disabled={!has_selection?(range)}
+              class="codeome-tool-btn"
+              title="Cut (Ctrl/Cmd+X)"
+            >
+              Cut
+            </button>
+            <button
+              type="button"
+              phx-click="paste_clipboard"
+              disabled={!has_clipboard?(@clipboard)}
+              class="codeome-tool-btn"
+              title="Paste (Ctrl/Cmd+V)"
+            >
+              Paste
+            </button>
+            <button
+              type="button"
+              phx-click="duplicate_selection"
+              disabled={!has_selection?(range)}
+              class="codeome-tool-btn"
+              title="Duplicate (Ctrl/Cmd+D)"
+            >
+              Duplicate
+            </button>
+            <button
+              type="button"
+              phx-click="delete_selection"
+              disabled={!has_selection?(range)}
+              class="codeome-tool-btn"
+              title="Delete (Del)"
+            >
+              Delete
+            </button>
             <span class="codeome-toolbar-sep"></span>
-            <button type="button" phx-click="undo" disabled={!EditorHistory.can_undo?(@history)} class="codeome-tool-btn" title="Undo (Ctrl/Cmd+Z)">Undo</button>
-            <button type="button" phx-click="redo" disabled={!EditorHistory.can_redo?(@history)} class="codeome-tool-btn" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
+            <button
+              type="button"
+              phx-click="undo"
+              disabled={!EditorHistory.can_undo?(@history)}
+              class="codeome-tool-btn"
+              title="Undo (Ctrl/Cmd+Z)"
+            >
+              Undo
+            </button>
+            <button
+              type="button"
+              phx-click="redo"
+              disabled={!EditorHistory.can_redo?(@history)}
+              class="codeome-tool-btn"
+              title="Redo (Ctrl/Cmd+Shift+Z)"
+            >
+              Redo
+            </button>
             <span class="codeome-toolbar-sep"></span>
-            <button type="button" phx-click="open_snippet_form" disabled={!has_selection?(range)} class="codeome-tool-btn" title="Save selection as snippet">Save as snippet</button>
+            <button
+              type="button"
+              phx-click="open_snippet_form"
+              disabled={!has_selection?(range)}
+              class="codeome-tool-btn"
+              title="Save selection as snippet"
+            >
+              Save as snippet
+            </button>
           </div>
           <div class="codeome-listing-pane-title">Codeome — {len} ops</div>
           <datalist id="opcode-datalist">
@@ -895,7 +971,12 @@ defmodule LeniesWeb.EditorLive do
                       → {String.pad_leading(Integer.to_string(target), 3, "0")}
                     </button>
                   <% :not_found -> %>
-                    <span class="codeome-jump-badge codeome-jump-badge-missing" title="No template match">→ ✕</span>
+                    <span
+                      class="codeome-jump-badge codeome-jump-badge-missing"
+                      title="No template match"
+                    >
+                      → ✕
+                    </span>
                   <% nil -> %>
                 <% end %>
                 <span class="codeome-block-actions">

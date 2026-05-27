@@ -194,7 +194,10 @@ defmodule LeniesWeb.CodeomeBuffer do
       cost =
         cond do
           op in [:jmp_t, :jz_t, :jnz_t, :call_t] ->
-            Lenies.Codeome.Costs.cost(op, template_len_at(buffer_tuple, idx + 1, template_max_len))
+            Lenies.Codeome.Costs.cost(
+              op,
+              template_len_at(buffer_tuple, idx + 1, template_max_len)
+            )
 
           op == :allocate ->
             Lenies.Codeome.Costs.cost(:allocate, alloc_size)

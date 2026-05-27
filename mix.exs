@@ -40,7 +40,11 @@ defmodule Lenies.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
+      {:bcrypt_elixir, "~> 3.0"},
       {:phoenix, "~> 1.8.1"},
+      {:phoenix_ecto, "~> 4.5"},
+      {:ecto_sql, "~> 3.12"},
+      {:postgrex, ">= 0.0.0"},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 1.1.0"},
@@ -59,6 +63,7 @@ defmodule Lenies.MixProject do
       {:gettext, "~> 0.26"},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
+      {:swoosh, "~> 1.16"},
       {:bandit, "~> 1.5"},
       {:earmark, "~> 1.4"}
     ]
@@ -72,7 +77,10 @@ defmodule Lenies.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
-      setup: ["deps.get", "assets.setup", "assets.build"],
+      setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
+      "ecto.setup": ["ecto.create", "ecto.migrate"],
+      "ecto.reset": ["ecto.drop", "ecto.setup"],
+      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind lenies", "esbuild lenies"],
       "assets.deploy": [

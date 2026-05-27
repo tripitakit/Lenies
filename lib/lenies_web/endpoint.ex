@@ -12,8 +12,14 @@ defmodule LeniesWeb.Endpoint do
   ]
 
   socket "/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [session: @session_options]],
-    longpoll: [connect_info: [session: @session_options]]
+    websocket: [connect_info: [:user_agent, session: @session_options]],
+    longpoll: [connect_info: [:user_agent, session: @session_options]]
+
+  # Enable the Phoenix Ecto SQL sandbox in the test environment so that
+  # LiveView and request processes share the test's database connection.
+  if Application.compile_env(:lenies, :sql_sandbox) do
+    plug Phoenix.Ecto.SQL.Sandbox
+  end
 
   # Serve at "/" the static files from "priv/static" directory.
   #

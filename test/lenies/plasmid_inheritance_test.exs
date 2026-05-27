@@ -80,16 +80,17 @@ defmodule Lenies.PlasmidInheritanceTest do
 
     deadline = System.monotonic_time(:millisecond) + 30_000
 
-    child_with_plasmid = poll_until(deadline, fn ->
-      :ets.tab2list(:lenies)
-      |> Enum.find_value(fn {id, snap} ->
-        if id != "PARENT" and Map.get(snap, :plasmids, []) != [] do
-          {:done, snap}
-        else
-          nil
-        end
-      end) || :continue
-    end)
+    child_with_plasmid =
+      poll_until(deadline, fn ->
+        :ets.tab2list(:lenies)
+        |> Enum.find_value(fn {id, snap} ->
+          if id != "PARENT" and Map.get(snap, :plasmids, []) != [] do
+            {:done, snap}
+          else
+            nil
+          end
+        end) || :continue
+      end)
 
     assert is_map(child_with_plasmid),
            "expected at least one child Lenie to have inherited the plasmid within 30s"
@@ -104,7 +105,9 @@ defmodule Lenies.PlasmidInheritanceTest do
       nil
     else
       case fun.() do
-        {:done, v} -> v
+        {:done, v} ->
+          v
+
         :continue ->
           Process.sleep(200)
           poll_until(deadline, fun)

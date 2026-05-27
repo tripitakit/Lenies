@@ -73,78 +73,140 @@ defmodule Lenies.Codeomes.Forager do
 
   @forage_body [
     # ── pos 52..65: build K=128 (push1 + 7×(dup,add)) ────────────────────
-    :push1, :dup, :add, :dup, :add, :dup, :add,
-    :dup, :add, :dup, :add, :dup, :add, :dup, :add,
+    :push1,
+    :dup,
+    :add,
+    :dup,
+    :add,
+    :dup,
+    :add,
+    :dup,
+    :add,
+    :dup,
+    :add,
+    :dup,
+    :add,
+    :dup,
+    :add,
 
     # ── pos 66..67: K+1 = 129 (decrement-first loop overshoots by 1) ────
-    :push1, :add,
+    :push1,
+    :add,
 
     # ── pos 68..69: store K+1 in slot[0] ─────────────────────────────────
-    :push0, :store,
+    :push0,
+    :store,
 
     # ── pos 70..73: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ─────────────
-    :nop_0, :nop_1, :nop_0, :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_0,
+    :nop_1,
 
     # ── pos 74..79: decrement slot[0] ────────────────────────────────────
-    :push0, :load, :push1, :sub, :push0, :store,
+    :push0,
+    :load,
+    :push1,
+    :sub,
+    :push0,
+    :store,
 
     # ── pos 80..81: load slot[0] for exit check ──────────────────────────
-    :push0, :load,
+    :push0,
+    :load,
 
     # ── pos 82..86: jz_t LOOP_HEAD (template [n0,n0,n0,n0]) — exit forage ─
-    :jz_t, :nop_0, :nop_0, :nop_0, :nop_0,
+    :jz_t,
+    :nop_0,
+    :nop_0,
+    :nop_0,
+    :nop_0,
 
     # ── pos 87..88: forage body — eat, move ──────────────────────────────
-    :eat, :move,
+    :eat,
+    :move,
 
     # ── pos 89..95: pushN; build 3; mod (pushN mod 3) ────────────────────
     # pushN [r]; push1 [r,1]; push1 [r,1,1]; push1 [r,1,1,1]; add [r,1,2];
     # add [r,3]; mod [r mod 3].
-    :pushN, :push1, :push1, :push1, :add, :add, :mod,
+    :pushN,
+    :push1,
+    :push1,
+    :push1,
+    :add,
+    :add,
+    :mod,
 
     # ── pos 96: dup the result ───────────────────────────────────────────
     :dup,
 
     # ── pos 97..101: jz_t NO_TURN_BR (template [n1,n1,n1,n0]) ───────────
     # Pops top dup. If 0 → jump to NO_TURN_BR. Else stack still has [val].
-    :jz_t, :nop_1, :nop_1, :nop_1, :nop_0,
+    :jz_t,
+    :nop_1,
+    :nop_1,
+    :nop_1,
+    :nop_0,
 
     # ── pos 102..103: val - 1 (val was 1 or 2) ───────────────────────────
-    :push1, :sub,
+    :push1,
+    :sub,
 
     # ── pos 104..108: jz_t TURN_LEFT_BR (template [n1,n0,n0,n0]) ────────
     # Pops top. If 0 (val was 1) → jump. Else (val was 2) fall through.
-    :jz_t, :nop_1, :nop_0, :nop_0, :nop_0,
+    :jz_t,
+    :nop_1,
+    :nop_0,
+    :nop_0,
+    :nop_0,
 
     # ── pos 109: turn_right (val was 2) ──────────────────────────────────
     :turn_right,
 
     # ── pos 110..114: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ───
-    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+    :jmp_t,
+    :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_0,
 
     # ── pos 115: separator (prevents 8-consecutive-nop misread) ──────────
     :push0,
 
     # ── pos 116..119: NO_TURN_BR anchor [n0, n0, n0, n1] ─────────────────
-    :nop_0, :nop_0, :nop_0, :nop_1,
+    :nop_0,
+    :nop_0,
+    :nop_0,
+    :nop_1,
 
     # ── pos 120: drop remaining val (= 0) ────────────────────────────────
     :drop,
 
     # ── pos 121..125: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ───
-    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+    :jmp_t,
+    :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_0,
 
     # ── pos 126: separator ───────────────────────────────────────────────
     :push0,
 
     # ── pos 127..130: TURN_LEFT_BR anchor [n0, n1, n1, n1] ──────────────
-    :nop_0, :nop_1, :nop_1, :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_1,
+    :nop_1,
 
     # ── pos 131: turn_left ───────────────────────────────────────────────
     :turn_left,
 
     # ── pos 132..136: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ───
-    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+    :jmp_t,
+    :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_0,
 
     # ── pos 137: separator (final wrap protection) ───────────────────────
     :push0

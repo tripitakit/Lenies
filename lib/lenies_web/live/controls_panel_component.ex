@@ -53,20 +53,23 @@ defmodule LeniesWeb.ControlsPanelComponent do
      |> assign(:sterilize_confirming, false)
      |> assign(:paused?, paused?)
      |> assign(:snapshot_status, nil)
-     |> assign(:show_custom_manage, false)
-     |> assign(:custom_seeds, custom_seeds())}
+     |> assign(:show_custom_manage, false)}
   end
 
   @impl true
-  def update(%{refresh_custom_seeds: true} = assigns, socket) do
-    {:ok,
-     socket
-     |> assign(Map.delete(assigns, :refresh_custom_seeds))
-     |> assign(:custom_seeds, custom_seeds())}
-  end
-
   def update(assigns, socket) do
-    {:ok, assign(socket, assigns)}
+    socket = assign(socket, Map.delete(assigns, :refresh_custom_seeds))
+    user = socket.assigns.current_scope && socket.assigns.current_scope.user
+
+    socket =
+      if Map.get(assigns, :refresh_custom_seeds, false) or
+           not Map.has_key?(socket.assigns, :custom_seeds) do
+        assign(socket, :custom_seeds, custom_seeds(user))
+      else
+        socket
+      end
+
+    {:ok, socket}
   end
 
   @impl true
@@ -170,7 +173,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
                 <option value={Atom.to_string(s.id)}>{s.name}</option>
               <% end %>
               <%= for s <- @custom_seeds do %>
-                <option value={"custom:#{s.id}"}>★ {s.name}</option>
+                <option value={"custom:" <> to_string(s.id)}>★ {s.name}</option>
               <% end %>
             </select>
           </label>
@@ -329,9 +332,11 @@ defmodule LeniesWeb.ControlsPanelComponent do
   end
 
   def handle_event("spawn_seed", %{"seed_id" => "custom:" <> id, "count" => count_str}, socket) do
-    case Lenies.Seeds.CustomStore.get(id) do
-      %{} = seed ->
-        codeome = Lenies.Codeome.from_list(seed.opcodes)
+    user = socket.assigns.current_scope && socket.assigns.current_scope.user
+
+    case user && Lenies.Collection.get_codeome(user, id) do
+      %Lenies.Collection.Codeome{} = seed ->
+        codeome = Lenies.Codeome.from_list(Lenies.Collection.to_opcode_atoms(seed))
         hash = Lenies.Codeome.hash(codeome)
         Lenies.SpeciesColor.set_override(hash, seed.color_hex)
 
@@ -348,8 +353,8 @@ defmodule LeniesWeb.ControlsPanelComponent do
 
         {:noreply, socket}
 
-      nil ->
-        {:noreply, assign(socket, :custom_seeds, custom_seeds())}
+      _ ->
+        {:noreply, assign(socket, :custom_seeds, custom_seeds(user))}
     end
   end
 
@@ -420,26 +425,25 @@ defmodule LeniesWeb.ControlsPanelComponent do
   end
 
   def handle_event("toggle_custom_manage", _params, socket) do
+    user = socket.assigns.current_scope && socket.assigns.current_scope.user
+
     {:noreply,
      socket
      |> assign(:show_custom_manage, !socket.assigns.show_custom_manage)
-     |> assign(:custom_seeds, custom_seeds())}
+     |> assign(:custom_seeds, custom_seeds(user))}
   end
 
   def handle_event("delete_custom_seed", %{"id" => id}, socket) do
-    case Lenies.Seeds.CustomStore.delete(id) do
-      :ok -> {:noreply, assign(socket, :custom_seeds, custom_seeds())}
-      {:error, _} -> {:noreply, socket}
+    user = socket.assigns.current_scope && socket.assigns.current_scope.user
+
+    case user && Lenies.Collection.delete_codeome(user, id) do
+      {:ok, _} -> {:noreply, assign(socket, :custom_seeds, custom_seeds(user))}
+      _ -> {:noreply, socket}
     end
   end
 
-  defp custom_seeds do
-    if Process.whereis(Lenies.Seeds.CustomStore) do
-      Lenies.Seeds.CustomStore.all()
-    else
-      []
-    end
-  end
+  defp custom_seeds(nil), do: []
+  defp custom_seeds(%{id: _} = user), do: Lenies.Collection.list_codeomes(user)
 
   defp tunable_params, do: @tunable_params
 

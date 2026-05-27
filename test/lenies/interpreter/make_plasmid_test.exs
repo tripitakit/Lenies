@@ -12,10 +12,19 @@ defmodule Lenies.Interpreter.MakePlasmidTest do
   test ":make_plasmid with valid args creates plasmid and pushes 1" do
     # Build a 10-opcode codeome ending with :make_plasmid; jump IP to it
     # with [start=0, length=4] on the stack.
-    codeome = Codeome.from_list([
-      :eat, :move, :turn_left, :turn_right, :defend,
-      :sense_front, :drop, :eat, :move, :make_plasmid
-    ])
+    codeome =
+      Codeome.from_list([
+        :eat,
+        :move,
+        :turn_left,
+        :turn_right,
+        :defend,
+        :sense_front,
+        :drop,
+        :eat,
+        :move,
+        :make_plasmid
+      ])
 
     state =
       State.new(energy: 100.0, pos: {0, 0}, dir: :n)

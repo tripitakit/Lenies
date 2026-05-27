@@ -33,7 +33,9 @@ defmodule Lenies.Codeomes.ForagerTest do
           |> Enum.each(fn {_, child, _, _} ->
             if is_pid(child), do: DynamicSupervisor.terminate_child(sup, child)
           end)
-        _ -> :ok
+
+        _ ->
+          :ok
       end
 
       case Process.whereis(Lenies.World) do
@@ -43,7 +45,9 @@ defmodule Lenies.Codeomes.ForagerTest do
           catch
             :exit, _ -> :ok
           end
-        _ -> :ok
+
+        _ ->
+          :ok
       end
 
       Tables.delete_all()
@@ -77,11 +81,12 @@ defmodule Lenies.Codeomes.ForagerTest do
 
     deadline = System.monotonic_time(:millisecond) + 30_000
 
-    max_gen = poll_until(deadline, fn ->
-      snaps = :ets.tab2list(:lenies)
-      m = max_generation(snaps)
-      if m >= 3, do: {:done, m}, else: :continue
-    end)
+    max_gen =
+      poll_until(deadline, fn ->
+        snaps = :ets.tab2list(:lenies)
+        m = max_generation(snaps)
+        if m >= 3, do: {:done, m}, else: :continue
+      end)
 
     snaps = :ets.tab2list(:lenies)
 
@@ -104,7 +109,9 @@ defmodule Lenies.Codeomes.ForagerTest do
       max_generation(snaps)
     else
       case fun.() do
-        {:done, v} -> v
+        {:done, v} ->
+          v
+
         :continue ->
           Process.sleep(200)
           poll_until(deadline, fun)

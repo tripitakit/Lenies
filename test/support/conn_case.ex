@@ -31,7 +31,65 @@ defmodule LeniesWeb.ConnCase do
     end
   end
 
-  setup _tags do
-    {:ok, conn: Phoenix.ConnTest.build_conn()}
+  setup tags do
+    pid = Lenies.DataCase.setup_sandbox(tags)
+
+    # Encode the sandbox owner into the connection so that connected LiveView
+    # (and channel) processes can share this test's database connection via the
+    # `Phoenix.Ecto.SQL.Sandbox` plug + `LeniesWeb.LiveAcceptance` on_mount hook.
+    conn =
+      Phoenix.ConnTest.build_conn()
+      |> Plug.Conn.put_private(:phoenix_ecto_sandbox, pid)
+      |> then(fn conn ->
+        metadata = Phoenix.Ecto.SQL.Sandbox.metadata_for(Lenies.Repo, pid)
+        Plug.Conn.put_req_header(conn, "user-agent", encode_metadata(metadata))
+      end)
+
+    {:ok, conn: conn}
+  end
+
+  defp encode_metadata(metadata) do
+    Phoenix.Ecto.SQL.Sandbox.encode_metadata(metadata)
+  end
+
+  @doc """
+  Setup helper that registers and logs in users.
+
+      setup :register_and_log_in_user
+
+  It stores an updated connection and a registered user in the
+  test context.
+  """
+  def register_and_log_in_user(%{conn: conn} = context) do
+    user = Lenies.AccountsFixtures.user_fixture()
+    scope = Lenies.Accounts.Scope.for_user(user)
+
+    opts =
+      context
+      |> Map.take([:token_authenticated_at])
+      |> Enum.into([])
+
+    %{conn: log_in_user(conn, user, opts), user: user, scope: scope}
+  end
+
+  @doc """
+  Logs the given `user` into the `conn`.
+
+  It returns an updated `conn`.
+  """
+  def log_in_user(conn, user, opts \\ []) do
+    token = Lenies.Accounts.generate_user_session_token(user)
+
+    maybe_set_token_authenticated_at(token, opts[:token_authenticated_at])
+
+    conn
+    |> Phoenix.ConnTest.init_test_session(%{})
+    |> Plug.Conn.put_session(:user_token, token)
+  end
+
+  defp maybe_set_token_authenticated_at(_token, nil), do: nil
+
+  defp maybe_set_token_authenticated_at(token, authenticated_at) do
+    Lenies.AccountsFixtures.override_token_authenticated_at(token, authenticated_at)
   end
 end

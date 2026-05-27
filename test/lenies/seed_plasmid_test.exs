@@ -84,12 +84,13 @@ defmodule Lenies.SeedPlasmidTest do
 
     deadline = System.monotonic_time(:millisecond) + 15_000
 
-    moved_off_axis = poll_until(deadline, fn ->
-      case :ets.lookup(:lenies, "TWITCH") do
-        [{_, %{pos: {_, y}}}] when y != 128 -> {:done, true}
-        _ -> :continue
-      end
-    end)
+    moved_off_axis =
+      poll_until(deadline, fn ->
+        case :ets.lookup(:lenies, "TWITCH") do
+          [{_, %{pos: {_, y}}}] when y != 128 -> {:done, true}
+          _ -> :continue
+        end
+      end)
 
     assert moved_off_axis == true,
            "expected MR-Twitch to leave y=128 within 15s (twitch plasmid hijacks LOOP_HEAD jump and injects random L/R turn)"
@@ -141,19 +142,20 @@ defmodule Lenies.SeedPlasmidTest do
 
     deadline = System.monotonic_time(:millisecond) + 15_000
 
-    infected = poll_until(deadline, fn ->
-      case :ets.lookup(:lenies, "VANILLA") do
-        [{_, snap}] ->
-          if Map.get(snap, :plasmids, []) != [] do
-            {:done, true}
-          else
-            :continue
-          end
+    infected =
+      poll_until(deadline, fn ->
+        case :ets.lookup(:lenies, "VANILLA") do
+          [{_, snap}] ->
+            if Map.get(snap, :plasmids, []) != [] do
+              {:done, true}
+            else
+              :continue
+            end
 
-        _ ->
-          :continue
-      end
-    end)
+          _ ->
+            :continue
+        end
+      end)
 
     assert infected == true,
            "expected vanilla MR to receive the Twitch plasmid within 15s"
@@ -224,7 +226,9 @@ defmodule Lenies.SeedPlasmidTest do
       nil
     else
       case fun.() do
-        {:done, v} -> v
+        {:done, v} ->
+          v
+
         :continue ->
           Process.sleep(150)
           poll_until(deadline, fun)

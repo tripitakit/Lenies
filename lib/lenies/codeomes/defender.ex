@@ -49,31 +49,62 @@ defmodule Lenies.Codeomes.Defender do
   @forage_body [
     # ── pos 52..62: build K=32 on stack (push1 + 5×(dup,add) = 32) ─────
     # push1 [1]; dup [1,1]; add [2]; dup [2,2]; add [4]; ... → 32 (11 ops)
-    :push1, :dup, :add, :dup, :add, :dup, :add, :dup, :add, :dup, :add,
+    :push1,
+    :dup,
+    :add,
+    :dup,
+    :add,
+    :dup,
+    :add,
+    :dup,
+    :add,
+    :dup,
+    :add,
 
     # ── pos 63..64: K+1 = 33 (decrement-first loop overshoots by 1) ─────
-    :push1, :add,
+    :push1,
+    :add,
 
     # ── pos 65..66: store K+1 in slot[0] (forage counter) ────────────────
-    :push0, :store,
+    :push0,
+    :store,
 
     # ── pos 67..70: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ─────────────
-    :nop_0, :nop_1, :nop_0, :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_0,
+    :nop_1,
 
     # ── pos 71..76: decrement slot[0] (slot[0] -= 1) ─────────────────────
-    :push0, :load, :push1, :sub, :push0, :store,
+    :push0,
+    :load,
+    :push1,
+    :sub,
+    :push0,
+    :store,
 
     # ── pos 77..78: load slot[0] for exit check ──────────────────────────
-    :push0, :load,
+    :push0,
+    :load,
 
     # ── pos 79..83: jz_t LOOP_HEAD (template [n0,n0,n0,n0]) — exit forage ─
-    :jz_t, :nop_0, :nop_0, :nop_0, :nop_0,
+    :jz_t,
+    :nop_0,
+    :nop_0,
+    :nop_0,
+    :nop_0,
 
     # ── pos 84..86: forage body — defend, eat, move ──────────────────────
-    :defend, :eat, :move,
+    :defend,
+    :eat,
+    :move,
 
     # ── pos 87..91: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ─────
-    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+    :jmp_t,
+    :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_0,
 
     # ── pos 92: separator — prevents template extractor from reading ────
     # 4 nops of the final template + 4 nops of LOOP_HEAD across wrap.
