@@ -40,6 +40,7 @@ defmodule Lenies.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
+      {:bcrypt_elixir, "~> 3.0"},
       {:phoenix, "~> 1.8.1"},
       {:phoenix_ecto, "~> 4.5"},
       {:ecto_sql, "~> 3.12"},
@@ -62,6 +63,7 @@ defmodule Lenies.MixProject do
       {:gettext, "~> 0.26"},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
+      {:swoosh, "~> 1.16"},
       {:bandit, "~> 1.5"},
       {:earmark, "~> 1.4"}
     ]

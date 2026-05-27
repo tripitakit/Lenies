@@ -7,7 +7,32 @@
 # General application configuration
 import Config
 
+config :lenies, :scopes,
+  user: [
+    default: true,
+    module: Lenies.Accounts.Scope,
+    assign_key: :current_scope,
+    access_path: [:user, :id],
+    schema_key: :user_id,
+    schema_type: :id,
+    schema_table: :users,
+    test_data_fixture: Lenies.AccountsFixtures,
+    test_setup_helper: :register_and_log_in_user
+  ]
+
 config :lenies, ecto_repos: [Lenies.Repo]
+
+# Configures the mailer
+#
+# By default it uses the "Local" adapter which stores the emails
+# locally. You can see the emails in your browser, at "/dev/mailbox".
+#
+# For production it's recommended to configure a different adapter
+# at the `config/runtime.exs`.
+config :lenies, Lenies.Mailer, adapter: Swoosh.Adapters.Local
+
+# Disable Swoosh api client as it is only required for production adapters.
+config :swoosh, :api_client, false
 
 config :lenies,
   generators: [timestamp_type: :utc_datetime]
