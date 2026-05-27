@@ -336,10 +336,16 @@ defmodule LeniesWeb.DashboardLive do
                           >+ {Enum.join(carried_plasmids(sp), ", ")}</span>
                         </td>
                         <td class="text-right pl-3 whitespace-nowrap">{sp.size}</td>
-                        <td class="text-right pl-3 whitespace-nowrap text-rose-300">{format_energy(sp.cost)}</td>
-                        <td class="text-right pl-3 whitespace-nowrap text-emerald-300">{format_energy(sp.max_gain)}</td>
+                        <td class="text-right pl-3 whitespace-nowrap text-rose-300">
+                          {format_energy(sp.cost)}
+                        </td>
+                        <td class="text-right pl-3 whitespace-nowrap text-emerald-300">
+                          {format_energy(sp.max_gain)}
+                        </td>
                         <td class="text-right pl-3 whitespace-nowrap">{sp.population}</td>
-                        <td class="text-right pl-3 whitespace-nowrap">{Float.round(sp.avg_generation, 2)}</td>
+                        <td class="text-right pl-3 whitespace-nowrap">
+                          {Float.round(sp.avg_generation, 2)}
+                        </td>
                       </tr>
                     </tbody>
                   </table>

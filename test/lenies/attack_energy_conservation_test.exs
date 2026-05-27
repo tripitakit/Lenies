@@ -262,7 +262,8 @@ defmodule Lenies.AttackEnergyConservationTest do
       [{"VIC_SYNC", record}] = :ets.lookup(:lenies, "VIC_SYNC")
       :ets.insert(:lenies, {"VIC_SYNC", Map.put(record, :defending_until, 999_999)})
 
-      attacker_pid = spawn_lenie("ATK_SYNC", {20, 24}, 500.0, dir: :e, paused?: false, codeome: [:attack])
+      attacker_pid =
+        spawn_lenie("ATK_SYNC", {20, 24}, 500.0, dir: :e, paused?: false, codeome: [:attack])
 
       attacker_before = Lenie.inspect_state(attacker_pid).energy
 

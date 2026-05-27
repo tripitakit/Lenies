@@ -83,101 +83,182 @@ defmodule Lenies.Codeomes.Hunter do
     # Phase 1 (pos 52..62, 11 ops): push1 + 5×(dup, add) → stack=[32]
     # Phase 2 (pos 63..66, 4 ops): dup→[32,32]; dup→[32,32,32];
     # add→[32,64]; add→[96]
-    :push1, :dup, :add, :dup, :add, :dup, :add, :dup, :add, :dup, :add,
-    :dup, :dup, :add, :add,
+    :push1,
+    :dup,
+    :add,
+    :dup,
+    :add,
+    :dup,
+    :add,
+    :dup,
+    :add,
+    :dup,
+    :add,
+    :dup,
+    :dup,
+    :add,
+    :add,
 
     # ── pos 67..68: K+1 = 97 ─────────────────────────────────────────────
-    :push1, :add,
+    :push1,
+    :add,
 
     # ── pos 69..70: store K+1 in slot[0] ─────────────────────────────────
-    :push0, :store,
+    :push0,
+    :store,
 
     # ── pos 71..77: init slot[3] := 0 ────────────────────────────────────
     # push0 [0]; push1+push1+push1 [0,1,1,1]; add [0,1,2]; add [0,3];
     # store → slot[3] := 0. (7 ops, two adds to build slot idx 3.)
-    :push0, :push1, :push1, :push1, :add, :add, :store,
+    :push0,
+    :push1,
+    :push1,
+    :push1,
+    :add,
+    :add,
+    :store,
 
     # ── pos 78..81: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ─────────────
-    :nop_0, :nop_1, :nop_0, :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_0,
+    :nop_1,
 
     # ── pos 82..87: decrement slot[0] ────────────────────────────────────
-    :push0, :load, :push1, :sub, :push0, :store,
+    :push0,
+    :load,
+    :push1,
+    :sub,
+    :push0,
+    :store,
 
     # ── pos 88..89: load slot[0] for exit check ──────────────────────────
-    :push0, :load,
+    :push0,
+    :load,
 
     # ── pos 90..94: jz_t LOOP_HEAD (template [n0,n0,n0,n0]) — exit forage ─
-    :jz_t, :nop_0, :nop_0, :nop_0, :nop_0,
+    :jz_t,
+    :nop_0,
+    :nop_0,
+    :nop_0,
+    :nop_0,
 
     # ── pos 95..97: sense_front; push1; add — value+1 ────────────────────
-    :sense_front, :push1, :add,
+    :sense_front,
+    :push1,
+    :add,
 
     # ── pos 98..102: jz_t LENIE_HANDLER (template [n1,n1,n1,n0]) ────────
     # Pops the value+1. If was -1 (now 0) → jump.
-    :jz_t, :nop_1, :nop_1, :nop_1, :nop_0,
+    :jz_t,
+    :nop_1,
+    :nop_1,
+    :nop_1,
+    :nop_0,
 
     # ── pos 103..104: not prey — eat, move ───────────────────────────────
-    :eat, :move,
+    :eat,
+    :move,
 
     # ── pos 105..110: build slot idx 3 and load slot[3] ──────────────────
     # push1 [1]; push1 [1,1]; push1 [1,1,1]; add [1,2]; add [3]; load [slot[3]]
-    :push1, :push1, :push1, :add, :add, :load,
+    :push1,
+    :push1,
+    :push1,
+    :add,
+    :add,
+    :load,
 
     # ── pos 111..112: counter + 1 ────────────────────────────────────────
-    :push1, :add,
+    :push1,
+    :add,
 
     # ── pos 113: dup (value needed for parity check AND for storing back) ─
     :dup,
 
     # ── pos 114..116: build 2 on stack ───────────────────────────────────
     # push1 [c+1, c+1, 1]; push1 [c+1, c+1, 1, 1]; add [c+1, c+1, 2]
-    :push1, :push1, :add,
+    :push1,
+    :push1,
+    :add,
 
     # ── pos 117: mod — (counter+1) mod 2 ─────────────────────────────────
     :mod,
 
     # ── pos 118..122: jz_t TURN_LEFT_BR (template [n1,n0,n0,n0]) ────────
     # Pops the mod result. If 0 → jump to TURN_LEFT_BR.
-    :jz_t, :nop_1, :nop_0, :nop_0, :nop_0,
+    :jz_t,
+    :nop_1,
+    :nop_0,
+    :nop_0,
+    :nop_0,
 
     # ── pos 123: turn_right (mod was 1) ──────────────────────────────────
     :turn_right,
 
     # ── pos 124..129: store counter+1 → slot[3] ──────────────────────────
     # Stack here has [counter+1]. Build slot idx 3 and store.
-    :push1, :push1, :push1, :add, :add, :store,
+    :push1,
+    :push1,
+    :push1,
+    :add,
+    :add,
+    :store,
 
     # ── pos 130..134: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ───
-    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+    :jmp_t,
+    :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_0,
 
     # ── pos 135: separator (prevents 8-nop misread between this jmp_t
     # template and LENIE_HANDLER anchor) ─────────────────────────────────
     :push0,
 
     # ── pos 136..139: LENIE_HANDLER anchor [n0, n0, n0, n1] ─────────────
-    :nop_0, :nop_0, :nop_0, :nop_1,
+    :nop_0,
+    :nop_0,
+    :nop_0,
+    :nop_1,
 
     # ── pos 140: attack (no move, no turn — lock on) ─────────────────────
     :attack,
 
     # ── pos 141..145: jmp_t FORAGE_LOOP_HEAD ─────────────────────────────
-    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+    :jmp_t,
+    :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_0,
 
     # ── pos 146: separator (prevents 8-nop misread between this jmp_t
     # template and TURN_LEFT_BR anchor) ──────────────────────────────────
     :push0,
 
     # ── pos 147..150: TURN_LEFT_BR anchor [n0, n1, n1, n1] ──────────────
-    :nop_0, :nop_1, :nop_1, :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_1,
+    :nop_1,
 
     # ── pos 151: turn_left ───────────────────────────────────────────────
     :turn_left,
 
     # ── pos 152..157: store counter+1 → slot[3] ──────────────────────────
-    :push1, :push1, :push1, :add, :add, :store,
+    :push1,
+    :push1,
+    :push1,
+    :add,
+    :add,
+    :store,
 
     # ── pos 158..162: jmp_t FORAGE_LOOP_HEAD ─────────────────────────────
-    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+    :jmp_t,
+    :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_0,
 
     # ── pos 163: separator (final wrap protection) ───────────────────────
     :push0

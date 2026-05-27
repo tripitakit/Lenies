@@ -89,6 +89,7 @@ defmodule Lenies.WorldReconcileTest do
 
       # Before reconcile: cell is still marked occupied, :lenies record still exists
       [{_, cell_stale}] = :ets.lookup(:cells, pos)
+
       assert cell_stale.lenie_id == lenie_id,
              "cell should still be stale before reconcile (this is the bug being fixed)"
 
@@ -102,6 +103,7 @@ defmodule Lenies.WorldReconcileTest do
 
       # After reconcile: cell is free, :lenies record is gone
       [{_, cell_after}] = :ets.lookup(:cells, pos)
+
       assert cell_after.lenie_id == nil,
              "cell should be free after reconcile"
 
@@ -123,6 +125,7 @@ defmodule Lenies.WorldReconcileTest do
       World.reconcile()
 
       [{_, cell_after}] = :ets.lookup(:cells, pos)
+
       assert cell_after.lenie_id == lenie_id,
              "live Lenie's cell must not be cleared"
 

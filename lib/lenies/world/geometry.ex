@@ -10,7 +10,11 @@ defmodule Lenies.World.Geometry do
   Direction conventions: `:n` decrements y, `:s` increments y,
   `:e` increments x, `:w` decrements x.
   """
-  @spec step({non_neg_integer(), non_neg_integer()}, :n | :s | :e | :w, {pos_integer(), pos_integer()}) ::
+  @spec step(
+          {non_neg_integer(), non_neg_integer()},
+          :n | :s | :e | :w,
+          {pos_integer(), pos_integer()}
+        ) ::
           {non_neg_integer(), non_neg_integer()}
   def step({x, y}, dir, {w, h}) do
     case dir do

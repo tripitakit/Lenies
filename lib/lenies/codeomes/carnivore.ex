@@ -12,13 +12,21 @@ defmodule Lenies.Codeomes.Carnivore do
 
   @plasmid_opcodes [
     # ── pos 0..3: INTERCEPT_ANCHOR = FORAGE_LOOP_HEAD pattern [n0,n1,n0,n1] ──
-    :nop_0, :nop_1, :nop_0, :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_0,
+    :nop_1,
 
     # ── pos 4..5: extra step + extra eat (sprint) ────────────────────────
-    :move, :eat,
+    :move,
+    :eat,
 
     # ── pos 6..10: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ───────
-    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+    :jmp_t,
+    :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_0,
 
     # ── pos 11: trailing separator (CRITICAL) ───────────────────────────
     # Without this non-nop, the final jmp_t template merges with the host's

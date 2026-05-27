@@ -69,7 +69,10 @@ defmodule Lenies.CollectionTest do
 
     test "create_codeome/2 upserts by (owner, name) — second save wins", %{user: user} do
       {:ok, _} = Lenies.Collection.create_codeome(user, @valid_attrs)
-      {:ok, c2} = Lenies.Collection.create_codeome(user, %{@valid_attrs | opcodes: ["eat", "move"]})
+
+      {:ok, c2} =
+        Lenies.Collection.create_codeome(user, %{@valid_attrs | opcodes: ["eat", "move"]})
+
       assert [only] = Lenies.Collection.list_codeomes(user)
       assert only.id == c2.id
       assert only.opcodes == ["eat", "move"]

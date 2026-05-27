@@ -192,9 +192,13 @@ defmodule LeniesWeb.DashboardLiveTest do
 
   test "Save snapshot button triggers Snapshot.save_to_disk", %{conn: conn} do
     root =
-      Path.join(System.tmp_dir!(), "lenies-ui-snapshot-test-#{System.unique_integer([:positive])}")
+      Path.join(
+        System.tmp_dir!(),
+        "lenies-ui-snapshot-test-#{System.unique_integer([:positive])}"
+      )
 
     Application.put_env(:lenies, :snapshot_root, root)
+
     on_exit(fn ->
       File.rm_rf!(root)
       Application.delete_env(:lenies, :snapshot_root)

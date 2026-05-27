@@ -296,41 +296,79 @@ defmodule Lenies.Codeomes.MinimalReplicator do
 
   @preamble [
     # ── pos 0..3: LOOP_HEAD anchor [n1, n1, n1, n1] ──────────────────────
-    :nop_1, :nop_1, :nop_1, :nop_1,
+    :nop_1,
+    :nop_1,
+    :nop_1,
+    :nop_1,
 
     # ── pos 4..6: get own size N, store in slot[0] ───────────────────────
-    :get_size, :push0, :store,
+    :get_size,
+    :push0,
+    :store,
 
     # ── pos 7..9: allocate child slot of size N in front cell ────────────
-    :push0, :load, :allocate,
+    :push0,
+    :load,
+    :allocate,
 
     # ── pos 10..14: jz_t ABORT_TARGET if allocate failed (template [n0,n0,n1,n1]) ──
-    :jz_t, :nop_0, :nop_0, :nop_1, :nop_1,
+    :jz_t,
+    :nop_0,
+    :nop_0,
+    :nop_1,
+    :nop_1,
 
     # ── pos 15..17: init copy counter slot[1] = 0 ────────────────────────
-    :push0, :push1, :store,
+    :push0,
+    :push1,
+    :store,
 
     # ── pos 18..21: COPY_LOOP_HEAD anchor [n1, n0, n0, n1] ───────────────
-    :nop_1, :nop_0, :nop_0, :nop_1,
+    :nop_1,
+    :nop_0,
+    :nop_0,
+    :nop_1,
 
     # ── pos 22..29: copy body — read self at slot[1], write to child ────
-    :push1, :load, :read_self,
-    :push1, :load, :swap, :write_child, :drop,
+    :push1,
+    :load,
+    :read_self,
+    :push1,
+    :load,
+    :swap,
+    :write_child,
+    :drop,
 
     # ── pos 30..35: increment slot[1] (copy counter) ─────────────────────
-    :push1, :load, :push1, :add, :push1, :store,
+    :push1,
+    :load,
+    :push1,
+    :add,
+    :push1,
+    :store,
 
     # ── pos 36..40: loop condition (N - (counter+1)) ─────────────────────
-    :push0, :load, :push1, :load, :sub,
+    :push0,
+    :load,
+    :push1,
+    :load,
+    :sub,
 
     # ── pos 41..45: jnz_t COPY_LOOP_HEAD (template [n0,n1,n1,n0]) ───────
-    :jnz_t, :nop_0, :nop_1, :nop_1, :nop_0,
+    :jnz_t,
+    :nop_0,
+    :nop_1,
+    :nop_1,
+    :nop_0,
 
     # ── pos 46: divide ───────────────────────────────────────────────────
     :divide,
 
     # ── pos 47..50: ABORT_TARGET anchor [n1, n1, n0, n0] ─────────────────
-    :nop_1, :nop_1, :nop_0, :nop_0,
+    :nop_1,
+    :nop_1,
+    :nop_0,
+    :nop_0,
 
     # ── pos 51: deterministic post-divide turn ───────────────────────────
     :turn_left
@@ -349,31 +387,53 @@ defmodule Lenies.Codeomes.MinimalReplicator do
 
   @plasmid_opcodes [
     # ── pos 0..3: INTERCEPT_ANCHOR = FORAGE_LOOP_HEAD pattern [n0,n1,n0,n1] ──
-    :nop_0, :nop_1, :nop_0, :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_0,
+    :nop_1,
 
     # ── pos 4..8: pushN mod 2 ────────────────────────────────────────────
-    :pushN, :push1, :push1, :add, :mod,
+    :pushN,
+    :push1,
+    :push1,
+    :add,
+    :mod,
 
     # ── pos 9..13: jz_t TURN_LEFT_BR (template [n1,n0,n0,n0] → [n0,n1,n1,n1]) ──
-    :jz_t, :nop_1, :nop_0, :nop_0, :nop_0,
+    :jz_t,
+    :nop_1,
+    :nop_0,
+    :nop_0,
+    :nop_0,
 
     # ── pos 14: turn_right (mod was 1) ───────────────────────────────────
     :turn_right,
 
     # ── pos 15..19: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ──────
-    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+    :jmp_t,
+    :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_0,
 
     # ── pos 20: separator ────────────────────────────────────────────────
     :push0,
 
     # ── pos 21..24: TURN_LEFT_BR anchor [n0,n1,n1,n1] ───────────────────
-    :nop_0, :nop_1, :nop_1, :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_1,
+    :nop_1,
 
     # ── pos 25: turn_left (mod was 0) ────────────────────────────────────
     :turn_left,
 
     # ── pos 26..30: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ──────
-    :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+    :jmp_t,
+    :nop_1,
+    :nop_0,
+    :nop_1,
+    :nop_0,
 
     # ── pos 31: trailing separator (CRITICAL) ───────────────────────────
     # The plasmid is appended at the end of the host's codeome ring, so

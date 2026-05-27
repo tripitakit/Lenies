@@ -77,8 +77,10 @@ defmodule Lenies.ConjugationTest do
 
     snapshot = :sys.get_state(recipient_pid)
     assert Codeome.size(snapshot.codeome) == 5 + 3
+
     assert Codeome.to_list(snapshot.codeome) ==
              [:eat, :move, :turn_left, :eat, :move, :turn_right, :turn_right, :defend]
+
     assert [%Plasmid{opcodes: ^plasmid_ops}] = snapshot.plasmids
   end
 
@@ -92,7 +94,8 @@ defmodule Lenies.ConjugationTest do
     {:ok, recipient_pid} =
       Lenie.start_link(
         id: "RX",
-        codeome: Codeome.from_list([:eat, :move, :turn_left, :eat, :move, :turn_right, :eat, :move]),
+        codeome:
+          Codeome.from_list([:eat, :move, :turn_left, :eat, :move, :turn_right, :eat, :move]),
         energy: 5_000.0,
         pos: {128, 128},
         dir: :n,
@@ -188,8 +191,10 @@ defmodule Lenies.ConjugationTest do
 
     # Recipient codeome grew by exactly 3 opcodes (capped at max 5).
     assert Codeome.size(recipient_snap.codeome) == 5
+
     assert Codeome.to_list(recipient_snap.codeome) ==
              [:eat, :move, :turn_left, :defend, :eat]
+
     # Recipient now has the plasmid in its buffer too.
     assert [%Plasmid{opcodes: [:turn_left, :defend, :eat]}] = recipient_snap.plasmids
   end
@@ -268,7 +273,9 @@ defmodule Lenies.ConjugationTest do
 
     assert length(new_ops) == 30
     diff = Enum.zip(original_ops, new_ops) |> Enum.count(fn {a, b} -> a != b end)
-    assert diff > 0, "expected at least one opcode to differ after 50 background mutations; got diff=#{diff}"
+
+    assert diff > 0,
+           "expected at least one opcode to differ after 50 background mutations; got diff=#{diff}"
   end
 
   test "receive_plasmid accumulates distinct plasmids (multi-plasmid carry)" do
@@ -443,7 +450,7 @@ defmodule Lenies.ConjugationTest do
     # Energy spent should be at least the cost of one successful conjugation
     # (may be more if extra ops ran, but never less on first success).
     assert energy_spent >= expected_cost - 0.001,
-      "Expected ≥ #{expected_cost} spent; got #{energy_spent}"
+           "Expected ≥ #{expected_cost} spent; got #{energy_spent}"
   end
 
   # Verify that a failed conjugation (empty plasmid list → world returns push(0))

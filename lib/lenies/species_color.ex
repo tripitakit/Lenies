@@ -136,7 +136,7 @@ defmodule Lenies.SpeciesColor do
         nil
 
       cmax == rf ->
-        :math.fmod((gf - bf) / delta, 6) * 60 |> wrap360()
+        (:math.fmod((gf - bf) / delta, 6) * 60) |> wrap360()
 
       cmax == gf ->
         ((bf - rf) / delta + 2) * 60
