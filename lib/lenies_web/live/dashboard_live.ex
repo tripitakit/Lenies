@@ -357,7 +357,11 @@ defmodule LeniesWeb.DashboardLive do
             <% end %>
           </div>
 
-          <.live_component module={LeniesWeb.ControlsPanelComponent} id="controls" />
+          <.live_component
+            module={LeniesWeb.ControlsPanelComponent}
+            id="controls"
+            current_scope={@current_scope}
+          />
         </div>
       </div>
     </div>
@@ -603,9 +607,9 @@ defmodule LeniesWeb.DashboardLive do
 
   # Pristine-codeome hashes for every built-in seed, computed once at
   # module load. Custom user seeds aren't covered because their pristine
-  # codeome lives in `Seeds.CustomStore` (the user could even edit and
-  # save back at any time) — for those we always show the "evolved from"
-  # form because we can't reliably know what "pristine" means.
+  # codeome lives in the per-user `Lenies.Collection` (the user could even
+  # edit and save back at any time) — for those we always show the "evolved
+  # from" form because we can't reliably know what "pristine" means.
   @builtin_pristine_hashes Map.new(
                              Lenies.Seeds.all(),
                              fn s -> {s.name, Lenies.Codeome.hash(s.codeome)} end
