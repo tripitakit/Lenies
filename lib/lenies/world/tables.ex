@@ -4,11 +4,8 @@ defmodule Lenies.World.Tables do
 
   Ownership convention: the caller (`Lenies.World` in production) must invoke
   `create_all/1` from its `init/1` to become the owner of the tables. All
-  tables are `:set`, `:public`. For the `:primary` world the tables are
-  ALSO created as `:named_table` (compat shim during the multi-world
-  refactor) so legacy callers reading by atom name (`:cells`, `:lenies`, …)
-  continue to work. The shim is removed in Task 6 when Lenies switch to
-  handle-based reads.
+  tables are `:set`, `:public`, and UNNAMED — the caller holds the tids in
+  its state map and exposes them via its `%Lenies.WorldHandle{}`.
 
   Tables:
   - `:cells`             — `{x,y} → %Lenies.World.Cell{}` (source of truth for occupancy)
@@ -27,40 +24,48 @@ defmodule Lenies.World.Tables do
   def tables, do: @tables
 
   @doc """
-  Creates the 4 per-world ETS tables and returns a map of tids.
+  Creates the 4 per-world ETS tables (unnamed) and returns a map of tids.
 
-  For the `:primary` world (compat shim during the multi-world refactor) we
-  ALSO register the tables as named (`:cells`, `:lenies`, `:child_slots`,
-  `:history`) so legacy callers reading by atom name continue to work. The
-  shim is removed in Task 6 when Lenies switch to handle-based reads.
+  The atom passed as first arg to `:ets.new/2` is just a tag for
+  `:ets.info/2` (the table has no global name without `:named_table`).
   """
-  def create_all(world_id) do
-    named = if world_id == :primary, do: [:named_table], else: []
-    opts = [:set, :public, read_concurrency: true, write_concurrency: true] ++ named
+  def create_all(_world_id) do
+    opts = [:set, :public, read_concurrency: true, write_concurrency: true]
+    ordered_opts = [:ordered_set, :public, read_concurrency: true, write_concurrency: true]
 
-    # `:ets.new/2` returns the atom name when `:named_table` is in opts and a
-    # reference (tid) otherwise. The state.tables map MUST always hold tids,
-    # so for the named-table case we resolve the tid via `:ets.whereis/1`.
     %{
-      cells: tid_of(:ets.new(:cells, opts)),
-      lenies: tid_of(:ets.new(:lenies, opts)),
-      child_slots: tid_of(:ets.new(:child_slots, opts)),
-      history: tid_of(:ets.new(:history, opts))
+      cells: :ets.new(:cells, opts),
+      lenies: :ets.new(:lenies, opts),
+      child_slots: :ets.new(:child_slots, opts),
+      history: :ets.new(:history, ordered_opts)
     }
   end
 
-  defp tid_of(ref) when is_reference(ref), do: ref
-  defp tid_of(name) when is_atom(name), do: :ets.whereis(name)
-
   @doc """
-  Legacy zero-arg variant — creates the 4 ETS tables as `:named_table` only.
+  Test-only convenience that creates the 4 tables as `:named_table` so a
+  test fixture can read/write them by bare atom without spinning up a
+  full `Lenies.World`.
 
-  Used by tests and other call sites that haven't been migrated to the
-  per-world tids map yet. Equivalent to `create_all(:primary)` minus the
-  return value (returns `:ok` for back-compat).
+  Production code MUST use `create_all/1` (unnamed tids) and thread the
+  resulting map through a `%Lenies.WorldHandle{}`. This wrapper exists
+  purely so existing test setups (`test/lenies/world/tables_test.exs`,
+  `test/lenies/world/child_slots_test.exs`, …) keep working.
   """
   def create_all do
-    _ = create_all(:primary)
+    opts = [:set, :public, :named_table, read_concurrency: true, write_concurrency: true]
+
+    ordered_opts = [
+      :ordered_set,
+      :public,
+      :named_table,
+      read_concurrency: true,
+      write_concurrency: true
+    ]
+
+    :ets.new(:cells, opts)
+    :ets.new(:lenies, opts)
+    :ets.new(:child_slots, opts)
+    :ets.new(:history, ordered_opts)
     :ok
   end
 
@@ -81,8 +86,11 @@ defmodule Lenies.World.Tables do
   end
 
   @doc """
-  Legacy zero-arg variant — deletes the 4 ETS tables by named atom.
-  Idempotent.
+  Test-only `on_exit` companion to `create_all/0`. Deletes the 4 named
+  tables (idempotent), then — if a `Lenies.World` GenServer is still
+  running — stops it so the next test starts from a clean slate.
+
+  Production code MUST use `delete_all/1` with the per-world tables map.
   """
   def delete_all do
     for t <- @tables do
@@ -112,7 +120,7 @@ defmodule Lenies.World.Tables do
   end
 
   @doc """
-  Legacy zero-arg variant — empties the 4 ETS tables by named atom.
+  Test-only counterpart to `create_all/0`: empties the 4 named tables.
   """
   def clear_all do
     for t <- @tables do

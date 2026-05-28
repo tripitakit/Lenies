@@ -37,8 +37,8 @@ defmodule Lenies.LenieTakeDamageTest do
   end
 
   test "Lenie loses energy when receiving :take_damage" do
-    [{key, cell}] = :ets.lookup(:cells, {5, 5})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "L1"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L1"}})
 
     codeome = Codeome.from_list([:nop_0, :nop_0])
 
@@ -63,8 +63,8 @@ defmodule Lenies.LenieTakeDamageTest do
   end
 
   test "Lenie dies when :take_damage brings energy <= 0" do
-    [{key, cell}] = :ets.lookup(:cells, {5, 5})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "L2"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L2"}})
 
     codeome = Codeome.from_list([:nop_0])
 
@@ -86,13 +86,13 @@ defmodule Lenies.LenieTakeDamageTest do
     assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 500
 
     Process.sleep(100)
-    [{_, cell}] = :ets.lookup(:cells, {5, 5})
+    [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
     assert cell.lenie_id == nil
   end
 
   test "Lenie that dies from damage with positive energy leaves carcass" do
-    [{key, cell}] = :ets.lookup(:cells, {5, 5})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "L3"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L3"}})
 
     codeome = Codeome.from_list([:nop_0])
 
@@ -114,7 +114,7 @@ defmodule Lenies.LenieTakeDamageTest do
     assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 500
 
     Process.sleep(100)
-    [{_, cell}] = :ets.lookup(:cells, {5, 5})
+    [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
     assert cell.lenie_id == nil
   end
 end

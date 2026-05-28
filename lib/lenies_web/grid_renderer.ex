@@ -26,8 +26,9 @@ defmodule LeniesWeb.GridRenderer do
   @spec encode_layers({pos_integer(), pos_integer()}) ::
           {binary(), binary(), binary(), binary()}
   def encode_layers({w, h}) do
-    cells = :ets.tab2list(:cells) |> Map.new()
-    hash_by_id = build_hash_index()
+    handle = fetch_handle()
+    cells = if handle, do: :ets.tab2list(handle.tables.cells) |> Map.new(), else: %{}
+    hash_by_id = build_hash_index(handle)
 
     bytes =
       for y <- 0..(h - 1), x <- 0..(w - 1) do
@@ -71,14 +72,21 @@ defmodule LeniesWeb.GridRenderer do
 
   # One ETS scan to build {lenie_id => codeome_hash}. Avoids a per-cell lookup
   # in the inner row-major loop.
-  defp build_hash_index do
-    case :ets.info(:lenies) do
-      :undefined ->
-        %{}
+  defp build_hash_index(nil), do: %{}
 
-      _ ->
-        :ets.tab2list(:lenies)
-        |> Map.new(fn {id, record} -> {id, Map.get(record, :codeome_hash)} end)
+  defp build_hash_index(handle) do
+    :ets.tab2list(handle.tables.lenies)
+    |> Map.new(fn {id, record} -> {id, Map.get(record, :codeome_hash)} end)
+  end
+
+  # Returns the primary world's handle or nil if the World isn't running.
+  # Empty render output is preferable to crashing when called before the
+  # World has booted.
+  defp fetch_handle do
+    try do
+      Lenies.Worlds.primary_handle()
+    catch
+      :exit, _ -> nil
     end
   end
 

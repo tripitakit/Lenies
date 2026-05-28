@@ -26,13 +26,13 @@ defmodule Lenies.IntegrationWalkerTest do
 
     # seed cells {10..200, 10} with biomass (wide enough to feed the walker for 500ms)
     for x <- 10..200 do
-      [{key, cell}] = :ets.lookup(:cells, {x, 10})
-      :ets.insert(:cells, {key, %{cell | resource: 100}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, 10})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 100}})
     end
 
     # spawn walker at {10, 10} facing east, plenty of energy
-    [{key, cell}] = :ets.lookup(:cells, {10, 10})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "walker"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {10, 10})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "walker"}})
 
     {:ok, pid} =
       Lenie.start_link(

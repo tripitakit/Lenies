@@ -117,11 +117,16 @@ defmodule Lenies.Snapshot do
   defp do_save(dir) do
     File.mkdir_p!(dir)
 
+    # Fetch tids from the primary World handle — tables are unnamed
+    # (multi-world refactor T6), so we can't pass bare atoms to tab2file.
+    handle = Lenies.Worlds.primary_handle()
+
     write_result =
       Enum.reduce_while(@tables, :ok, fn table, _acc ->
         tmp = tmp_path(dir, table) |> String.to_charlist()
+        tid = Map.fetch!(handle.tables, table)
 
-        case :ets.tab2file(table, tmp) do
+        case :ets.tab2file(tid, tmp) do
           :ok -> {:cont, :ok}
           error -> {:halt, {:error, {table, error}}}
         end

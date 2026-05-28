@@ -16,7 +16,11 @@ defmodule LeniesWeb.LenieInspectorLive do
   @impl true
   def mount(%{"id" => id}, _session, socket) do
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(Lenies.PubSub, "lenie:#{id}")
+      # Multi-world refactor T6: the Lenie broadcasts its own update topic
+      # scoped to the world it belongs to. Subscribe to the primary world's
+      # scoped topic; once LiveViews become world-aware (Task 11) this
+      # picks up the world_id from the route.
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "world:primary:lenie:#{id}")
     end
 
     socket =
@@ -30,7 +34,7 @@ defmodule LeniesWeb.LenieInspectorLive do
   defp load_lenie(socket) do
     id = socket.assigns.id
 
-    case Registry.lookup(Lenies.Registry, id) do
+    case Registry.lookup(Lenies.Registry, {:lenie, :primary, id}) do
       [{pid, _}] ->
         snap =
           try do
@@ -49,16 +53,29 @@ defmodule LeniesWeb.LenieInspectorLive do
         end
 
       [] ->
-        case :ets.lookup(:lenies, id) do
-          [{^id, snap}] ->
+        case lookup_lenie_snap(id) do
+          {:ok, snap} ->
             socket
             |> assign(:found?, false)
             |> assign(:snap, snap)
             |> assign(:codeome_lines, [])
 
-          _ ->
+          :error ->
             assign(socket, :found?, false)
         end
+    end
+  end
+
+  defp lookup_lenie_snap(id) do
+    try do
+      handle = Lenies.Worlds.primary_handle()
+
+      case :ets.lookup(handle.tables.lenies, id) do
+        [{^id, snap}] -> {:ok, snap}
+        _ -> :error
+      end
+    catch
+      :exit, _ -> :error
     end
   end
 
@@ -86,7 +103,7 @@ defmodule LeniesWeb.LenieInspectorLive do
         |> assign(:found?, true)
 
       socket =
-        case Registry.lookup(Lenies.Registry, snap.id) do
+        case Registry.lookup(Lenies.Registry, {:lenie, :primary, snap.id}) do
           [{pid, _}] -> assign(socket, :codeome_lines, fetch_codeome_lines(pid, snap))
           [] -> socket
         end

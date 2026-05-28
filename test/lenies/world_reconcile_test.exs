@@ -48,7 +48,7 @@ defmodule Lenies.WorldReconcileTest do
 
   # Look up a Lenie by id via the OTP Registry. Returns the pid or nil.
   defp whereis(id) do
-    case Registry.lookup(Lenies.Registry, id) do
+    case Registry.lookup(Lenies.Registry, {:lenie, :primary, id}) do
       [{pid, _}] -> pid
       [] -> nil
     end
@@ -81,7 +81,7 @@ defmodule Lenies.WorldReconcileTest do
       assert is_pid(pid), "Lenie should be alive after spawn"
 
       # Verify the cell is occupied
-      [{_, cell_before}] = :ets.lookup(:cells, pos)
+      [{_, cell_before}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), pos)
       assert cell_before.lenie_id == lenie_id
 
       # Brutal kill — skips terminate/2, so no lenie_died cast is sent
@@ -96,12 +96,12 @@ defmodule Lenies.WorldReconcileTest do
       :ok = wait_until(fn -> whereis(lenie_id) == nil end)
 
       # Before reconcile: cell is still marked occupied, :lenies record still exists
-      [{_, cell_stale}] = :ets.lookup(:cells, pos)
+      [{_, cell_stale}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), pos)
 
       assert cell_stale.lenie_id == lenie_id,
              "cell should still be stale before reconcile (this is the bug being fixed)"
 
-      assert :ets.lookup(:lenies, lenie_id) != [],
+      assert :ets.lookup(Lenies.WorldTestHelpers.lenies(), lenie_id) != [],
              ":lenies record should still exist before reconcile"
 
       # Run the reconcile sweep
@@ -110,12 +110,12 @@ defmodule Lenies.WorldReconcileTest do
       assert deleted >= 1, "at least one :lenies record should have been deleted"
 
       # After reconcile: cell is free, :lenies record is gone
-      [{_, cell_after}] = :ets.lookup(:cells, pos)
+      [{_, cell_after}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), pos)
 
       assert cell_after.lenie_id == nil,
              "cell should be free after reconcile"
 
-      assert :ets.lookup(:lenies, lenie_id) == [],
+      assert :ets.lookup(Lenies.WorldTestHelpers.lenies(), lenie_id) == [],
              ":lenies record should be gone after reconcile"
     end
 
@@ -127,17 +127,17 @@ defmodule Lenies.WorldReconcileTest do
       assert is_pid(pid)
 
       # Wait for the Lenie's initial snapshot to appear in :lenies
-      :ok = wait_until(fn -> :ets.lookup(:lenies, lenie_id) != [] end)
+      :ok = wait_until(fn -> :ets.lookup(Lenies.WorldTestHelpers.lenies(), lenie_id) != [] end)
 
       # Reconcile should leave the live Lenie completely alone
       World.reconcile()
 
-      [{_, cell_after}] = :ets.lookup(:cells, pos)
+      [{_, cell_after}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), pos)
 
       assert cell_after.lenie_id == lenie_id,
              "live Lenie's cell must not be cleared"
 
-      assert :ets.lookup(:lenies, lenie_id) != [],
+      assert :ets.lookup(Lenies.WorldTestHelpers.lenies(), lenie_id) != [],
              "live Lenie's :lenies record must not be deleted"
 
       # Clean up
@@ -149,14 +149,14 @@ defmodule Lenies.WorldReconcileTest do
       dead_id = "deaddeaddeaddead"
 
       # Manually plant an orphaned :lenies record — no live pid, no cell
-      :ets.insert(:lenies, {dead_id, %{id: dead_id, pos: {5, 5}, energy: 1.0}})
+      :ets.insert(Lenies.WorldTestHelpers.lenies(), {dead_id, %{id: dead_id, pos: {5, 5}, energy: 1.0}})
 
-      assert :ets.lookup(:lenies, dead_id) != []
+      assert :ets.lookup(Lenies.WorldTestHelpers.lenies(), dead_id) != []
 
       {_freed, deleted} = World.reconcile()
       assert deleted >= 1
 
-      assert :ets.lookup(:lenies, dead_id) == [],
+      assert :ets.lookup(Lenies.WorldTestHelpers.lenies(), dead_id) == [],
              "orphaned :lenies record should be deleted"
     end
 

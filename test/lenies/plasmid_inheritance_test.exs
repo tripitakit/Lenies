@@ -56,12 +56,12 @@ defmodule Lenies.PlasmidInheritanceTest do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
     for x <- 0..254, y <- 0..254 do
-      [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 200}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 200}})
     end
 
-    [{key, cell}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "PARENT"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "PARENT"}})
 
     parent_plasmid = Plasmid.new([:eat, :move, :turn_left])
 
@@ -82,7 +82,7 @@ defmodule Lenies.PlasmidInheritanceTest do
 
     child_with_plasmid =
       poll_until(deadline, fn ->
-        :ets.tab2list(:lenies)
+        :ets.tab2list(Lenies.WorldTestHelpers.lenies())
         |> Enum.find_value(fn {id, snap} ->
           if id != "PARENT" and Map.get(snap, :plasmids, []) != [] do
             {:done, snap}

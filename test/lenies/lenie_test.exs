@@ -30,8 +30,8 @@ defmodule Lenies.LenieTest do
     {:ok, _world} = Lenies.World.start_link(tick_interval_ms: 0)
 
     # mark cell {5,5} as occupied (the Lenie expects to find itself there)
-    [{key, cell}] = :ets.lookup(:cells, {5, 5})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "L1"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L1"}})
 
     codeome = Codeome.from_list([:nop_0, :nop_1])
 
@@ -46,15 +46,15 @@ defmodule Lenies.LenieTest do
       )
 
     assert Process.alive?(pid)
-    assert [{^pid, _}] = Registry.lookup(Lenies.Registry, "L1")
+    assert [{^pid, _}] = Registry.lookup(Lenies.Registry, {:lenie, :primary, "L1"})
 
     GenServer.stop(pid)
   end
 
   test "inspect_state/1 returns current snapshot" do
     {:ok, _world} = Lenies.World.start_link(tick_interval_ms: 0)
-    [{key, cell}] = :ets.lookup(:cells, {5, 5})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "L2"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L2"}})
 
     codeome = Codeome.from_list([:nop_0])
 
@@ -79,8 +79,8 @@ defmodule Lenies.LenieTest do
 
   test "dies of starvation when energy depletes" do
     {:ok, _world} = Lenies.World.start_link(tick_interval_ms: 0)
-    [{key, cell}] = :ets.lookup(:cells, {5, 5})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "L3"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L3"}})
 
     # only 0.3 energy — will be consumed by a few nops + age increments
     codeome = Codeome.from_list([:nop_0, :nop_1, :add, :sub])
@@ -100,7 +100,7 @@ defmodule Lenies.LenieTest do
     assert_receive {:DOWN, ^ref, :process, ^pid, :starvation}, 1_000
 
     # cell freed
-    [{_, after_cell}] = :ets.lookup(:cells, {5, 5})
+    [{_, after_cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
     assert after_cell.lenie_id == nil
   end
 end

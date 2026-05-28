@@ -65,12 +65,12 @@ defmodule Lenies.Codeomes.DefenderTest do
     # Wide resource strip so the random-turn behaviour can find food
     # regardless of the direction the seed wandered into.
     for x <- 0..254, y <- 0..254 do
-      [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 200}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 200}})
     end
 
-    [{key, cell}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "DEF-ORIGIN"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "DEF-ORIGIN"}})
 
     {:ok, pid} =
       Lenie.start_link(
@@ -88,12 +88,12 @@ defmodule Lenies.Codeomes.DefenderTest do
 
     max_gen =
       poll_until(deadline, fn ->
-        snaps = :ets.tab2list(:lenies)
+        snaps = :ets.tab2list(Lenies.WorldTestHelpers.lenies())
         m = max_generation(snaps)
         if m >= 3, do: {:done, m}, else: :continue
       end)
 
-    snaps = :ets.tab2list(:lenies)
+    snaps = :ets.tab2list(Lenies.WorldTestHelpers.lenies())
 
     assert max_gen >= 3,
            "expected at least 3 generations; got max gen #{max_gen}, " <>
@@ -110,7 +110,7 @@ defmodule Lenies.Codeomes.DefenderTest do
     now = System.monotonic_time(:millisecond)
 
     if now >= deadline do
-      snaps = :ets.tab2list(:lenies)
+      snaps = :ets.tab2list(Lenies.WorldTestHelpers.lenies())
       max_generation(snaps)
     else
       case fun.() do

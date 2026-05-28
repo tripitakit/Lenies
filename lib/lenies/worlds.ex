@@ -28,4 +28,18 @@ defmodule Lenies.Worlds do
   def id_to_path({atom, rest}) when is_atom(atom) do
     "#{atom}-#{rest}"
   end
+
+  @doc """
+  Fetch the `%Lenies.WorldHandle{}` for the running `:primary` World.
+
+  Compat helper used during the multi-world refactor — many call sites
+  (Telemetry, GridRenderer, dashboard LiveViews, tests) still operate on
+  the implicit primary world. Goes through the `Lenies.World` singleton
+  GenServer name (compat shim removed in Task 10). Raises if the primary
+  World isn't running.
+  """
+  @spec primary_handle() :: Lenies.WorldHandle.t()
+  def primary_handle do
+    GenServer.call(Lenies.World, :get_handle)
+  end
 end

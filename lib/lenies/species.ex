@@ -36,18 +36,17 @@ defmodule Lenies.Species do
   """
   @spec aggregate() :: [species_record()]
   def aggregate do
-    if :ets.info(:lenies) == :undefined do
-      []
-    else
-      do_aggregate()
+    case primary_handle() do
+      nil -> []
+      handle -> do_aggregate(handle)
     end
   end
 
-  defp do_aggregate do
+  defp do_aggregate(handle) do
     eat_amount = Application.get_env(:lenies, :eat_amount, 20)
     attack_damage = Application.get_env(:lenies, :attack_damage, 10)
 
-    :ets.tab2list(:lenies)
+    :ets.tab2list(handle.tables.lenies)
     # Filter out stale snapshots whose Lenie process is already dead.
     # `World.lenie_died` is a CAST so there's a window where the
     # process is gone but the :lenies record isn't deleted yet —
@@ -138,11 +137,24 @@ defmodule Lenies.Species do
   @doc "Return all `:lenies` records (raw {id, snap} tuples) with the given codeome_hash."
   @spec for_hash(binary()) :: [{binary(), map()}]
   def for_hash(hash) do
-    if :ets.info(:lenies) == :undefined do
-      []
-    else
-      :ets.tab2list(:lenies)
-      |> Enum.filter(fn {_id, snap} -> snap.codeome_hash == hash end)
+    case primary_handle() do
+      nil ->
+        []
+
+      handle ->
+        :ets.tab2list(handle.tables.lenies)
+        |> Enum.filter(fn {_id, snap} -> snap.codeome_hash == hash end)
+    end
+  end
+
+  # Returns the primary World's handle or nil if the World isn't running.
+  # Species aggregation is best-effort: the dashboard renders an empty
+  # species panel rather than crashing if the world hasn't booted yet.
+  defp primary_handle do
+    try do
+      Lenies.Worlds.primary_handle()
+    catch
+      :exit, _ -> nil
     end
   end
 

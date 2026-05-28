@@ -45,10 +45,10 @@ defmodule Lenies.WorldSpawnTest do
     assert x in 0..255
     assert y in 0..255
 
-    [{_, cell}] = :ets.lookup(:cells, {x, y})
+    [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
     assert cell.lenie_id == lenie_id
 
-    [{pid, _}] = Registry.lookup(Lenies.Registry, lenie_id)
+    [{pid, _}] = Registry.lookup(Lenies.Registry, {:lenie, :primary, lenie_id})
     assert is_pid(pid)
     Process.unlink(pid)
     GenServer.stop(pid)
@@ -56,8 +56,8 @@ defmodule Lenies.WorldSpawnTest do
 
   test "spawn_lenie/2 returns :no_free_cell when grid is full" do
     for x <- 0..255, y <- 0..255 do
-      [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | lenie_id: "FAKE"}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "FAKE"}})
     end
 
     codeome = Codeome.from_list([:nop_0])

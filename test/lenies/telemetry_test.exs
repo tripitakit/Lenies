@@ -86,7 +86,7 @@ defmodule Lenies.TelemetryTest do
       for _ <- 1..7, do: send_tick(nil)
       # Drain Telemetry mailbox synchronously
       :sys.get_state(Lenies.Telemetry)
-      assert :ets.info(:history, :size) == 3
+      assert :ets.info(Lenies.WorldTestHelpers.history(), :size) == 3
     end
 
     test "retained entries are the most recent ones (oldest evicted)" do
@@ -114,7 +114,7 @@ defmodule Lenies.TelemetryTest do
       for _ <- 1..5, do: send_tick(nil)
       :sys.get_state(Lenies.Telemetry)
 
-      assert :ets.info(:history, :size) == 3
+      assert :ets.info(Lenies.WorldTestHelpers.history(), :size) == 3
       entries = Lenies.Telemetry.history(:all)
       ticks = Enum.map(entries, & &1.tick) |> Enum.sort()
       assert ticks == [3, 4, 5]

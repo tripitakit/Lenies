@@ -234,71 +234,74 @@ defmodule Lenies.World do
     if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
     if state.reconcile_ref, do: Process.cancel_timer(state.reconcile_ref)
 
-    result =
+    # Delete the existing (sterilized) tables so file2tab can recreate them
+    # owned by THIS World process. Each file2tab returns {:ok, tid}; we
+    # collect the new tids into a map shaped like Tables.create_all/1.
+    delete_tables(state.tables)
+
+    {result, restored_tables} =
       try do
-        Enum.reduce_while(Lenies.Snapshot.tables(), :ok, fn table, _acc ->
+        Enum.reduce_while(Lenies.Snapshot.tables(), {:ok, %{}}, fn table, {:ok, acc} ->
           path = Path.join(dir, "#{table}.tab") |> String.to_charlist()
 
-          # The table still exists after sterilize; delete it so file2tab can
-          # recreate it owned by THIS (World) process.
-          if :ets.whereis(table) != :undefined, do: :ets.delete(table)
-
           case :ets.file2tab(path) do
-            {:ok, _} -> {:cont, :ok}
-            _error -> {:halt, {:error, {:restore_failed, table}}}
+            {:ok, tid} -> {:cont, {:ok, Map.put(acc, table, tid)}}
+            _error -> {:halt, {{:error, {:restore_failed, table}}, acc}}
           end
         end)
       rescue
-        _ -> {:error, {:restore_failed, :unknown}}
+        _ -> {{:error, {:restore_failed, :unknown}}, %{}}
       end
 
-    # `file2tab` recreates the snapshot tables (under their saved names —
-    # `:cells`, `:lenies`, …, which works for `:primary`'s named-table shim)
-    # but the old tids stored in `state.tables` now point at deleted tables.
-    # Refresh the tables map to the new tids before we touch ETS again.
-    new_tables = refresh_named_tables(state.tables)
+    new_state =
+      case result do
+        :ok ->
+          # All 4 tables restored — adopt the new tids into state + handle.
+          new_state = %{
+            state
+            | tables: restored_tables,
+              handle: %{state.handle | tables: restored_tables},
+              tick_count: 0,
+              tick_ref: nil,
+              reconcile_ref: nil
+          }
 
-    # Reset tick bookkeeping like sterilize does and reschedule the tick and reconcile.
-    new_state = %{
-      state
-      | tables: new_tables,
-        handle: %{state.handle | tables: new_tables},
-        tick_count: 0,
-        tick_ref: nil,
-        reconcile_ref: nil
-    }
+          {r, c} = sum_cells(new_state.tables)
+          new_state = %{new_state | total_resource: r, total_carcass: c}
 
-    new_state = maybe_schedule_tick(new_state)
-    new_state = schedule_reconcile(new_state)
+          new_state = maybe_schedule_tick(new_state)
+          new_state = schedule_reconcile(new_state)
+          broadcast(new_state, "control", {:restored, System.system_time(:millisecond)})
+          new_state
+
+        {:error, _} ->
+          # Recovery: file2tab failed partway through the loop. Some tables may
+          # have been restored; some are missing. Drop whatever we partially
+          # restored and replace ALL 4 with fresh empty tables so the world is
+          # in a valid (empty) state.
+          delete_tables(restored_tables)
+          recovered_tables = recover_tables(state.grid)
+
+          new_state = %{
+            state
+            | tables: recovered_tables,
+              handle: %{state.handle | tables: recovered_tables},
+              tick_count: 0,
+              tick_ref: nil,
+              reconcile_ref: nil
+          }
+
+          {r, c} = sum_cells(new_state.tables)
+          new_state = %{new_state | total_resource: r, total_carcass: c}
+
+          new_state = maybe_schedule_tick(new_state)
+          new_state = schedule_reconcile(new_state)
+          new_state
+      end
 
     case result do
-      :ok ->
-        # Recompute totals from the freshly loaded :cells table.
-        {r, c} = sum_cells(new_state.tables)
-        new_state = %{new_state | total_resource: r, total_carcass: c}
-
-        broadcast(new_state, "control", {:restored, System.system_time(:millisecond)})
-
-        {:reply, :ok, new_state}
-
-      {:error, _} = err ->
-        # Recovery: if file2tab failed partway through the loop, one or more
-        # snapshot tables may be missing (deleted but not recreated). An absent
-        # named table would cause World to crash on the next ETS lookup, so we
-        # recreate all 4 as fresh empty tables and re-initialise the :cells grid
-        # to leave the world in a valid, consistent (empty) state.
-        recover_tables(new_state.grid)
-        recovered_tables = refresh_named_tables(new_state.tables)
-
-        new_state = %{
-          new_state
-          | tables: recovered_tables,
-            handle: %{new_state.handle | tables: recovered_tables}
-        }
-
-        {r, c} = sum_cells(new_state.tables)
-        new_state = %{new_state | total_resource: r, total_carcass: c}
-        {:reply, err, new_state}
+      :ok -> {:reply, :ok, new_state}
+      err -> {:reply, err, new_state}
     end
   end
 
@@ -362,7 +365,9 @@ defmodule Lenies.World do
         {:ok, _pid} =
           DynamicSupervisor.start_child(
             Lenies.LenieSupervisor,
-            Supervisor.child_spec({Lenies.Lenie, child_opts}, restart: :temporary)
+            Supervisor.child_spec({Lenies.Lenie, {state.handle, child_opts}},
+              restart: :temporary
+            )
           )
 
         [{key, cell}] = :ets.lookup(state.tables.cells, pos)
@@ -410,6 +415,18 @@ defmodule Lenies.World do
 
   # ----- internals -----
 
+  defp delete_tables(tables) when is_map(tables) do
+    for {_key, tid} <- tables do
+      try do
+        :ets.delete(tid)
+      rescue
+        ArgumentError -> :ok
+      end
+    end
+
+    :ok
+  end
+
   # Live config read with hardcoded-default fallback (compat shim during the
   # multi-world refactor). The intent of the spec is that `state.config.<key>`
   # be the source of truth — but the existing suite relies on
@@ -435,15 +452,6 @@ defmodule Lenies.World do
     Application.get_env(:lenies, key, Map.fetch!(@cfg_defaults, key))
   end
 
-  # Re-resolve the tids for each table key by consulting `:ets.whereis/1`
-  # under the same atom name. Used after `:ets.file2tab` and `recover_tables`,
-  # both of which recreate the tables under their original (named) name —
-  # this is currently a :primary-only path because snapshot/restore is not
-  # yet multi-world.
-  defp refresh_named_tables(tables) do
-    Map.new(tables, fn {key, _old_tid} -> {key, :ets.whereis(key)} end)
-  end
-
   defp init_cells({w, h}, tables) do
     initial_resource = Application.get_env(:lenies, :initial_resource_per_cell, 30)
 
@@ -456,29 +464,33 @@ defmodule Lenies.World do
 
   # Recreate all 4 snapshot tables from scratch when a restore fails mid-loop.
   # Any table that currently exists is deleted first so the :new/2 call can
-  # register the :named_table. The :cells grid is then populated the same way
-  # init/1 does it, so the world is immediately usable after recovery.
+  # recreate it. The :cells grid is then populated the same way init/1 does
+  # it, so the world is immediately usable after recovery.
   #
   # NOTE: this path is only reachable via :restore_tables, which is a
   # primary-world-only flow at this stage (snapshot/restore is not yet
-  # multi-world). Recovery therefore re-creates NAMED tables and uses the
-  # legacy named-atom interface to seed cells.
+  # multi-world). Tables are recreated as unnamed tids and returned as a
+  # map matching Tables.create_all/1's output, so the caller can update
+  # state.tables / state.handle.tables in place.
   defp recover_tables(grid) do
-    table_opts = [:set, :named_table, :public, read_concurrency: true, write_concurrency: true]
+    table_opts = [:set, :public, read_concurrency: true, write_concurrency: true]
+    ordered_opts = [:ordered_set, :public, read_concurrency: true, write_concurrency: true]
 
-    for table <- Lenies.Snapshot.tables() do
-      if :ets.whereis(table) != :undefined, do: :ets.delete(table)
-      :ets.new(table, table_opts)
-    end
+    new_tables = %{
+      cells: :ets.new(:cells, table_opts),
+      lenies: :ets.new(:lenies, table_opts),
+      child_slots: :ets.new(:child_slots, table_opts),
+      history: :ets.new(:history, ordered_opts)
+    }
 
     initial_resource = Application.get_env(:lenies, :initial_resource_per_cell, 30)
     {w, h} = grid
 
     for x <- 0..(w - 1), y <- 0..(h - 1) do
-      :ets.insert(:cells, {{x, y}, %Cell{resource: initial_resource}})
+      :ets.insert(new_tables.cells, {{x, y}, %Cell{resource: initial_resource}})
     end
 
-    :ok
+    new_tables
   end
 
   defp prewarm_radiation(state) do
@@ -596,7 +608,7 @@ defmodule Lenies.World do
         # Pick a random Lenie's id
         {id, _record} = Enum.random(records)
 
-        case Registry.lookup(Lenies.Registry, id) do
+        case Registry.lookup(Lenies.Registry, {:lenie, state.world_id, id}) do
           [{pid, _}] -> send(pid, :background_mutate)
           [] -> :ok
         end
@@ -651,11 +663,14 @@ defmodule Lenies.World do
       cells = state.tables.cells
       lenies = state.tables.lenies
 
+      world_id = state.world_id
+
       # Pass 1 — collect keys of cells occupied by dead Lenies
       stale_cell_keys =
         :ets.foldl(
           fn {key, cell}, acc ->
-            if is_binary(cell.lenie_id) and Registry.lookup(Lenies.Registry, cell.lenie_id) == [] do
+            if is_binary(cell.lenie_id) and
+                 Registry.lookup(Lenies.Registry, {:lenie, world_id, cell.lenie_id}) == [] do
               [key | acc]
             else
               acc
@@ -677,7 +692,7 @@ defmodule Lenies.World do
       stale_lenie_ids =
         :ets.foldl(
           fn {id, _record}, acc ->
-            if Registry.lookup(Lenies.Registry, id) == [] do
+            if Registry.lookup(Lenies.Registry, {:lenie, world_id, id}) == [] do
               [id | acc]
             else
               acc
@@ -773,7 +788,9 @@ defmodule Lenies.World do
 
         case :ets.lookup(state.tables.cells, target_cell) do
           [{_, %{lenie_id: nil}}] ->
-            {:ok, slot_id} = ChildSlots.create(parent_id, target_cell, size)
+            {:ok, slot_id} =
+              ChildSlots.create(state.tables.child_slots, parent_id, target_cell, size)
+
             update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, slot_id), state)
             {{:ok, {:allocated, slot_id, target_cell}}, state}
 
@@ -801,7 +818,7 @@ defmodule Lenies.World do
   defp do_action({:divide, parent_energy, _pos, _dir, parent_id}, state) do
     case :ets.lookup(state.tables.lenies, parent_id) do
       [{^parent_id, %{child_slot_id: slot_id} = parent_record}] when is_binary(slot_id) ->
-        case ChildSlots.get(slot_id) do
+        case ChildSlots.get(state.tables.child_slots, slot_id) do
           {:ok, slot} ->
             do_divide(parent_id, parent_record, slot_id, slot, parent_energy, state)
 
@@ -863,7 +880,7 @@ defmodule Lenies.World do
         # Send async damage message to the target Lenie, including the
         # attacker id so the victim can reward the attacker with exactly
         # what it actually lost (energy conservation fix).
-        case Registry.lookup(Lenies.Registry, target_id) do
+        case Registry.lookup(Lenies.Registry, {:lenie, state.world_id, target_id}) do
           [{pid, _}] -> send(pid, {:take_damage, damage, attacker_id})
           [] -> :ok
         end
@@ -886,7 +903,7 @@ defmodule Lenies.World do
 
         if non_nops < min_viable do
           # slot has too many nops; "stillbirth" — release slot, energy not refunded
-          ChildSlots.delete(slot_id)
+          ChildSlots.delete(state.tables.child_slots, slot_id)
           update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil), state)
           {{:ok, :stillborn}, state}
         else
@@ -895,7 +912,7 @@ defmodule Lenies.World do
 
       _ ->
         # target now occupied; release slot, energy not refunded
-        ChildSlots.delete(slot_id)
+        ChildSlots.delete(state.tables.child_slots, slot_id)
         update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil), state)
         {{:ok, :target_blocked}, state}
     end
@@ -928,7 +945,9 @@ defmodule Lenies.World do
     {:ok, _child_pid} =
       DynamicSupervisor.start_child(
         Lenies.LenieSupervisor,
-        Supervisor.child_spec({Lenies.Lenie, child_opts}, restart: :temporary)
+        Supervisor.child_spec({Lenies.Lenie, {state.handle, child_opts}},
+          restart: :temporary
+        )
       )
 
     # Mark child cell occupied
@@ -936,7 +955,7 @@ defmodule Lenies.World do
     :ets.insert(state.tables.cells, {key, %{cell | lenie_id: child_id}})
 
     # Clean up parent's slot
-    ChildSlots.delete(slot_id)
+    ChildSlots.delete(state.tables.child_slots, slot_id)
     update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil), state)
 
     {{:ok, {:divided, child_id, child_energy}}, state}
@@ -1039,23 +1058,23 @@ defmodule Lenies.World do
     }
   end
 
-  defp apply_copy_outcome(slot_id, child_addr, opcode, :write, _state) do
-    ChildSlots.set_opcode(slot_id, child_addr, opcode)
+  defp apply_copy_outcome(slot_id, child_addr, opcode, :write, state) do
+    ChildSlots.set_opcode(state.tables.child_slots, slot_id, child_addr, opcode)
     :ok
   end
 
-  defp apply_copy_outcome(slot_id, child_addr, _opcode, :substitute, _state) do
-    ChildSlots.set_opcode(slot_id, child_addr, Mutator.random_opcode())
+  defp apply_copy_outcome(slot_id, child_addr, _opcode, :substitute, state) do
+    ChildSlots.set_opcode(state.tables.child_slots, slot_id, child_addr, Mutator.random_opcode())
     :ok
   end
 
   defp apply_copy_outcome(slot_id, child_addr, opcode, :insert, state) do
     # Insert a random opcode AT child_addr, shifting subsequent positions
-    {:ok, slot} = ChildSlots.get(slot_id)
+    {:ok, slot} = ChildSlots.get(state.tables.child_slots, slot_id)
     new_opcodes = Mutator.insert_at(slot.opcodes, child_addr, Mutator.random_opcode(), slot.size)
     :ets.insert(state.tables.child_slots, {slot_id, %{slot | opcodes: new_opcodes}})
     # Then write the requested opcode at the next position (the original target shifted by 1)
-    ChildSlots.set_opcode(slot_id, child_addr + 1, opcode)
+    ChildSlots.set_opcode(state.tables.child_slots, slot_id, child_addr + 1, opcode)
     :ok
   end
 

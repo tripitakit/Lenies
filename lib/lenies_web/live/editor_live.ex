@@ -72,7 +72,7 @@ defmodule LeniesWeb.EditorLive do
   end
 
   defp safe_get_codeome(id) do
-    case Registry.lookup(Lenies.Registry, id) do
+    case Registry.lookup(Lenies.Registry, {:lenie, :primary, id}) do
       [{pid, _}] ->
         try do
           GenServer.call(pid, :get_codeome, 1_000)

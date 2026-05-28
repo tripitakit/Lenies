@@ -106,7 +106,7 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
           lineage: {nil, 0}
         )
 
-      :ets.insert(:lenies, {"TEST-INSP-L1", %{id: "TEST-INSP-L1", codeome_hash: hash}})
+      :ets.insert(Lenies.WorldTestHelpers.lenies(), {"TEST-INSP-L1", %{id: "TEST-INSP-L1", codeome_hash: hash}})
 
       record = %{hash: hash, population: 1, avg_generation: 0.0}
 
@@ -140,7 +140,7 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
           lineage: {nil, 0}
         )
 
-      :ets.insert(:lenies, {"TEST-BLOCK-L1", %{id: "TEST-BLOCK-L1", codeome_hash: hash}})
+      :ets.insert(Lenies.WorldTestHelpers.lenies(), {"TEST-BLOCK-L1", %{id: "TEST-BLOCK-L1", codeome_hash: hash}})
 
       html =
         render_component(SpeciesInspectorComponent, %{

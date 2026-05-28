@@ -35,17 +35,22 @@ defmodule Lenies.SnapshotTest do
     {:ok, root: root}
   end
 
+  # Fetch the current primary handle. The world process is stable across a
+  # single test, but its tids change after `:restore_tables` succeeds, so
+  # the helper re-fetches on each call rather than caching.
+  defp h, do: Lenies.Worlds.primary_handle()
+
   test "save_to_disk/1 and restore_from_disk/1 round-trip cells by name" do
-    [{key, cell}] = :ets.lookup(:cells, {3, 3})
-    :ets.insert(:cells, {key, %{cell | resource: 88, carcass: 17, lenie_id: "TEST"}})
+    [{key, cell}] = :ets.lookup(h().tables.cells, {3, 3})
+    :ets.insert(h().tables.cells, {key, %{cell | resource: 88, carcass: 17, lenie_id: "TEST"}})
 
     :ok = Snapshot.save_to_disk("default")
 
-    :ets.insert(:cells, {key, %{cell | resource: 0, carcass: 0, lenie_id: nil}})
+    :ets.insert(h().tables.cells, {key, %{cell | resource: 0, carcass: 0, lenie_id: nil}})
 
     :ok = Snapshot.restore_from_disk("default")
 
-    [{_, restored}] = :ets.lookup(:cells, {3, 3})
+    [{_, restored}] = :ets.lookup(h().tables.cells, {3, 3})
     assert restored.resource == 88
     assert restored.carcass == 17
     assert restored.lenie_id == "TEST"
@@ -102,8 +107,8 @@ defmodule Lenies.SnapshotTest do
   describe "validate-before-destroy (C2)" do
     test "corrupt file aborts restore and leaves the live world untouched", %{root: root} do
       # Pre-populate a recognizable world state.
-      [{key, cell}] = :ets.lookup(:cells, {5, 5})
-      :ets.insert(:cells, {key, %{cell | resource: 777}})
+      [{key, cell}] = :ets.lookup(h().tables.cells, {5, 5})
+      :ets.insert(h().tables.cells, {key, %{cell | resource: 777}})
 
       # A valid save so all 4 .tab files exist.
       :ok = Snapshot.save_to_disk("corruptme")
@@ -113,15 +118,15 @@ defmodule Lenies.SnapshotTest do
       File.write!(corrupt_path, "this is not an ets dump")
 
       # Mutate the live world AFTER the save so we can detect a sterilize.
-      [{_, cell2}] = :ets.lookup(:cells, {5, 5})
-      :ets.insert(:cells, {key, %{cell2 | resource: 999}})
+      [{_, cell2}] = :ets.lookup(h().tables.cells, {5, 5})
+      :ets.insert(h().tables.cells, {key, %{cell2 | resource: 999}})
 
       result = Snapshot.restore_from_disk("corruptme")
       assert match?({:error, {:corrupt, :history}}, result)
 
       # The world was NOT touched: still 999, not sterilized back to default,
       # and not restored to 777.
-      [{_, after_cell}] = :ets.lookup(:cells, {5, 5})
+      [{_, after_cell}] = :ets.lookup(h().tables.cells, {5, 5})
       assert after_cell.resource == 999
     end
   end
@@ -133,8 +138,10 @@ defmodule Lenies.SnapshotTest do
 
       world = Process.whereis(Lenies.World)
 
-      for table <- Snapshot.tables() do
-        assert :ets.info(table, :owner) == world,
+      for table <- [:cells, :lenies, :child_slots, :history] do
+        tid = Map.fetch!(h().tables, table)
+
+        assert :ets.info(tid, :owner) == world,
                "expected World to own #{table} after restore"
       end
     end
@@ -173,8 +180,10 @@ defmodule Lenies.SnapshotTest do
              "expected restore to fail, got: #{inspect(result)}"
 
       # All 4 tables must still be present and accessible — no raised ArgumentError.
-      for table <- Snapshot.tables() do
-        assert :ets.info(table, :size) != :undefined,
+      for table <- [:cells, :lenies, :child_slots, :history] do
+        tid = Map.fetch!(h().tables, table)
+
+        assert :ets.info(tid, :size) != :undefined,
                "expected #{table} to still exist after failed restore"
       end
 
@@ -204,8 +213,10 @@ defmodule Lenies.SnapshotTest do
              "expected {:error, {:restore_failed, :cells}}, got: #{inspect(result)}"
 
       # All 4 tables must exist (recovery recreated the missing ones empty).
-      for table <- Snapshot.tables() do
-        assert :ets.info(table, :size) != :undefined,
+      for table <- [:cells, :lenies, :child_slots, :history] do
+        tid = Map.fetch!(h().tables, table)
+
+        assert :ets.info(tid, :size) != :undefined,
                "expected #{table} to still exist after recovery"
       end
 

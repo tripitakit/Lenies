@@ -54,7 +54,7 @@ defmodule LeniesWeb.SpeciesLive do
   end
 
   defp fetch_sample_codeome(sample_id) do
-    case Registry.lookup(Lenies.Registry, sample_id) do
+    case Registry.lookup(Lenies.Registry, {:lenie, :primary, sample_id}) do
       [{pid, _}] ->
         try do
           case GenServer.call(pid, :get_codeome) do

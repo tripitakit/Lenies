@@ -17,15 +17,20 @@ defmodule Lenies.World.TablesTest do
     :ok
   end
 
-  test "create_all/0 creates the four named tables as public sets" do
+  test "create_all/0 creates the four named tables as public sets/ordered_sets" do
     Tables.create_all()
 
-    for t <- [:cells, :lenies, :child_slots, :history] do
+    for t <- [:cells, :lenies, :child_slots] do
       info = :ets.info(t)
       assert info != :undefined, "table #{t} not created"
       assert Keyword.get(info, :type) == :set
       assert Keyword.get(info, :protection) == :public
     end
+
+    history_info = :ets.info(:history)
+    assert history_info != :undefined, "table :history not created"
+    assert Keyword.get(history_info, :type) == :ordered_set
+    assert Keyword.get(history_info, :protection) == :public
   end
 
   test "delete_all/0 removes all named tables idempotently" do

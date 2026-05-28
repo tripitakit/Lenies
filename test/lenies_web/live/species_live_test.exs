@@ -37,8 +37,8 @@ defmodule LeniesWeb.SpeciesLiveTest do
   end
 
   test "mount on /species/:hash with a known species shows lineage", %{conn: conn} do
-    [{key, cell}] = :ets.lookup(:cells, {3, 3})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "SP1"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {3, 3})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "SP1"}})
 
     codeome = Codeome.from_list([:nop_0, :push1])
     hash = Codeome.hash(codeome)

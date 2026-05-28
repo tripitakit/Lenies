@@ -69,13 +69,13 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
     # clusters near the origin instead of spreading linearly. Use a higher resource
     # (2000 vs 200) to prevent local depletion in the cluster area.
     for x <- 0..254, y <- 0..254 do
-      [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 2000}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 2000}})
     end
 
     # Spawn original replicator at center
-    [{key, cell}] = :ets.lookup(:cells, {50, 50})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "ORIGIN"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {50, 50})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "ORIGIN"}})
 
     {:ok, pid} =
       Lenie.start_link(
@@ -94,7 +94,7 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
 
     max_gen =
       poll_until(deadline, fn ->
-        snapshots = :ets.tab2list(:lenies)
+        snapshots = :ets.tab2list(Lenies.WorldTestHelpers.lenies())
         max = max_generation(snapshots)
 
         if max >= 3 do
@@ -104,7 +104,7 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
         end
       end)
 
-    snapshots = :ets.tab2list(:lenies)
+    snapshots = :ets.tab2list(Lenies.WorldTestHelpers.lenies())
     population = length(snapshots)
 
     IO.inspect(population, label: "Final population")
@@ -137,13 +137,13 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
 
     # Seed the full grid with abundant food so each eat() can draw 2000 units
     for x <- 0..254, y <- 0..254 do
-      [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 100_000}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 100_000}})
     end
 
     # Spawn original replicator at center
-    [{key, cell}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "ORIGIN"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "ORIGIN"}})
 
     {:ok, pid} =
       Lenie.start_link(
@@ -169,7 +169,7 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
         Process.sleep(poll_interval)
 
         current_max =
-          :ets.tab2list(:lenies)
+          :ets.tab2list(Lenies.WorldTestHelpers.lenies())
           |> Enum.map(fn {_id, snap} -> Map.get(snap, :lineage, {nil, 0}) |> elem(1) end)
           |> Enum.max(fn -> 0 end)
 
@@ -182,7 +182,7 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
         end
       end)
 
-    snapshots = :ets.tab2list(:lenies)
+    snapshots = :ets.tab2list(Lenies.WorldTestHelpers.lenies())
     IO.inspect(length(snapshots), label: "Slow test: Population size")
     IO.inspect(max_gen, label: "Slow test: Max generation reached")
 
@@ -200,7 +200,7 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
     now = System.monotonic_time(:millisecond)
 
     if now >= deadline do
-      snapshots = :ets.tab2list(:lenies)
+      snapshots = :ets.tab2list(Lenies.WorldTestHelpers.lenies())
       max_generation(snapshots)
     else
       case fun.() do

@@ -17,7 +17,7 @@ defmodule Lenies.Lenie do
 
   use GenServer
 
-  alias Lenies.{Codeome, Interpreter, World}
+  alias Lenies.{Codeome, Interpreter}
   alias Lenies.Interpreter.State
 
   defstruct [
@@ -26,6 +26,12 @@ defmodule Lenies.Lenie do
     :interp,
     :lineage,
     :seed_origin,
+    # The handle of the world this Lenie belongs to. Carries the world
+    # GenServer pid (for `:action`/`:lenie_died` calls), the ETS tids
+    # (for fast-path reads/writes on `:cells`/`:lenies`), and the
+    # scoped PubSub prefix (for `:lenie_update` / `:fx` broadcasts and
+    # the `:control` subscription).
+    :world,
     batch_count: 0,
     # When true, in-flight :metabolize messages are dropped and no
     # follow-up is scheduled. Set to true on `:world_paused` (broadcast
@@ -37,8 +43,26 @@ defmodule Lenies.Lenie do
 
   # ----- Public API -----
 
-  def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts)
+  @doc """
+  Start a Lenie under a specific world.
+
+  The first init arg is the `%Lenies.WorldHandle{}` of the world the Lenie
+  belongs to. `opts` is the existing keyword list (`:id`, `:codeome`,
+  `:energy`, `:pos`, `:dir`, `:lineage`, `:seed_origin`, `:paused?`,
+  `:plasmids`).
+  """
+  def start_link({%Lenies.WorldHandle{} = handle, opts}) when is_list(opts) do
+    GenServer.start_link(__MODULE__, {handle, opts})
+  end
+
+  # Compat shim for in-tree test callers that still pass a bare keyword list.
+  # Resolves the primary world's handle on the spot. Tests that exercise
+  # multi-world behaviour should pass the handle explicitly via the tuple
+  # form above. Removed in a later task once every direct test caller is
+  # multi-world-aware.
+  def start_link(opts) when is_list(opts) do
+    handle = Lenies.Worlds.primary_handle()
+    GenServer.start_link(__MODULE__, {handle, opts})
   end
 
   @doc "Returns a snapshot of the internal state (for inspection/test)."
@@ -62,7 +86,7 @@ defmodule Lenies.Lenie do
   # ----- Server -----
 
   @impl true
-  def init(opts) do
+  def init({%Lenies.WorldHandle{} = handle, opts}) do
     id = Keyword.fetch!(opts, :id)
     codeome = Keyword.fetch!(opts, :codeome)
     energy = Keyword.fetch!(opts, :energy)
@@ -81,7 +105,10 @@ defmodule Lenies.Lenie do
       error_logger: false
     })
 
-    {:ok, _} = Registry.register(Lenies.Registry, id, nil)
+    # Per-world Registry key — `{:lenie, world_id, id}` — so the same
+    # Lenie id can coexist in different worlds without colliding. Replaces
+    # the legacy bare-id registration (multi-world refactor T6).
+    {:ok, _} = Registry.register(Lenies.Registry, {:lenie, handle.id, id}, nil)
 
     interp = State.new(energy: energy, pos: pos, dir: dir)
 
@@ -94,10 +121,11 @@ defmodule Lenies.Lenie do
     plasmids = Keyword.get(opts, :plasmids, [])
     interp = %{interp | plasmids: plasmids}
 
-    # Subscribe to world:control so future pause/resume broadcasts
-    # gate the metabolize loop.
+    # Subscribe to the world's scoped control topic so pause/resume
+    # broadcasts from THAT world (and only that world) gate the
+    # metabolize loop.
     if Process.whereis(Lenies.PubSub) do
-      Phoenix.PubSub.subscribe(Lenies.PubSub, "world:control")
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "#{handle.pubsub_prefix}:control")
     end
 
     state = %__MODULE__{
@@ -106,6 +134,7 @@ defmodule Lenies.Lenie do
       interp: interp,
       lineage: lineage,
       seed_origin: seed_origin,
+      world: handle,
       batch_count: 0,
       paused?: paused?,
       plasmids: plasmids
@@ -214,7 +243,7 @@ defmodule Lenies.Lenie do
         {:noreply, new_state}
 
       {:wait_world, action, new_interp} ->
-        case apply_world_action(action, state.id, new_interp) do
+        case apply_world_action(action, state, new_interp) do
           {:ok, updated_interp} ->
             new_state = age_and_continue(state, updated_interp)
             {:noreply, new_state}
@@ -269,7 +298,7 @@ defmodule Lenies.Lenie do
 
     # Reward the attacker with exactly what this victim lost.
     # Do this BEFORE returning {:stop, ...} so a dying victim still pays out.
-    case Registry.lookup(Lenies.Registry, attacker_id) do
+    case Registry.lookup(Lenies.Registry, {:lenie, state.world.id, attacker_id}) do
       [{pid, _}] -> send(pid, {:attack_reward, actual})
       [] -> :ok
     end
@@ -291,7 +320,14 @@ defmodule Lenies.Lenie do
   @impl true
   def terminate(_reason, state) do
     hash = Lenies.Codeome.hash(state.codeome)
-    World.lenie_died(state.id, state.interp.pos, state.interp.energy, hash)
+    # Cast to the world pid directly. World handles `{:lenie_died, id, pos,
+    # energy, hash}` (see lib/lenies/world.ex handle_cast). Matches the arg
+    # order of the legacy World.lenie_died/4 helper.
+    GenServer.cast(
+      state.world.pid,
+      {:lenie_died, state.id, state.interp.pos, state.interp.energy, hash}
+    )
+
     :ok
   end
 
@@ -342,45 +378,45 @@ defmodule Lenies.Lenie do
       }
 
       existing =
-        case :ets.lookup(:lenies, state.id) do
+        case :ets.lookup(state.world.tables.lenies, state.id) do
           [{_, record}] -> record
           [] -> %{}
         end
 
       merged = Map.merge(existing, new_snap)
-      :ets.insert(:lenies, {state.id, merged})
+      :ets.insert(state.world.tables.lenies, {state.id, merged})
 
       Phoenix.PubSub.broadcast(
         Lenies.PubSub,
-        "lenie:#{state.id}",
+        "#{state.world.pubsub_prefix}:lenie:#{state.id}",
         {:lenie_update, merged}
       )
     end
   end
 
-  defp apply_world_action({:sense_front, _pos, _dir} = action, _id, interp) do
-    case World.action(action) do
+  defp apply_world_action({:sense_front, _pos, _dir} = action, state, interp) do
+    case world_call(state, action) do
       {:ok, :empty} -> {:ok, State.push(interp, 0)}
       {:ok, {:resource, n}} -> {:ok, State.push(interp, n)}
       {:ok, {:lenie, _id}} -> {:ok, State.push(interp, -1)}
     end
   end
 
-  defp apply_world_action({:move, _pos, _dir}, id, interp) do
-    case World.action({:move, interp.pos, interp.dir, id}) do
+  defp apply_world_action({:move, _pos, _dir}, state, interp) do
+    case world_call(state, {:move, interp.pos, interp.dir, state.id}) do
       {:ok, {:moved, new_pos}} -> {:ok, %{interp | pos: new_pos}}
       {:ok, :blocked} -> {:ok, interp}
     end
   end
 
-  defp apply_world_action({:eat, _pos} = action, _id, interp) do
-    case World.action(action) do
+  defp apply_world_action({:eat, _pos} = action, state, interp) do
+    case world_call(state, action) do
       {:ok, {:ate, amount}} -> {:ok, %{interp | energy: interp.energy + amount}}
     end
   end
 
-  defp apply_world_action({:allocate, size, _pos, _dir}, id, interp) do
-    case World.action({:allocate, size, interp.pos, interp.dir, id}) do
+  defp apply_world_action({:allocate, size, _pos, _dir}, state, interp) do
+    case world_call(state, {:allocate, size, interp.pos, interp.dir, state.id}) do
       {:ok, {:allocated, _slot_id, _target_cell}} ->
         {:ok, State.push(interp, 1)}
 
@@ -390,15 +426,15 @@ defmodule Lenies.Lenie do
     end
   end
 
-  defp apply_world_action({:write_child, opcode_int, child_addr}, id, interp) do
-    case World.action({:write_child, opcode_int, child_addr, id}) do
+  defp apply_world_action({:write_child, opcode_int, child_addr}, state, interp) do
+    case world_call(state, {:write_child, opcode_int, child_addr, state.id}) do
       {:ok, :written} -> {:ok, State.push(interp, 1)}
       {:ok, :no_slot} -> {:ok, State.push(interp, 0)}
     end
   end
 
-  defp apply_world_action({:divide, _new_energy, _pos, _dir}, id, interp) do
-    case World.action({:divide, interp.energy, interp.pos, interp.dir, id}) do
+  defp apply_world_action({:divide, _new_energy, _pos, _dir}, state, interp) do
+    case world_call(state, {:divide, interp.energy, interp.pos, interp.dir, state.id}) do
       {:ok, {:divided, _child_id, energy_given}} ->
         plasmid_size =
           case interp.plasmids do
@@ -415,8 +451,8 @@ defmodule Lenies.Lenie do
     end
   end
 
-  defp apply_world_action({:attack, _pos, _dir}, id, interp) do
-    case World.action({:attack, interp.pos, interp.dir, id}) do
+  defp apply_world_action({:attack, _pos, _dir}, state, interp) do
+    case world_call(state, {:attack, interp.pos, interp.dir, state.id}) do
       {:ok, {:attacked, _damage}} ->
         # Reward arrives asynchronously via {:attack_reward, amount}.
         # Do NOT credit damage here — that was the energy-from-nothing bug.
@@ -434,14 +470,14 @@ defmodule Lenies.Lenie do
     end
   end
 
-  defp apply_world_action(:defend, id, interp) do
-    case World.action({:defend, id}) do
+  defp apply_world_action(:defend, state, interp) do
+    case world_call(state, {:defend, state.id}) do
       {:ok, :defending} -> {:ok, interp}
       {:ok, :no_lenie} -> {:ok, interp}
     end
   end
 
-  defp apply_world_action({:conjugate, pos, dir, plasmid_opcodes}, donor_id, interp) do
+  defp apply_world_action({:conjugate, pos, dir, plasmid_opcodes}, state, interp) do
     cond do
       plasmid_opcodes == [] ->
         conjugate_failure(interp)
@@ -449,14 +485,14 @@ defmodule Lenies.Lenie do
       true ->
         target_pos = front_cell(pos, dir)
 
-        case :ets.lookup(:cells, target_pos) do
+        case :ets.lookup(state.world.tables.cells, target_pos) do
           [{_, %{lenie_id: nil}}] ->
             conjugate_failure(interp)
 
           [{_, %{lenie_id: recipient_id}}] when is_binary(recipient_id) ->
-            case Registry.lookup(Lenies.Registry, recipient_id) do
+            case Registry.lookup(Lenies.Registry, {:lenie, state.world.id, recipient_id}) do
               [{recipient_pid, _}] ->
-                attempt_transfer(interp, donor_id, recipient_pid, recipient_id, plasmid_opcodes)
+                attempt_transfer(interp, state.id, recipient_pid, recipient_id, plasmid_opcodes, state)
 
               [] ->
                 conjugate_failure(interp)
@@ -468,6 +504,13 @@ defmodule Lenies.Lenie do
     end
   end
 
+  # Direct GenServer call to the per-world pid (multi-world refactor T6).
+  # Replaces module-level `Lenies.World.action/1`, which still uses the
+  # singleton compat name (removed in Task 10).
+  defp world_call(state, action_spec) do
+    GenServer.call(state.world.pid, {:action, action_spec})
+  end
+
   defp front_cell({x, y}, dir) do
     Lenies.World.Geometry.step({x, y}, dir, Lenies.Config.grid_size())
   end
@@ -475,8 +518,8 @@ defmodule Lenies.Lenie do
   # Read the seed_origin of a Lenie from the :lenies ETS snapshot. Lenies
   # spawned directly via start_link (tests) without a seed_origin opt
   # snapshot as nil; fall back to "?" for the dashboard display.
-  defp lookup_seed_origin(lenie_id) do
-    case :ets.lookup(:lenies, lenie_id) do
+  defp lookup_seed_origin(state, lenie_id) do
+    case :ets.lookup(state.world.tables.lenies, lenie_id) do
       [{_, snap}] -> Map.get(snap, :seed_origin) || "?"
       [] -> "?"
     end
@@ -496,7 +539,7 @@ defmodule Lenies.Lenie do
   # GenServer.call (microseconds in-process); 5_000ms (default) used to
   # kill both Lenies in dense MR-Twitch populations where :conjugate
   # fires every forage iter.
-  defp attempt_transfer(interp, donor_id, recipient_pid, recipient_id, plasmid_opcodes) do
+  defp attempt_transfer(interp, donor_id, recipient_pid, recipient_id, plasmid_opcodes, state) do
     plasmid_size = length(plasmid_opcodes)
 
     result =
@@ -520,13 +563,13 @@ defmodule Lenies.Lenie do
 
         Phoenix.PubSub.broadcast(
           Lenies.PubSub,
-          "world:fx",
+          "#{state.world.pubsub_prefix}:fx",
           {:conjugation,
            %{
              donor_id: donor_id,
-             donor_seed: lookup_seed_origin(donor_id),
+             donor_seed: lookup_seed_origin(state, donor_id),
              recipient_id: recipient_id,
-             recipient_seed: lookup_seed_origin(recipient_id),
+             recipient_seed: lookup_seed_origin(state, recipient_id),
              plasmid_hash: plasmid_hash,
              sender_pos: interp.pos,
              receiver_pos: front_cell(interp.pos, interp.dir)

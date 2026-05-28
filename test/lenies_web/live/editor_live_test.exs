@@ -94,7 +94,7 @@ defmodule LeniesWeb.EditorLiveTest do
         lineage: {nil, 0}
       )
 
-    :ets.insert(:lenies, {"TEST-EDITOR-L1", %{id: "TEST-EDITOR-L1", codeome_hash: hash}})
+    :ets.insert(Lenies.WorldTestHelpers.lenies(), {"TEST-EDITOR-L1", %{id: "TEST-EDITOR-L1", codeome_hash: hash}})
 
     {:ok, _view, html} = live(conn, "/editor/edit/#{hash}")
     assert html =~ "155 ops"

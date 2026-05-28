@@ -60,12 +60,12 @@ defmodule Lenies.Codeomes.HunterTest do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
     for x <- 0..254, y <- 0..254 do
-      [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 200}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 200}})
     end
 
-    [{key, cell}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "HUN-ORIGIN"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "HUN-ORIGIN"}})
 
     {:ok, pid} =
       Lenie.start_link(
@@ -83,12 +83,12 @@ defmodule Lenies.Codeomes.HunterTest do
 
     max_gen =
       poll_until(deadline, fn ->
-        snaps = :ets.tab2list(:lenies)
+        snaps = :ets.tab2list(Lenies.WorldTestHelpers.lenies())
         m = max_generation(snaps)
         if m >= 3, do: {:done, m}, else: :continue
       end)
 
-    snaps = :ets.tab2list(:lenies)
+    snaps = :ets.tab2list(Lenies.WorldTestHelpers.lenies())
 
     assert max_gen >= 3,
            "expected at least 3 generations; got max gen #{max_gen}, " <>
@@ -100,16 +100,16 @@ defmodule Lenies.Codeomes.HunterTest do
 
     # Fill the grid with resource so Hunter has energy to advance.
     for x <- 0..254, y <- 0..254 do
-      [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 200}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 200}})
     end
 
     # Place Hunter at (128, 128) facing east; prey at (129, 128).
-    [{key_h, cell_h}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key_h, %{cell_h | lenie_id: "HUN-ORIGIN"}})
+    [{key_h, cell_h}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key_h, %{cell_h | lenie_id: "HUN-ORIGIN"}})
 
-    [{key_p, cell_p}] = :ets.lookup(:cells, {129, 128})
-    :ets.insert(:cells, {key_p, %{cell_p | lenie_id: "PREY"}})
+    [{key_p, cell_p}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {129, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key_p, %{cell_p | lenie_id: "PREY"}})
 
     {:ok, hunter_pid} =
       Lenie.start_link(
@@ -143,7 +143,7 @@ defmodule Lenies.Codeomes.HunterTest do
 
     damaged =
       poll_until(deadline, fn ->
-        case :ets.lookup(:lenies, "PREY") do
+        case :ets.lookup(Lenies.WorldTestHelpers.lenies(), "PREY") do
           [{_, %{energy: e}}] when e < 5_000.0 -> {:done, true}
           _ -> :continue
         end
@@ -166,7 +166,7 @@ defmodule Lenies.Codeomes.HunterTest do
     now = System.monotonic_time(:millisecond)
 
     if now >= deadline do
-      snaps = :ets.tab2list(:lenies)
+      snaps = :ets.tab2list(Lenies.WorldTestHelpers.lenies())
       max_generation(snaps)
     else
       case fun.() do

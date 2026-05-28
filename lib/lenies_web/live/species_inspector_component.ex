@@ -166,7 +166,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
 
   defp safe_whereis(id) do
     try do
-      case Registry.lookup(Lenies.Registry, id) do
+      case Registry.lookup(Lenies.Registry, {:lenie, :primary, id}) do
         [{pid, _}] -> pid
         [] -> nil
       end

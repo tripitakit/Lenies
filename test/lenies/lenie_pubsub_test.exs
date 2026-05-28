@@ -26,10 +26,10 @@ defmodule Lenies.LeniePubsubTest do
   end
 
   test "Lenie broadcasts {:lenie_update, snap} on its per-id topic" do
-    [{key, cell}] = :ets.lookup(:cells, {3, 3})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "PUB1"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {3, 3})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "PUB1"}})
 
-    Phoenix.PubSub.subscribe(Lenies.PubSub, "lenie:PUB1")
+    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:primary:lenie:PUB1")
 
     codeome = Codeome.from_list([:nop_0, :nop_0])
 

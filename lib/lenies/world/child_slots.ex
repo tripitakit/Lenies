@@ -9,12 +9,11 @@ defmodule Lenies.World.ChildSlots do
   - `size`: length of the child's Codeome
   - `opcodes`: tuple of opcode atoms (size elements), initialized to `:nop_0`
 
-  All mutations go through the `World` GenServer (single writer). The functions
-  here are helpers *called from within* World callbacks. Lookups are plain ETS
-  (callable by anyone reading `:child_slots`).
+  All mutations go through the `World` GenServer (single writer). Each
+  function takes the per-world `:child_slots` tid (from `state.tables`)
+  as its first argument — there is no global `:child_slots` table since
+  the multi-world refactor (T6).
   """
-
-  @table :child_slots
 
   @type slot :: %{
           parent_id: binary(),
@@ -24,9 +23,9 @@ defmodule Lenies.World.ChildSlots do
         }
 
   @doc "Create an empty slot initialized to `:nop_0` × size. Returns {:ok, slot_id}."
-  @spec create(binary(), {non_neg_integer(), non_neg_integer()}, non_neg_integer()) ::
+  @spec create(:ets.tid(), binary(), {non_neg_integer(), non_neg_integer()}, non_neg_integer()) ::
           {:ok, binary()}
-  def create(parent_id, target_cell, size) do
+  def create(tid, parent_id, target_cell, size) do
     slot_id = generate_slot_id()
 
     slot = %{
@@ -36,25 +35,25 @@ defmodule Lenies.World.ChildSlots do
       opcodes: List.duplicate(:nop_0, size) |> List.to_tuple()
     }
 
-    :ets.insert(@table, {slot_id, slot})
+    :ets.insert(tid, {slot_id, slot})
     {:ok, slot_id}
   end
 
-  @spec get(binary()) :: {:ok, slot()} | :not_found
-  def get(slot_id) do
-    case :ets.lookup(@table, slot_id) do
+  @spec get(:ets.tid(), binary()) :: {:ok, slot()} | :not_found
+  def get(tid, slot_id) do
+    case :ets.lookup(tid, slot_id) do
       [{^slot_id, slot}] -> {:ok, slot}
       [] -> :not_found
     end
   end
 
-  @spec set_opcode(binary(), integer(), atom()) :: :ok | :not_found
-  def set_opcode(slot_id, addr, opcode) do
-    case get(slot_id) do
+  @spec set_opcode(:ets.tid(), binary(), integer(), atom()) :: :ok | :not_found
+  def set_opcode(tid, slot_id, addr, opcode) do
+    case get(tid, slot_id) do
       {:ok, slot} ->
         idx = Integer.mod(addr, slot.size)
         new_opcodes = put_elem(slot.opcodes, idx, opcode)
-        :ets.insert(@table, {slot_id, %{slot | opcodes: new_opcodes}})
+        :ets.insert(tid, {slot_id, %{slot | opcodes: new_opcodes}})
         :ok
 
       :not_found ->
@@ -62,9 +61,9 @@ defmodule Lenies.World.ChildSlots do
     end
   end
 
-  @spec delete(binary()) :: :ok
-  def delete(slot_id) do
-    :ets.delete(@table, slot_id)
+  @spec delete(:ets.tid(), binary()) :: :ok
+  def delete(tid, slot_id) do
+    :ets.delete(tid, slot_id)
     :ok
   end
 

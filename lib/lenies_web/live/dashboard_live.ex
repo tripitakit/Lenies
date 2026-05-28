@@ -470,8 +470,12 @@ defmodule LeniesWeb.DashboardLive do
   def handle_event(_event, _params, socket), do: {:noreply, socket}
 
   defp lookup_lenie_at_cell(x, y) do
-    with [{_, %{lenie_id: id}}] when is_binary(id) <- :ets.lookup(:cells, {x, y}),
-         [{^id, lenie_meta}] <- :ets.lookup(:lenies, id),
+    handle = fetch_primary_handle()
+
+    with handle when not is_nil(handle) <- handle,
+         [{_, %{lenie_id: id}}] when is_binary(id) <-
+           :ets.lookup(handle.tables.cells, {x, y}),
+         [{^id, lenie_meta}] <- :ets.lookup(handle.tables.lenies, id),
          hash when is_binary(hash) <- Map.get(lenie_meta, :codeome_hash) do
       {:ok, hash}
     else
@@ -480,8 +484,12 @@ defmodule LeniesWeb.DashboardLive do
   end
 
   defp lenie_hover_payload(x, y) do
-    with [{_, %{lenie_id: id}}] when is_binary(id) <- :ets.lookup(:cells, {x, y}),
-         [{^id, snap}] <- :ets.lookup(:lenies, id) do
+    handle = fetch_primary_handle()
+
+    with handle when not is_nil(handle) <- handle,
+         [{_, %{lenie_id: id}}] when is_binary(id) <-
+           :ets.lookup(handle.tables.cells, {x, y}),
+         [{^id, snap}] <- :ets.lookup(handle.tables.lenies, id) do
       %{
         x: x,
         y: y,
@@ -493,6 +501,14 @@ defmodule LeniesWeb.DashboardLive do
       }
     else
       _ -> %{x: x, y: y, present: false}
+    end
+  end
+
+  defp fetch_primary_handle do
+    try do
+      Lenies.Worlds.primary_handle()
+    catch
+      :exit, _ -> nil
     end
   end
 
