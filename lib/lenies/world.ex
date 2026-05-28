@@ -340,6 +340,16 @@ defmodule Lenies.World do
     {:reply, state.paused?, state}
   end
 
+  def handle_call({:tune, key, value}, _from, state) do
+    if Map.has_key?(Map.from_struct(state.config), key) do
+      new_config = Map.put(state.config, key, value)
+      broadcast(state, "control", {:config_changed, key, value})
+      {:reply, :ok, %{state | config: new_config}}
+    else
+      {:reply, {:error, {:unknown_tunable, key}}, state}
+    end
+  end
+
   def handle_call(:reconcile, _from, state) do
     result = do_reconcile(state)
     {:reply, result, state}

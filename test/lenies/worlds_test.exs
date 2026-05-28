@@ -50,4 +50,63 @@ defmodule Lenies.WorldsTest do
       assert handle.pid == Process.whereis(Lenies.World)
     end
   end
+
+  describe "facade (T8 smoke)" do
+    # The facade is exercised against the :primary World, which (with
+    # auto_start_simulation: false in test env) must be started by hand.
+    setup do
+      {:ok, pid} = Lenies.World.start_link(tick_interval_ms: 0)
+
+      on_exit(fn ->
+        if Process.alive?(pid) do
+          try do
+            GenServer.stop(pid)
+          catch
+            :exit, _ -> :ok
+          end
+        end
+
+        Lenies.World.Tables.delete_all()
+      end)
+
+      :ok
+    end
+
+    test "handle/1 returns the primary world handle by id" do
+      {:ok, %Lenies.WorldHandle{id: :primary}} = Lenies.Worlds.handle(:primary)
+    end
+
+    test "handle/1 returns :error for an unknown world" do
+      assert :error = Lenies.Worlds.handle(:not_running)
+    end
+
+    test "list/0 includes :primary" do
+      assert :primary in Lenies.Worlds.list()
+    end
+
+    test "alive?/1 is true for :primary, false otherwise" do
+      assert Lenies.Worlds.alive?(:primary)
+      refute Lenies.Worlds.alive?(:not_running)
+    end
+
+    test "snapshot_stats/1 by id matches the direct singleton call" do
+      via_facade = Lenies.Worlds.snapshot_stats(:primary)
+      via_singleton = Lenies.World.snapshot_stats()
+      # both should return the same shape (map with the same keys)
+      assert is_map(via_facade) and is_map(via_singleton)
+      assert Map.keys(via_facade) == Map.keys(via_singleton)
+    end
+
+    test "tune/3 updates the world config; broadcast {:config_changed, …} reaches subscribers" do
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "world:primary:control")
+      assert :ok = Lenies.Worlds.tune(:primary, :eat_amount, 123.0)
+      assert_receive {:config_changed, :eat_amount, 123.0}, 500
+      # restore the default so other tests aren't affected
+      Lenies.Worlds.tune(:primary, :eat_amount, 100.0)
+    end
+
+    test "tune/3 rejects unknown keys" do
+      assert {:error, {:unknown_tunable, :nope}} = Lenies.Worlds.tune(:primary, :nope, 0)
+    end
+  end
 end

@@ -1,8 +1,7 @@
 defmodule Lenies.Worlds do
   @moduledoc """
-  Facade for the multi-world simulation engine. Other modules in this file
-  will be filled in by later tasks (start_world, stop_world, handle, list,
-  spawn_lenie, action, ...). For now only the `id_to_path/1` helper exists.
+  Facade for the multi-world simulation engine. Provides the per-world API
+  surface that other modules call (LiveViews, Telemetry, tests, Lenies).
 
   ## world_id convention
 
@@ -11,6 +10,16 @@ defmodule Lenies.Worlds do
     `user_id` is an integer. **Never** `String.to_atom("sandbox_\#{user_id}")`
     — would re-introduce the atom-table pollution that the multi-world design
     explicitly avoids.
+
+  ## Facade entry points
+
+  - Lifecycle: `start_world/2`, `stop_world/1`, `handle/1`, `list/0`, `alive?/1`
+  - Per-world ops: `spawn_lenie/3`, `action/2`, `sterilize/1`, `pause/1`,
+    `resume/1`, `paused?/1`, `tune/3`, `snapshot_stats/1`
+
+  All per-world ops accept either a world id (`:primary`, `{:sandbox, 1}`, ...)
+  OR an already-resolved `%Lenies.WorldHandle{}` for callers that can cache
+  the handle in their state.
   """
 
   @doc """
@@ -41,5 +50,122 @@ defmodule Lenies.Worlds do
   @spec primary_handle() :: Lenies.WorldHandle.t()
   def primary_handle do
     GenServer.call(Lenies.World, :get_handle)
+  end
+
+  @doc """
+  Start a new world with the given id and optional config overrides.
+  Returns `{:ok, sup_pid}` (the per-world Supervisor pid) or `{:error, …}`.
+
+  Note: until Task 9 adds `Lenies.World.Supervisor`, this function will
+  return `{:error, :not_implemented}` or similar — the existing :primary
+  world is still booted via the legacy child in Lenies.Application and
+  reachable via `primary_handle/0` / `Lenies.World.X(...)` module helpers.
+  """
+  @spec start_world(term(), map()) :: DynamicSupervisor.on_start_child()
+  def start_world(world_id, config_overrides \\ %{}) do
+    spec = {Lenies.World.Supervisor, world_id: world_id, config: config_overrides}
+    DynamicSupervisor.start_child(Lenies.Worlds.Supervisor, spec)
+  end
+
+  @doc "Stop a world by id. Idempotent — returns :ok if not found."
+  @spec stop_world(term()) :: :ok
+  def stop_world(world_id) do
+    case Registry.lookup(Lenies.Registry, {:world_sup, world_id}) do
+      [{sup_pid, _}] ->
+        DynamicSupervisor.terminate_child(Lenies.Worlds.Supervisor, sup_pid)
+        :ok
+
+      [] ->
+        :ok
+    end
+  end
+
+  @doc """
+  Look up the %WorldHandle{} for an id. Returns `{:ok, handle}` or `:error`.
+
+  Accepts an already-built handle (returned as-is) for callsites that can
+  cache it.
+
+  Special case: `:primary` is currently registered under the global atom
+  name `Lenies.World` (compat shim, removed in Task 10), NOT in the
+  Registry, so we resolve it via `Process.whereis/1` until T10.
+  """
+  @spec handle(term() | Lenies.WorldHandle.t()) :: {:ok, Lenies.WorldHandle.t()} | :error
+  def handle(%Lenies.WorldHandle{} = h), do: {:ok, h}
+
+  def handle(:primary) do
+    case Process.whereis(Lenies.World) do
+      nil -> :error
+      pid -> {:ok, GenServer.call(pid, :get_handle)}
+    end
+  end
+
+  def handle(world_id) do
+    case Registry.lookup(Lenies.Registry, {:world, world_id}) do
+      [{pid, _}] -> {:ok, GenServer.call(pid, :get_handle)}
+      [] -> :error
+    end
+  end
+
+  @doc """
+  List the ids of currently running worlds.
+
+  Until Task 10, the `:primary` world is registered under the global atom
+  name `Lenies.World` (not in the Registry), so we prepend it manually if
+  it's alive.
+  """
+  @spec list() :: [term()]
+  def list do
+    via_registry =
+      Registry.select(Lenies.Registry, [{{{:world, :"$1"}, :_, :_}, [], [:"$1"]}])
+
+    if Process.whereis(Lenies.World) do
+      [:primary | via_registry] |> Enum.uniq()
+    else
+      via_registry
+    end
+  end
+
+  @doc "Is a world with this id alive?"
+  @spec alive?(term()) :: boolean
+  def alive?(:primary), do: Process.whereis(Lenies.World) != nil
+
+  def alive?(world_id) do
+    match?([{_, _}], Registry.lookup(Lenies.Registry, {:world, world_id}))
+  end
+
+  # ----- delegated operations -----
+
+  @doc "Spawn a Lenie in the target world."
+  def spawn_lenie(target, codeome, opts \\ []) do
+    with {:ok, h} <- handle(target) do
+      GenServer.call(h.pid, {:spawn_lenie, codeome, opts})
+    end
+  end
+
+  @doc "Apply an action to the target world (used by Lenies in their hot path)."
+  def action(target, action_spec) do
+    with {:ok, h} <- handle(target) do
+      GenServer.call(h.pid, {:action, action_spec})
+    end
+  end
+
+  def sterilize(target), do: call(target, :sterilize)
+  def pause(target), do: call(target, :pause)
+  def resume(target), do: call(target, :resume)
+  def paused?(target), do: call(target, :paused?)
+  def snapshot_stats(target), do: call(target, :snapshot_stats)
+
+  @doc "Set a tunable on the target world."
+  def tune(target, key, value) do
+    with {:ok, h} <- handle(target) do
+      GenServer.call(h.pid, {:tune, key, value})
+    end
+  end
+
+  defp call(target, msg) do
+    with {:ok, h} <- handle(target) do
+      GenServer.call(h.pid, msg)
+    end
   end
 end
