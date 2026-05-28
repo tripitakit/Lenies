@@ -14,6 +14,8 @@ defmodule Lenies.Sandboxes do
   """
   use GenServer
 
+  @grace_ms 30_000
+
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
   @doc "Returns the world id for a user id. Pure helper."
@@ -88,4 +90,46 @@ defmodule Lenies.Sandboxes do
   end
 
   defp bump_generation(entry), do: %{entry | generation: entry.generation + 1}
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    case find_user_for_pid(state, pid) do
+      nil -> {:noreply, state}
+      user_id -> {:noreply, remove_pid(state, user_id, pid)}
+    end
+  end
+
+  defp find_user_for_pid(state, pid) do
+    Enum.find_value(state, fn {user_id, entry} ->
+      if MapSet.member?(entry.connections, pid), do: user_id
+    end)
+  end
+
+  defp remove_pid(state, user_id, pid) do
+    entry = state[user_id]
+    new_connections = MapSet.delete(entry.connections, pid)
+    new_monitors = Map.delete(entry.monitors, pid)
+    new_entry = %{entry | connections: new_connections, monitors: new_monitors}
+
+    new_entry =
+      if MapSet.size(new_connections) == 0 do
+        schedule_grace_stop(new_entry, user_id)
+      else
+        new_entry
+      end
+
+    Map.put(state, user_id, new_entry)
+  end
+
+  defp schedule_grace_stop(entry, user_id) do
+    ref =
+      Process.send_after(
+        self(),
+        {:maybe_stop, user_id, entry.generation},
+        grace_ms()
+      )
+    %{entry | pending_stop: ref}
+  end
+
+  defp grace_ms, do: Application.get_env(:lenies, :sandbox_grace_ms, @grace_ms)
 end

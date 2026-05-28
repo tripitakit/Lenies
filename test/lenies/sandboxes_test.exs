@@ -47,5 +47,56 @@ defmodule Lenies.SandboxesTest do
     end
   end
 
+  describe "detach via :DOWN" do
+    setup do
+      start_supervised!({Lenies.Sandboxes, []})
+      :ok
+    end
+
+    test "last pid disconnect schedules a grace timer; world still running" do
+      user_id = unique_user_id()
+      task =
+        Task.async(fn ->
+          :ok = Lenies.Sandboxes.attach(user_id)
+          receive do :exit -> :ok end
+        end)
+      Process.sleep(50)
+      send(task.pid, :exit)
+      Task.await(task)
+      Process.sleep(100)
+
+      state = :sys.get_state(Lenies.Sandboxes)
+      entry = state[user_id]
+      assert MapSet.size(entry.connections) == 0
+      refute is_nil(entry.pending_stop), "expected a pending_stop timer ref"
+      assert Lenies.Worlds.alive?({:sandbox, user_id}), "world must still be running during grace"
+
+      # cleanup
+      :ok = Lenies.Worlds.stop_world({:sandbox, user_id})
+    end
+
+    test "one pid disconnect of two does NOT schedule a grace timer" do
+      user_id = unique_user_id()
+      :ok = Lenies.Sandboxes.attach(user_id)
+
+      task =
+        Task.async(fn ->
+          :ok = Lenies.Sandboxes.attach(user_id)
+          receive do :exit -> :ok end
+        end)
+      Process.sleep(50)
+      send(task.pid, :exit)
+      Task.await(task)
+      Process.sleep(100)
+
+      state = :sys.get_state(Lenies.Sandboxes)
+      entry = state[user_id]
+      assert MapSet.size(entry.connections) == 1
+      assert is_nil(entry.pending_stop)
+
+      :ok = Lenies.Worlds.stop_world({:sandbox, user_id})
+    end
+  end
+
   defp unique_user_id, do: :erlang.unique_integer([:positive])
 end
