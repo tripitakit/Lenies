@@ -17,6 +17,20 @@ defmodule Lenies.Application do
       ])
     end
 
+    # Deterministic, global codeome cache: hash → [opcode]. Owned by the
+    # Application (not any individual World) so its lifetime spans the whole
+    # node and is independent of World restarts. Content is invariant given
+    # the hash, so sharing it across all worlds (now and future) is correct.
+    if :ets.info(:species_codeomes) == :undefined do
+      :ets.new(:species_codeomes, [
+        :set,
+        :named_table,
+        :public,
+        read_concurrency: true,
+        write_concurrency: true
+      ])
+    end
+
     children = [
       Lenies.Repo,
       LeniesWeb.Telemetry,

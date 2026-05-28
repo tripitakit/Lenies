@@ -11,12 +11,14 @@ defmodule Lenies.World.Tables do
   - `:lenies`            — `id    → snapshot` (written mainly by Lenies, with exceptions by World)
   - `:child_slots`       — `slot  → gestation record`
   - `:history`           — ring buffer of aggregated metrics (written by Telemetry)
-  - `:species_codeomes`  — `hash  → [opcode]` cache populated by `Lenie.init/1`,
-    so the species table can show per-species size / cost / max-gain without
-    a `GenServer.call` round-trip to a representative Lenie on every render.
+
+  Note: `:species_codeomes` (hash → [opcode] cache populated by `Lenie.init/1`)
+  is NOT created here — it's owned by `Lenies.Application` so its lifetime
+  spans the whole node, independent of any World restart. The content is
+  deterministic given the hash, so sharing it across worlds is correct.
   """
 
-  @tables [:cells, :lenies, :child_slots, :history, :species_codeomes]
+  @tables [:cells, :lenies, :child_slots, :history]
 
   def tables, do: @tables
 
