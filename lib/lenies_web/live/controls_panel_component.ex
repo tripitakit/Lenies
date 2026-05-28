@@ -425,7 +425,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
 
   def handle_event("snapshot_action", %{"action" => "save", "snapshot_name" => name}, socket) do
     status =
-      case Lenies.Snapshot.save_to_disk(name) do
+      case Lenies.Worlds.save_snapshot(socket.assigns.world_id, name) do
         :ok -> "Saved as “#{name}”"
         {:error, :invalid_name} -> "Invalid name — use letters, digits, - and _ only"
         {:error, reason} -> "Save failed: #{inspect(reason)}"
@@ -436,7 +436,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
 
   def handle_event("snapshot_action", %{"action" => "restore", "snapshot_name" => name}, socket) do
     status =
-      case Lenies.Snapshot.restore_from_disk(name) do
+      case Lenies.Worlds.restore_snapshot(socket.assigns.world_id, name) do
         :ok -> "Restored from “#{name}”"
         {:error, :invalid_name} -> "Invalid name — use letters, digits, - and _ only"
         {:error, :missing_file} -> "No snapshot named “#{name}”"

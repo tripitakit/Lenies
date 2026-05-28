@@ -134,6 +134,42 @@ defmodule Lenies.Worlds do
   def paused?(target), do: call(target, :paused?)
   def snapshot_stats(target), do: call(target, :snapshot_stats)
 
+  @doc """
+  Save a named snapshot of `target`'s 5 ETS tables to disk, under
+  `<snapshot_root>/<id_to_path(world_id)>/<name>/`. See `Lenies.Snapshot.save/2`.
+
+  Runs inside the target world's GenServer so World owns the file I/O —
+  consistent with restore, which has to run there anyway to mutate the
+  world's tids.
+  """
+  def save_snapshot(target, name) do
+    with {:ok, h} <- handle(target) do
+      GenServer.call(h.pid, {:save_snapshot, name})
+    end
+  end
+
+  @doc """
+  Restore the named snapshot for `target`. See `Lenies.Snapshot.restore/2`.
+
+  Three-step protocol so the live world is never half-loaded:
+    1. `Lenies.Snapshot.validate/2` — read-only check that the snapshot is
+       loadable; bails out without touching the world if not.
+    2. `GenServer.call(world, :sterilize)` — terminates all Lenies. Issued as
+       a SEPARATE call so the resulting `:lenie_died` casts land in the
+       world's mailbox BEFORE the subsequent `:restore_snapshot` call (FIFO
+       mailbox). Otherwise stale casts would clobber the freshly restored
+       `:cells` / `:lenies` tables.
+    3. `GenServer.call(world, {:restore_snapshot, name})` — does the actual
+       load via `Lenies.Snapshot.load_validated/2`.
+  """
+  def restore_snapshot(target, name) do
+    with {:ok, h} <- handle(target),
+         :ok <- Lenies.Snapshot.validate(h.id, name) do
+      :ok = GenServer.call(h.pid, :sterilize)
+      GenServer.call(h.pid, {:restore_snapshot, name})
+    end
+  end
+
   @doc "Set a tunable on the target world."
   def tune(target, key, value) do
     with {:ok, h} <- handle(target) do

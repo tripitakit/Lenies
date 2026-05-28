@@ -166,6 +166,74 @@ defmodule Lenies.WorldsTest do
     end
   end
 
+  describe "snapshot per-world (T12 smoke)" do
+    setup do
+      {:ok, pid} = Lenies.World.start_link(tick_interval_ms: 0)
+
+      on_exit(fn ->
+        if Process.alive?(pid) do
+          try do
+            GenServer.stop(pid)
+          catch
+            :exit, _ -> :ok
+          end
+        end
+
+        Lenies.World.Tables.delete_all()
+      end)
+
+      :ok
+    end
+
+    @tag :tmp_dir
+    test "save/restore round-trip on :primary preserves color_overrides", %{tmp_dir: tmp} do
+      Application.put_env(:lenies, :snapshot_root, tmp)
+      on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
+
+      handle = Lenies.Worlds.primary_handle()
+      Lenies.SpeciesColor.set_override(handle, "snap-marker", "#abcdef")
+      assert "#abcdef" = Lenies.SpeciesColor.override(handle, "snap-marker")
+
+      assert :ok = Lenies.Worlds.save_snapshot(:primary, "t12_smoke")
+      assert File.dir?(Path.join([tmp, "primary", "t12_smoke"]))
+      assert File.exists?(Path.join([tmp, "primary", "t12_smoke", "color_overrides.tab"]))
+
+      Lenies.SpeciesColor.clear_override(handle, "snap-marker")
+      refute Lenies.SpeciesColor.override(handle, "snap-marker")
+
+      assert :ok = Lenies.Worlds.restore_snapshot(:primary, "t12_smoke")
+      # The handle's tids are stable across restore — re-fetch defensively
+      # so the assertion uses whatever the world reports as current.
+      handle = Lenies.Worlds.primary_handle()
+      assert "#abcdef" = Lenies.SpeciesColor.override(handle, "snap-marker")
+
+      # cleanup
+      Lenies.SpeciesColor.clear_override(handle, "snap-marker")
+    end
+
+    @tag :tmp_dir
+    test "restore tolerates a legacy 4-table snapshot (missing color_overrides.tab)",
+         %{tmp_dir: tmp} do
+      Application.put_env(:lenies, :snapshot_root, tmp)
+      on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
+
+      handle = Lenies.Worlds.primary_handle()
+
+      # Create a snapshot, then delete color_overrides.tab to simulate legacy.
+      assert :ok = Lenies.Worlds.save_snapshot(:primary, "t12_legacy")
+      legacy_dir = Path.join([tmp, "primary", "t12_legacy"])
+      File.rm!(Path.join(legacy_dir, "color_overrides.tab"))
+
+      # Add an override that should be wiped on legacy restore.
+      Lenies.SpeciesColor.set_override(handle, "before-restore", "#123456")
+
+      # Restore the legacy snapshot — should succeed, color_overrides becomes empty.
+      assert :ok = Lenies.Worlds.restore_snapshot(:primary, "t12_legacy")
+      handle = Lenies.Worlds.primary_handle()
+      refute Lenies.SpeciesColor.override(handle, "before-restore")
+    end
+  end
+
   describe "boot migration (T10 smoke)" do
     setup do
       # auto_start_simulation: false in test env, so spin up :primary via the

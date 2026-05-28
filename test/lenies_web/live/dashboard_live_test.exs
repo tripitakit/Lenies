@@ -168,7 +168,7 @@ defmodule LeniesWeb.DashboardLiveTest do
     Application.put_env(:lenies, :radiation_per_tick, original)
   end
 
-  test "Save snapshot button triggers Snapshot.save_to_disk", %{conn: conn} do
+  test "Save snapshot button triggers Worlds.save_snapshot/2", %{conn: conn} do
     root =
       Path.join(
         System.tmp_dir!(),
@@ -191,7 +191,7 @@ defmodule LeniesWeb.DashboardLiveTest do
     |> form("form[phx-submit='snapshot_action']", %{snapshot_name: "uitest"})
     |> render_submit(%{action: "save"})
 
-    assert File.exists?(Path.join([root, "uitest", "cells.tab"]))
+    assert File.exists?(Path.join([root, "primary", "uitest", "cells.tab"]))
   end
 
   describe "inspector dirty notification" do

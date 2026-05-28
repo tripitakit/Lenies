@@ -73,21 +73,6 @@ defmodule Lenies.World do
   def sterilize, do: Lenies.Worlds.sterilize(:primary)
 
   @doc """
-  Swap the 4 snapshot tables (`Lenies.Snapshot.tables/0`) for the `.tab` files
-  in `dir`, running in the World process so World owns the reloaded tables.
-
-  Intended to be called by `Lenies.Snapshot.restore_from_disk/1` AFTER a
-  separate `sterilize/0` call (so terminated-Lenie `:lenie_died` casts are
-  drained first) and AFTER the files have been validated. Does NOT recreate
-  `:cells` contents (they come from the file) nor touch `:species_codeomes`.
-  """
-  def restore_tables(dir) do
-    with {:ok, h} <- Lenies.Worlds.handle(:primary) do
-      GenServer.call(h.pid, {:restore_tables, dir})
-    end
-  end
-
-  @doc """
   Execute an action requested by a Lenie (primary world). Synchronous call.
 
   Forms:
@@ -218,122 +203,36 @@ defmodule Lenies.World do
   end
 
   def handle_call(:sterilize, _from, state) do
-    terminate_all_lenies(state.world_id)
-    if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
-    if state.reconcile_ref, do: Process.cancel_timer(state.reconcile_ref)
-    # Color overrides survive sterilize per the SpeciesColor contract — they
-    # represent user intent, not simulation state. Clear only the simulation
-    # tables (cells, lenies, child_slots, history).
-    Tables.clear_all(Map.drop(state.tables, [:color_overrides]))
-    init_cells(state.grid, state.tables)
-    hotspots = Hotspots.initial(state.grid, Config.hotspot_count())
-    {total_resource, total_carcass} = sum_cells(state.tables)
-
-    new_state = %{
-      state
-      | hotspots: hotspots,
-        tick_count: 0,
-        tick_ref: nil,
-        reconcile_ref: nil,
-        total_resource: total_resource,
-        total_carcass: total_carcass
-    }
-
-    new_state = prewarm_radiation(new_state)
-    # Recompute totals after prewarm radiation has deposited resources.
-    {r, c} = sum_cells(state.tables)
-    new_state = %{new_state | total_resource: r, total_carcass: c}
-    new_state = maybe_schedule_tick(new_state)
-    new_state = schedule_reconcile(new_state)
-
+    new_state = do_sterilize(state)
     broadcast(state, "control", {:sterilized, System.system_time(:millisecond)})
-
     {:reply, :ok, new_state}
   end
 
-  def handle_call({:restore_tables, dir}, _from, state) do
-    if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
-    if state.reconcile_ref, do: Process.cancel_timer(state.reconcile_ref)
+  def handle_call({:save_snapshot, name}, _from, state) do
+    result = Lenies.Snapshot.save(state.handle, name)
+    {:reply, result, state}
+  end
 
-    # The snapshot only covers a subset of the per-world tables (the 4 listed
-    # in `Lenies.Snapshot.tables/0`). Tables outside that set — currently
-    # `:color_overrides` (T7) — are preserved across the restore so user-picked
-    # species colors survive a "load snapshot" cycle. Full per-world snapshot
-    # layout (including color_overrides) lands in T12.
-    snapshot_tables = Lenies.Snapshot.tables()
-    {snapshot_tids, preserved_tids} = Map.split(state.tables, snapshot_tables)
+  def handle_call({:restore_snapshot, name}, _from, state) do
+    # Only the load phase runs in the World GenServer; the caller
+    # (`Lenies.Worlds.restore_snapshot/2`) has already validated the snapshot
+    # AND issued a separate `:sterilize` call. The separate sterilize call is
+    # load-bearing: it drains the resulting `:lenie_died` casts from the
+    # world's mailbox before this call is dequeued, so the freshly restored
+    # `:cells` / `:lenies` tables aren't clobbered.
+    case Lenies.Snapshot.load_validated(state.handle, name) do
+      :ok ->
+        {r, c} = sum_cells(state.tables)
+        new_state = %{state | total_resource: r, total_carcass: c}
+        broadcast(new_state, "control", {:restored, System.system_time(:millisecond)})
+        {:reply, :ok, new_state}
 
-    # Delete only the snapshot-tracked tables so file2tab can recreate them
-    # owned by THIS World process. Each file2tab returns {:ok, tid}; we
-    # collect the new tids into a map shaped like Tables.create_all/1.
-    delete_tables(snapshot_tids)
-
-    {result, restored_tables} =
-      try do
-        Enum.reduce_while(snapshot_tables, {:ok, %{}}, fn table, {:ok, acc} ->
-          path = Path.join(dir, "#{table}.tab") |> String.to_charlist()
-
-          case :ets.file2tab(path) do
-            {:ok, tid} -> {:cont, {:ok, Map.put(acc, table, tid)}}
-            _error -> {:halt, {{:error, {:restore_failed, table}}, acc}}
-          end
-        end)
-      rescue
-        _ -> {{:error, {:restore_failed, :unknown}}, %{}}
-      end
-
-    new_state =
-      case result do
-        :ok ->
-          # All snapshot tables restored — merge with the preserved ones
-          # (e.g. color_overrides) and adopt the resulting map into state.
-          merged_tables = Map.merge(preserved_tids, restored_tables)
-
-          new_state = %{
-            state
-            | tables: merged_tables,
-              handle: %{state.handle | tables: merged_tables},
-              tick_count: 0,
-              tick_ref: nil,
-              reconcile_ref: nil
-          }
-
-          {r, c} = sum_cells(new_state.tables)
-          new_state = %{new_state | total_resource: r, total_carcass: c}
-
-          new_state = maybe_schedule_tick(new_state)
-          new_state = schedule_reconcile(new_state)
-          broadcast(new_state, "control", {:restored, System.system_time(:millisecond)})
-          new_state
-
-        {:error, _} ->
-          # Recovery: file2tab failed partway through the loop. Drop whatever
-          # we partially restored and recreate the snapshot tables empty; then
-          # merge with the preserved tables so the world is in a valid state.
-          delete_tables(restored_tables)
-          recovered_snapshot = recover_tables(state.grid)
-          merged_tables = Map.merge(preserved_tids, recovered_snapshot)
-
-          new_state = %{
-            state
-            | tables: merged_tables,
-              handle: %{state.handle | tables: merged_tables},
-              tick_count: 0,
-              tick_ref: nil,
-              reconcile_ref: nil
-          }
-
-          {r, c} = sum_cells(new_state.tables)
-          new_state = %{new_state | total_resource: r, total_carcass: c}
-
-          new_state = maybe_schedule_tick(new_state)
-          new_state = schedule_reconcile(new_state)
-          new_state
-      end
-
-    case result do
-      :ok -> {:reply, :ok, new_state}
-      err -> {:reply, err, new_state}
+      {:error, _} = err ->
+        # Sterilize already ran in a previous call. The simulation tables
+        # are empty; recompute the cached totals so they reflect reality.
+        {r, c} = sum_cells(state.tables)
+        new_state = %{state | total_resource: r, total_carcass: c}
+        {:reply, err, new_state}
     end
   end
 
@@ -457,16 +356,42 @@ defmodule Lenies.World do
 
   # ----- internals -----
 
-  defp delete_tables(tables) when is_map(tables) do
-    for {_key, tid} <- tables do
-      try do
-        :ets.delete(tid)
-      rescue
-        ArgumentError -> :ok
-      end
-    end
+  # Wipes the simulation tables (cells, lenies, child_slots, history),
+  # terminates all live Lenies, cancels timers, repaints the cell grid with
+  # the initial resource value, prewarms radiation, and reschedules the tick
+  # and reconcile timers. Returns the new state. Color overrides are
+  # preserved per the SpeciesColor contract — they represent user intent,
+  # not simulation state.
+  #
+  # Shared by the `:sterilize` and `:restore_snapshot` handle_calls. Note: this
+  # helper does NOT broadcast the `{:sterilized, …}` event — the caller is
+  # expected to broadcast whatever event matches its semantics (`:sterilized`
+  # vs `:restored`).
+  defp do_sterilize(state) do
+    terminate_all_lenies(state.world_id)
+    if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
+    if state.reconcile_ref, do: Process.cancel_timer(state.reconcile_ref)
+    Tables.clear_all(Map.drop(state.tables, [:color_overrides]))
+    init_cells(state.grid, state.tables)
+    hotspots = Hotspots.initial(state.grid, Config.hotspot_count())
+    {total_resource, total_carcass} = sum_cells(state.tables)
 
-    :ok
+    new_state = %{
+      state
+      | hotspots: hotspots,
+        tick_count: 0,
+        tick_ref: nil,
+        reconcile_ref: nil,
+        total_resource: total_resource,
+        total_carcass: total_carcass
+    }
+
+    new_state = prewarm_radiation(new_state)
+    # Recompute totals after prewarm radiation has deposited resources.
+    {r, c} = sum_cells(state.tables)
+    new_state = %{new_state | total_resource: r, total_carcass: c}
+    new_state = maybe_schedule_tick(new_state)
+    schedule_reconcile(new_state)
   end
 
   # Live config read with hardcoded-default fallback (compat shim during the
@@ -502,37 +427,6 @@ defmodule Lenies.World do
     end
 
     :ok
-  end
-
-  # Recreate all 4 snapshot tables from scratch when a restore fails mid-loop.
-  # Any table that currently exists is deleted first so the :new/2 call can
-  # recreate it. The :cells grid is then populated the same way init/1 does
-  # it, so the world is immediately usable after recovery.
-  #
-  # NOTE: this path is only reachable via :restore_tables, which is a
-  # primary-world-only flow at this stage (snapshot/restore is not yet
-  # multi-world). Tables are recreated as unnamed tids and returned as a
-  # map matching Tables.create_all/1's output, so the caller can update
-  # state.tables / state.handle.tables in place.
-  defp recover_tables(grid) do
-    table_opts = [:set, :public, read_concurrency: true, write_concurrency: true]
-    ordered_opts = [:ordered_set, :public, read_concurrency: true, write_concurrency: true]
-
-    new_tables = %{
-      cells: :ets.new(:cells, table_opts),
-      lenies: :ets.new(:lenies, table_opts),
-      child_slots: :ets.new(:child_slots, table_opts),
-      history: :ets.new(:history, ordered_opts)
-    }
-
-    initial_resource = Application.get_env(:lenies, :initial_resource_per_cell, 30)
-    {w, h} = grid
-
-    for x <- 0..(w - 1), y <- 0..(h - 1) do
-      :ets.insert(new_tables.cells, {{x, y}, %Cell{resource: initial_resource}})
-    end
-
-    new_tables
   end
 
   defp prewarm_radiation(state) do
