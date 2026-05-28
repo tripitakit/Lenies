@@ -240,5 +240,74 @@ defmodule Lenies.SandboxesTest do
     end
   end
 
+  describe "auto-restore round-trip (integration)" do
+    @moduletag :integration
+
+    @tag :tmp_dir
+    test "spawn lenies, detach, wait grace, re-attach: lenies restored", %{tmp_dir: tmp} do
+      Application.put_env(:lenies, :snapshot_root, tmp)
+      Application.put_env(:lenies, :sandbox_grace_ms, 50)
+      on_exit(fn ->
+        Application.delete_env(:lenies, :snapshot_root)
+        Application.delete_env(:lenies, :sandbox_grace_ms)
+      end)
+
+      user_id = unique_user_id()
+      world_id = {:sandbox, user_id}
+
+      :ok = Lenies.Sandboxes.attach(user_id)
+      {:ok, handle1} = Lenies.Worlds.handle(world_id)
+
+      # Spawn 3 lenies of the minimal_replicator seed.
+      %{codeome: codeome, default_options: opts} = Lenies.Seeds.get(:minimal_replicator)
+      energy = Map.get(opts, :energy, 500.0)
+      for _ <- 1..3, do: Lenies.Worlds.spawn_lenie(world_id, codeome, energy: energy)
+      Process.sleep(50)
+
+      lenies_before = :ets.tab2list(handle1.tables.lenies)
+      assert length(lenies_before) >= 3
+
+      # Detach + wait past grace (with safety margin for auto_save IO).
+      :ok = Lenies.Sandboxes.detach(user_id)
+      Process.sleep(1_000)
+      refute Lenies.Worlds.alive?(world_id)
+
+      # Re-attach — auto-restore brings the lenies back.
+      :ok = Lenies.Sandboxes.attach(user_id)
+      {:ok, handle2} = Lenies.Worlds.handle(world_id)
+      lenies_after = :ets.tab2list(handle2.tables.lenies)
+      assert length(lenies_after) == length(lenies_before)
+
+      :ok = Lenies.Worlds.stop_world(world_id)
+    end
+  end
+
+  describe "concurrent users (smoke)" do
+    @moduletag :integration
+
+    test "5 users get 5 distinct worlds; all stop cleanly" do
+      Application.put_env(:lenies, :sandbox_grace_ms, 50)
+      on_exit(fn -> Application.delete_env(:lenies, :sandbox_grace_ms) end)
+
+      user_ids = for _ <- 1..5, do: unique_user_id()
+
+      for user_id <- user_ids do
+        :ok = Lenies.Sandboxes.attach(user_id)
+      end
+
+      for user_id <- user_ids do
+        assert Lenies.Worlds.alive?({:sandbox, user_id})
+      end
+
+      # Detach all + wait past grace (with safety margin)
+      for user_id <- user_ids, do: Lenies.Sandboxes.detach(user_id)
+      Process.sleep(1_000)
+
+      for user_id <- user_ids do
+        refute Lenies.Worlds.alive?({:sandbox, user_id})
+      end
+    end
+  end
+
   defp unique_user_id, do: :erlang.unique_integer([:positive])
 end
