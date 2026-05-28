@@ -5,7 +5,7 @@ defmodule Lenies.Worlds do
 
   ## world_id convention
 
-  - Fixed worlds use atoms: `:primary`, `:arena` (one atom per id, safe).
+  - Fixed worlds use atoms: `:arena`, `:test_world` (one atom per id, safe).
   - Dynamic worlds use tuples with bounded atoms: `{:sandbox, user_id}` where
     `user_id` is an integer. **Never** `String.to_atom("sandbox_\#{user_id}")`
     — would re-introduce the atom-table pollution that the multi-world design
@@ -17,7 +17,7 @@ defmodule Lenies.Worlds do
   - Per-world ops: `spawn_lenie/3`, `action/2`, `sterilize/1`, `pause/1`,
     `resume/1`, `paused?/1`, `tune/3`, `snapshot_stats/1`
 
-  All per-world ops accept either a world id (`:primary`, `{:sandbox, 1}`, ...)
+  All per-world ops accept either a world id (`:arena`, `{:sandbox, 1}`, ...)
   OR an already-resolved `%Lenies.WorldHandle{}` for callers that can cache
   the handle in their state.
   """
@@ -26,8 +26,8 @@ defmodule Lenies.Worlds do
   Render a `world_id` as a filesystem- and topic-safe string.
 
   Examples:
-      iex> Lenies.Worlds.id_to_path(:primary)
-      "primary"
+      iex> Lenies.Worlds.id_to_path(:arena)
+      "arena"
       iex> Lenies.Worlds.id_to_path({:sandbox, 42})
       "sandbox-42"
   """

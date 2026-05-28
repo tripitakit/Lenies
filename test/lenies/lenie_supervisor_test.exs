@@ -4,22 +4,17 @@ defmodule Lenies.LenieSupervisorTest do
   alias Lenies.WorldTestHelpers
 
   setup do
-    {:ok, _sup} = Lenies.Worlds.start_world(:primary, %{tick_interval_ms: 0})
-
-    on_exit(fn ->
-      Lenies.Worlds.stop_world(:primary)
-      Lenies.World.Tables.delete_all()
-    end)
-
-    :ok
+    {:ok, world_id} = WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+    on_exit(fn -> WorldTestHelpers.stop_test_world(world_id) end)
+    {:ok, world_id: world_id}
   end
 
-  test "starts as DynamicSupervisor with zero children" do
-    pid = WorldTestHelpers.lenie_sup_pid()
+  test "starts as DynamicSupervisor with zero children", %{world_id: world_id} do
+    pid = WorldTestHelpers.lenie_sup_pid(world_id)
     assert is_pid(pid)
     assert Process.alive?(pid)
 
-    counts = DynamicSupervisor.count_children(Lenies.LenieSupervisor.via(:primary))
+    counts = DynamicSupervisor.count_children(Lenies.LenieSupervisor.via(world_id))
     assert counts.specs == 0
     assert counts.active == 0
   end

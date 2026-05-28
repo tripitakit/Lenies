@@ -1,12 +1,14 @@
 defmodule Lenies.LenieTakeDamageTest do
   use ExUnit.Case, async: false
 
-  alias Lenies.{Codeome, Lenie, World}
-  alias Lenies.World.Tables
+  alias Lenies.{Codeome, Lenie}
 
   setup do
+    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+    {:ok, handle} = Lenies.Worlds.handle(world_id)
+
     on_exit(fn ->
-      case Lenies.WorldTestHelpers.lenie_sup_pid() do
+      case Lenies.WorldTestHelpers.lenie_sup_pid(world_id) do
         sup_pid when is_pid(sup_pid) ->
           DynamicSupervisor.which_children(sup_pid)
           |> Enum.each(fn {_, child_pid, _, _} ->
@@ -17,39 +19,29 @@ defmodule Lenies.LenieTakeDamageTest do
           :ok
       end
 
-      case Lenies.WorldTestHelpers.world_pid() do
-        pid when is_pid(pid) ->
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-
-        _ ->
-          :ok
-      end
-
-      Tables.delete_all()
+      Lenies.WorldTestHelpers.stop_test_world(world_id)
     end)
 
-    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
-    :ok
+    {:ok, world_id: world_id, handle: handle}
   end
 
-  test "Lenie loses energy when receiving :take_damage" do
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
-    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L1"}})
+  test "Lenie loses energy when receiving :take_damage", %{world_id: world_id, handle: handle} do
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 5})
+    :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "L1"}})
 
     codeome = Codeome.from_list([:nop_0, :nop_0])
 
     {:ok, pid} =
       Lenie.start_link(
-        id: "L1",
-        codeome: codeome,
-        energy: 100.0,
-        pos: {5, 5},
-        dir: :n,
-        lineage: {nil, 0}
+        {handle,
+         [
+           id: "L1",
+           codeome: codeome,
+           energy: 100.0,
+           pos: {5, 5},
+           dir: :n,
+           lineage: {nil, 0}
+         ]}
       )
 
     send(pid, {:take_damage, 30, "no_attacker"})
@@ -62,20 +54,24 @@ defmodule Lenies.LenieTakeDamageTest do
     GenServer.stop(pid)
   end
 
-  test "Lenie dies when :take_damage brings energy <= 0" do
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
-    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L2"}})
+  test "Lenie dies when :take_damage brings energy <= 0",
+       %{world_id: world_id, handle: handle} do
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 5})
+    :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "L2"}})
 
     codeome = Codeome.from_list([:nop_0])
 
     {:ok, pid} =
       Lenie.start_link(
-        id: "L2",
-        codeome: codeome,
-        energy: 5.0,
-        pos: {5, 5},
-        dir: :n,
-        lineage: {nil, 0}
+        {handle,
+         [
+           id: "L2",
+           codeome: codeome,
+           energy: 5.0,
+           pos: {5, 5},
+           dir: :n,
+           lineage: {nil, 0}
+         ]}
       )
 
     Process.unlink(pid)
@@ -86,24 +82,28 @@ defmodule Lenies.LenieTakeDamageTest do
     assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 500
 
     Process.sleep(100)
-    [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
+    [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 5})
     assert cell.lenie_id == nil
   end
 
-  test "Lenie that dies from damage with positive energy leaves carcass" do
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
-    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L3"}})
+  test "Lenie that dies from damage with positive energy leaves carcass",
+       %{world_id: world_id, handle: handle} do
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 5})
+    :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "L3"}})
 
     codeome = Codeome.from_list([:nop_0])
 
     {:ok, pid} =
       Lenie.start_link(
-        id: "L3",
-        codeome: codeome,
-        energy: 50.0,
-        pos: {5, 5},
-        dir: :n,
-        lineage: {nil, 0}
+        {handle,
+         [
+           id: "L3",
+           codeome: codeome,
+           energy: 50.0,
+           pos: {5, 5},
+           dir: :n,
+           lineage: {nil, 0}
+         ]}
       )
 
     Process.unlink(pid)
@@ -114,7 +114,7 @@ defmodule Lenies.LenieTakeDamageTest do
     assert_receive {:DOWN, ^ref, :process, ^pid, :killed}, 500
 
     Process.sleep(100)
-    [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
+    [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 5})
     assert cell.lenie_id == nil
   end
 end

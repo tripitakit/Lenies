@@ -1,51 +1,32 @@
 defmodule Lenies.WorldPauseResumeTest do
   use ExUnit.Case, async: false
 
-  alias Lenies.World
-  alias Lenies.World.Tables
-
-  setup do
-    on_exit(fn ->
-      case Lenies.WorldTestHelpers.world_pid() do
-        pid when is_pid(pid) ->
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-
-        _ ->
-          :ok
-      end
-
-      Tables.delete_all()
-    end)
-
-    :ok
-  end
-
   test "pause/0 stops tick_count from advancing" do
-    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
+    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+    on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
 
-    Lenies.Worlds.tick_now(:primary)
-    Lenies.Worlds.tick_now(:primary)
-    stats_before = Lenies.Worlds.snapshot_stats(:primary)
+    Lenies.Worlds.tick_now(world_id)
+    Lenies.Worlds.tick_now(world_id)
+    stats_before = Lenies.Worlds.snapshot_stats(world_id)
     assert stats_before.tick_count == 2
 
-    :ok = Lenies.Worlds.pause(:primary)
-    assert Lenies.Worlds.paused?(:primary) == true
+    :ok = Lenies.Worlds.pause(world_id)
+    assert Lenies.Worlds.paused?(world_id) == true
 
-    :ok = Lenies.Worlds.resume(:primary)
-    assert Lenies.Worlds.paused?(:primary) == false
+    :ok = Lenies.Worlds.resume(world_id)
+    assert Lenies.Worlds.paused?(world_id) == false
   end
 
   test "resume/0 restarts auto-tick" do
-    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:primary:tick")
-    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 50)
+    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 50)
+    {:ok, handle} = Lenies.Worlds.handle(world_id)
+    on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
 
-    assert_receive {:tick, 1}, 500
+    Phoenix.PubSub.subscribe(Lenies.PubSub, handle.pubsub_prefix <> ":tick")
 
-    :ok = Lenies.Worlds.pause(:primary)
+    assert_receive {:tick, _}, 500
+
+    :ok = Lenies.Worlds.pause(world_id)
 
     receive do
       {:tick, _} -> :ok
@@ -55,7 +36,7 @@ defmodule Lenies.WorldPauseResumeTest do
 
     refute_receive {:tick, _}, 200
 
-    :ok = Lenies.Worlds.resume(:primary)
+    :ok = Lenies.Worlds.resume(world_id)
     assert_receive {:tick, _}, 500
   end
 end

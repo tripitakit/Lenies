@@ -8,12 +8,14 @@ defmodule Lenies.AttackEnergyConservationTest do
   """
   use ExUnit.Case, async: false
 
-  alias Lenies.{Codeome, Lenie, World}
-  alias Lenies.World.Tables
+  alias Lenies.{Codeome, Lenie}
 
   setup do
+    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+    {:ok, handle} = Lenies.Worlds.handle(world_id)
+
     on_exit(fn ->
-      case Lenies.WorldTestHelpers.lenie_sup_pid() do
+      case Lenies.WorldTestHelpers.lenie_sup_pid(world_id) do
         sup_pid when is_pid(sup_pid) ->
           DynamicSupervisor.which_children(sup_pid)
           |> Enum.each(fn {_, child_pid, _, _} ->
@@ -24,46 +26,34 @@ defmodule Lenies.AttackEnergyConservationTest do
           :ok
       end
 
-      case Lenies.WorldTestHelpers.world_pid() do
-        pid when is_pid(pid) ->
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-
-        _ ->
-          :ok
-      end
-
-      Tables.delete_all()
+      Lenies.WorldTestHelpers.stop_test_world(world_id)
     end)
 
-    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
-    :ok
+    {:ok, world_id: world_id, handle: handle}
   end
 
   # Spawn a lenie at position, register it in ETS. Starts paused by default
   # so metabolism doesn't drain energy between spawn and the test action.
   # The initial snapshot is still written in init/1 regardless of paused?.
-  defp spawn_lenie(id, pos, energy, opts) do
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), pos)
-    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: id}})
+  defp spawn_lenie(world_id, handle, id, pos, energy, opts) do
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), pos)
+    :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: id}})
 
     opcodes = Keyword.get(opts, :codeome, [:nop_0, :nop_0, :nop_0])
     codeome = Codeome.from_list(opcodes)
 
     {:ok, pid} =
       Lenie.start_link(
-        [
-          id: id,
-          codeome: codeome,
-          energy: energy,
-          pos: pos,
-          dir: Keyword.get(opts, :dir, :n),
-          lineage: {nil, 0},
-          paused?: Keyword.get(opts, :paused?, true)
-        ] ++ Keyword.drop(opts, [:dir, :paused?, :codeome])
+        {handle,
+         [
+           id: id,
+           codeome: codeome,
+           energy: energy,
+           pos: pos,
+           dir: Keyword.get(opts, :dir, :n),
+           lineage: {nil, 0},
+           paused?: Keyword.get(opts, :paused?, true)
+         ] ++ Keyword.drop(opts, [:dir, :paused?, :codeome])}
       )
 
     Process.unlink(pid)
@@ -93,14 +83,15 @@ defmodule Lenies.AttackEnergyConservationTest do
   end
 
   describe "energy conservation on overkill" do
-    test "victim with less energy than attack_damage: attacker gains only what victim had" do
+    test "victim with less energy than attack_damage: attacker gains only what victim had",
+         %{world_id: world_id, handle: handle} do
       attack_damage = Application.get_env(:lenies, :attack_damage, 10)
       victim_energy = attack_damage / 2.0
 
       # Both lenies start paused so energy is stable during the test.
       # Attacker faces east; victim is to its east.
-      attacker_pid = spawn_lenie("ATK_OVK", {20, 20}, 100.0, dir: :e)
-      victim_pid = spawn_lenie("VIC_OVK", {21, 20}, victim_energy, dir: :w)
+      attacker_pid = spawn_lenie(world_id, handle, "ATK_OVK", {20, 20}, 100.0, dir: :e)
+      victim_pid = spawn_lenie(world_id, handle, "VIC_OVK", {21, 20}, victim_energy, dir: :w)
 
       ref = Process.monitor(victim_pid)
 
@@ -108,7 +99,7 @@ defmodule Lenies.AttackEnergyConservationTest do
 
       # Trigger attack (World.action is a synchronous call).
       {:ok, {:attacked, ^attack_damage}} =
-        Lenies.Worlds.action(:primary, {:attack, {20, 20}, :e, "ATK_OVK"})
+        Lenies.Worlds.action(world_id, {:attack, {20, 20}, :e, "ATK_OVK"})
 
       # Victim must die — overkill
       assert_receive {:DOWN, ^ref, :process, ^victim_pid, :killed}, 1_000
@@ -132,18 +123,19 @@ defmodule Lenies.AttackEnergyConservationTest do
   end
 
   describe "energy conservation on normal hit" do
-    test "victim has more energy than attack_damage: attacker gains full attack_damage; victim survives" do
+    test "victim has more energy than attack_damage: attacker gains full attack_damage; victim survives",
+         %{world_id: world_id, handle: handle} do
       attack_damage = Application.get_env(:lenies, :attack_damage, 10)
       victim_energy = attack_damage * 10.0
 
-      attacker_pid = spawn_lenie("ATK_NRM", {20, 21}, 100.0, dir: :e)
-      victim_pid = spawn_lenie("VIC_NRM", {21, 21}, victim_energy, dir: :w)
+      attacker_pid = spawn_lenie(world_id, handle, "ATK_NRM", {20, 21}, 100.0, dir: :e)
+      victim_pid = spawn_lenie(world_id, handle, "VIC_NRM", {21, 21}, victim_energy, dir: :w)
 
       attacker_before = Lenie.inspect_state(attacker_pid).energy
       victim_before = Lenie.inspect_state(victim_pid).energy
 
       {:ok, {:attacked, ^attack_damage}} =
-        Lenies.Worlds.action(:primary, {:attack, {20, 21}, :e, "ATK_NRM"})
+        Lenies.Worlds.action(world_id, {:attack, {20, 21}, :e, "ATK_NRM"})
 
       # Wait deterministically for the async :attack_reward to land on the attacker.
       attacker_after = await_energy_change(attacker_pid, attacker_before)
@@ -172,7 +164,8 @@ defmodule Lenies.AttackEnergyConservationTest do
   end
 
   describe "energy conservation on defended hit" do
-    test "defended: victim loses halved damage; attacker receives halved damage as async reward" do
+    test "defended: victim loses halved damage; attacker receives halved damage as async reward",
+         %{world_id: world_id, handle: handle} do
       # Note: the attacker's defense penalty is applied by apply_world_action
       # inside the lenie interpreter (not here). This test verifies the
       # async reward component: the victim loses half_damage and the attacker
@@ -180,22 +173,22 @@ defmodule Lenies.AttackEnergyConservationTest do
       attack_damage = Application.get_env(:lenies, :attack_damage, 10)
       half_damage = div(attack_damage, 2)
 
-      attacker_pid = spawn_lenie("ATK_DEF", {20, 22}, 100.0, dir: :e)
-      victim_pid = spawn_lenie("VIC_DEF", {21, 22}, 100.0, dir: :w)
+      attacker_pid = spawn_lenie(world_id, handle, "ATK_DEF", {20, 22}, 100.0, dir: :e)
+      victim_pid = spawn_lenie(world_id, handle, "VIC_DEF", {21, 22}, 100.0, dir: :w)
 
       attacker_before = Lenie.inspect_state(attacker_pid).energy
       victim_before = Lenie.inspect_state(victim_pid).energy
 
       # Make the victim defending
-      [{"VIC_DEF", record}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(), "VIC_DEF")
+      [{"VIC_DEF", record}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(world_id), "VIC_DEF")
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        Lenies.WorldTestHelpers.lenies(world_id),
         {"VIC_DEF", Map.put(record, :defending_until, 999_999)}
       )
 
       {:ok, {:defended, ^half_damage}} =
-        Lenies.Worlds.action(:primary, {:attack, {20, 22}, :e, "ATK_DEF"})
+        Lenies.Worlds.action(world_id, {:attack, {20, 22}, :e, "ATK_DEF"})
 
       # Wait deterministically for the async :attack_reward to land on the attacker.
       attacker_after = await_energy_change(attacker_pid, attacker_before)
@@ -220,7 +213,8 @@ defmodule Lenies.AttackEnergyConservationTest do
       GenServer.stop(victim_pid)
     end
 
-    test "defended: apply_world_action charges only the penalty — not a pre-credited damage bonus" do
+    test "defended: apply_world_action charges only the penalty — not a pre-credited damage bonus",
+         %{world_id: world_id, handle: handle} do
       # This test runs the attacker's real metabolize loop (codeome = [:attack])
       # against a live defending victim. The old bug credited +damage inside
       # apply_world_action before the async reward arrived, so each defended
@@ -258,20 +252,24 @@ defmodule Lenies.AttackEnergyConservationTest do
       # initial energy for many cycles before dying.
       # Spawn victim first and set defending state before launching the attacker,
       # so every attack the attacker fires sees the victim as defending.
-      victim_pid = spawn_lenie("VIC_SYNC", {21, 24}, 10_000.0, dir: :w)
+      victim_pid = spawn_lenie(world_id, handle, "VIC_SYNC", {21, 24}, 10_000.0, dir: :w)
 
       victim_before = Lenie.inspect_state(victim_pid).energy
 
       # Set victim as permanently defending (must happen before attacker spawns).
-      [{"VIC_SYNC", record}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(), "VIC_SYNC")
+      [{"VIC_SYNC", record}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(world_id), "VIC_SYNC")
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        Lenies.WorldTestHelpers.lenies(world_id),
         {"VIC_SYNC", Map.put(record, :defending_until, 999_999)}
       )
 
       attacker_pid =
-        spawn_lenie("ATK_SYNC", {20, 24}, 500.0, dir: :e, paused?: false, codeome: [:attack])
+        spawn_lenie(world_id, handle, "ATK_SYNC", {20, 24}, 500.0,
+          dir: :e,
+          paused?: false,
+          codeome: [:attack]
+        )
 
       attacker_before = Lenie.inspect_state(attacker_pid).energy
 
@@ -314,22 +312,26 @@ defmodule Lenies.AttackEnergyConservationTest do
   end
 
   describe "unit: take_damage clamp via direct message" do
-    test "victim with energy less than damage reports actual=energy as reward" do
-      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 30})
-      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "CLAMP_V"}})
+    test "victim with energy less than damage reports actual=energy as reward",
+         %{world_id: world_id, handle: handle} do
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 30})
+      :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "CLAMP_V"}})
 
       codeome = Codeome.from_list([:nop_0])
       small_energy = 3.0
 
       {:ok, victim_pid} =
         Lenie.start_link(
-          id: "CLAMP_V",
-          codeome: codeome,
-          energy: small_energy,
-          pos: {5, 30},
-          dir: :n,
-          lineage: {nil, 0},
-          paused?: true
+          {handle,
+           [
+             id: "CLAMP_V",
+             codeome: codeome,
+             energy: small_energy,
+             pos: {5, 30},
+             dir: :n,
+             lineage: {nil, 0},
+             paused?: true
+           ]}
         )
 
       Process.unlink(victim_pid)
@@ -342,7 +344,7 @@ defmodule Lenies.AttackEnergyConservationTest do
 
       _fake_attacker =
         spawn(fn ->
-          {:ok, _} = Registry.register(Lenies.Registry, {:lenie, :primary, attacker_id}, nil)
+          {:ok, _} = Registry.register(Lenies.Registry, {:lenie, world_id, attacker_id}, nil)
           # Signal the test that registration is complete so there is no race.
           send(test_pid, {:registered, attacker_id})
 
@@ -373,9 +375,10 @@ defmodule Lenies.AttackEnergyConservationTest do
              "Reward was zero but victim had positive energy"
     end
 
-    test "victim with energy greater than damage: reward equals damage exactly" do
-      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 31})
-      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "CLAMP_V2"}})
+    test "victim with energy greater than damage: reward equals damage exactly",
+         %{world_id: world_id, handle: handle} do
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 31})
+      :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "CLAMP_V2"}})
 
       codeome = Codeome.from_list([:nop_0])
       big_energy = 200.0
@@ -383,13 +386,16 @@ defmodule Lenies.AttackEnergyConservationTest do
 
       {:ok, victim_pid} =
         Lenie.start_link(
-          id: "CLAMP_V2",
-          codeome: codeome,
-          energy: big_energy,
-          pos: {5, 31},
-          dir: :n,
-          lineage: {nil, 0},
-          paused?: true
+          {handle,
+           [
+             id: "CLAMP_V2",
+             codeome: codeome,
+             energy: big_energy,
+             pos: {5, 31},
+             dir: :n,
+             lineage: {nil, 0},
+             paused?: true
+           ]}
         )
 
       Process.unlink(victim_pid)
@@ -399,7 +405,7 @@ defmodule Lenies.AttackEnergyConservationTest do
 
       _fake_attacker =
         spawn(fn ->
-          {:ok, _} = Registry.register(Lenies.Registry, {:lenie, :primary, attacker_id}, nil)
+          {:ok, _} = Registry.register(Lenies.Registry, {:lenie, world_id, attacker_id}, nil)
           # Signal the test that registration is complete so there is no race.
           send(test_pid, {:registered, attacker_id})
 

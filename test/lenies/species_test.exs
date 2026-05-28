@@ -4,12 +4,12 @@ defmodule Lenies.SpeciesTest do
   alias Lenies.Species
 
   setup do
-    {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
-    {:ok, handle} = Lenies.Worlds.handle(:primary)
+    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+    {:ok, handle} = Lenies.Worlds.handle(world_id)
     # Start from an empty :lenies table — clear whatever the World seeded.
     :ets.delete_all_objects(handle.tables.lenies)
 
-    on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
+    on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
 
     {:ok, handle: handle}
   end

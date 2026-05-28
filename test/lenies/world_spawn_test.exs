@@ -1,12 +1,13 @@
 defmodule Lenies.WorldSpawnTest do
   use ExUnit.Case, async: false
 
-  alias Lenies.{Codeome, World}
-  alias Lenies.World.Tables
+  alias Lenies.Codeome
 
   setup do
+    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world()
+
     on_exit(fn ->
-      case Lenies.WorldTestHelpers.lenie_sup_pid() do
+      case Lenies.WorldTestHelpers.lenie_sup_pid(world_id) do
         sup_pid when is_pid(sup_pid) ->
           DynamicSupervisor.which_children(sup_pid)
           |> Enum.each(fn {_, child_pid, _, _} ->
@@ -17,38 +18,37 @@ defmodule Lenies.WorldSpawnTest do
           :ok
       end
 
-      Lenies.WorldTestHelpers.stop_primary()
+      Lenies.WorldTestHelpers.stop_test_world(world_id)
     end)
 
-    {:ok, _world} = Lenies.WorldTestHelpers.start_primary()
-    :ok
+    {:ok, world_id: world_id}
   end
 
-  test "spawn_lenie/2 places a new Lenie on a random free cell" do
+  test "spawn_lenie/2 places a new Lenie on a random free cell", %{world_id: world_id} do
     codeome = Codeome.from_list([:nop_0, :nop_0, :nop_0])
-    result = Lenies.Worlds.spawn_lenie(:primary, codeome, energy: 500.0)
+    result = Lenies.Worlds.spawn_lenie(world_id, codeome, energy: 500.0)
 
     assert {:ok, {lenie_id, {x, y}}} = result
     assert is_binary(lenie_id)
     assert x in 0..255
     assert y in 0..255
 
-    [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
+    [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, y})
     assert cell.lenie_id == lenie_id
 
-    [{pid, _}] = Registry.lookup(Lenies.Registry, {:lenie, :primary, lenie_id})
+    [{pid, _}] = Registry.lookup(Lenies.Registry, {:lenie, world_id, lenie_id})
     assert is_pid(pid)
     Process.unlink(pid)
     GenServer.stop(pid)
   end
 
-  test "spawn_lenie/2 returns :no_free_cell when grid is full" do
+  test "spawn_lenie/2 returns :no_free_cell when grid is full", %{world_id: world_id} do
     for x <- 0..255, y <- 0..255 do
-      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
-      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "FAKE"}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, y})
+      :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "FAKE"}})
     end
 
     codeome = Codeome.from_list([:nop_0])
-    assert {:error, :no_free_cell} = Lenies.Worlds.spawn_lenie(:primary, codeome, energy: 100.0)
+    assert {:error, :no_free_cell} = Lenies.Worlds.spawn_lenie(world_id, codeome, energy: 100.0)
   end
 end

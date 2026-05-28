@@ -1,13 +1,12 @@
 defmodule Lenies.WorldsTest do
-  # The handle smoke test starts a singleton :primary World, so the module
-  # cannot be async. The id_to_path/1 tests are still pure and would be safe
-  # in async mode on their own.
+  # Tests in this module bring up their own isolated test worlds; the module
+  # cannot be async because it manipulates global ETS / Registry state.
   use ExUnit.Case, async: false
 
   describe "id_to_path/1" do
     test "atom world id renders as the atom name" do
-      assert Lenies.Worlds.id_to_path(:primary) == "primary"
       assert Lenies.Worlds.id_to_path(:arena) == "arena"
+      assert Lenies.Worlds.id_to_path(:other) == "other"
     end
 
     test "tuple {atom, integer} renders as 'atom-integer'" do
@@ -15,58 +14,54 @@ defmodule Lenies.WorldsTest do
     end
 
     test "is filesystem-safe (no slashes or dots)" do
-      refute Lenies.Worlds.id_to_path(:primary) =~ "/"
+      refute Lenies.Worlds.id_to_path(:arena) =~ "/"
       refute Lenies.Worlds.id_to_path({:sandbox, 42}) =~ "/"
     end
   end
 
   describe "handle (Task 5 smoke)" do
-    # auto_start_simulation is false in test (see config/test.exs); the World
-    # must be started by hand. Other tests do the same; tear it down here to
-    # avoid a name clash with any subsequent test.
     setup do
-      {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
-      on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
-      :ok
+      {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+      on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
+      {:ok, world_id: world_id}
     end
 
-    test "primary World exposes a handle with the right tids" do
-      {:ok, handle} = Lenies.Worlds.handle(:primary)
-      assert %Lenies.WorldHandle{id: :primary, pubsub_prefix: "world:primary"} = handle
+    test "test World exposes a handle with the right tids", %{world_id: world_id} do
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
+      assert %Lenies.WorldHandle{id: ^world_id} = handle
+      assert handle.pubsub_prefix == "world:" <> Lenies.Worlds.id_to_path(world_id)
       assert is_reference(handle.tables.cells)
       assert is_reference(handle.tables.lenies)
-      assert handle.pid == Lenies.WorldTestHelpers.world_pid()
+      assert handle.pid == Lenies.WorldTestHelpers.world_pid(world_id)
     end
   end
 
   describe "facade (T8 smoke)" do
-    # The facade is exercised against the :primary World, which (with
-    # auto_start_simulation: false in test env) must be started by hand.
     setup do
-      {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
-      on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
-      :ok
+      {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+      on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
+      {:ok, world_id: world_id}
     end
 
-    test "handle/1 returns the primary world handle by id" do
-      {:ok, %Lenies.WorldHandle{id: :primary}} = Lenies.Worlds.handle(:primary)
+    test "handle/1 returns the test world handle by id", %{world_id: world_id} do
+      {:ok, %Lenies.WorldHandle{id: ^world_id}} = Lenies.Worlds.handle(world_id)
     end
 
     test "handle/1 returns :error for an unknown world" do
       assert :error = Lenies.Worlds.handle(:not_running)
     end
 
-    test "list/0 includes :primary" do
-      assert :primary in Lenies.Worlds.list()
+    test "list/0 includes the test world", %{world_id: world_id} do
+      assert world_id in Lenies.Worlds.list()
     end
 
-    test "alive?/1 is true for :primary, false otherwise" do
-      assert Lenies.Worlds.alive?(:primary)
+    test "alive?/1 is true for the test world, false otherwise", %{world_id: world_id} do
+      assert Lenies.Worlds.alive?(world_id)
       refute Lenies.Worlds.alive?(:not_running)
     end
 
-    test "snapshot_stats/1 returns a map with the expected keys" do
-      stats = Lenies.Worlds.snapshot_stats(:primary)
+    test "snapshot_stats/1 returns a map with the expected keys", %{world_id: world_id} do
+      stats = Lenies.Worlds.snapshot_stats(world_id)
       assert is_map(stats)
       assert Map.has_key?(stats, :cells)
       assert Map.has_key?(stats, :population)
@@ -75,16 +70,18 @@ defmodule Lenies.WorldsTest do
       assert Map.has_key?(stats, :tick_count)
     end
 
-    test "tune/3 updates the world config; broadcast {:config_changed, …} reaches subscribers" do
-      Phoenix.PubSub.subscribe(Lenies.PubSub, "world:primary:control")
-      assert :ok = Lenies.Worlds.tune(:primary, :eat_amount, 123.0)
+    test "tune/3 updates the world config; broadcast {:config_changed, …} reaches subscribers",
+         %{world_id: world_id} do
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
+      Phoenix.PubSub.subscribe(Lenies.PubSub, handle.pubsub_prefix <> ":control")
+      assert :ok = Lenies.Worlds.tune(world_id, :eat_amount, 123.0)
       assert_receive {:config_changed, :eat_amount, 123.0}, 500
       # restore the default so other tests aren't affected
-      Lenies.Worlds.tune(:primary, :eat_amount, 100.0)
+      Lenies.Worlds.tune(world_id, :eat_amount, 100.0)
     end
 
-    test "tune/3 rejects unknown keys" do
-      assert {:error, {:unknown_tunable, :nope}} = Lenies.Worlds.tune(:primary, :nope, 0)
+    test "tune/3 rejects unknown keys", %{world_id: world_id} do
+      assert {:error, {:unknown_tunable, :nope}} = Lenies.Worlds.tune(world_id, :nope, 0)
     end
   end
 
@@ -98,62 +95,60 @@ defmodule Lenies.WorldsTest do
     end
 
     test "Lenies.LenieSupervisor.via/1 returns a Registry via-tuple" do
-      assert {:via, Registry, {Lenies.Registry, {:lenie_sup, :primary}}} =
-               Lenies.LenieSupervisor.via(:primary)
+      assert {:via, Registry, {Lenies.Registry, {:lenie_sup, :some_world}}} =
+               Lenies.LenieSupervisor.via(:some_world)
     end
 
     test "Lenies.Telemetry.via/1 returns a Registry via-tuple" do
-      assert {:via, Registry, {Lenies.Registry, {:telemetry, :primary}}} =
-               Lenies.Telemetry.via(:primary)
+      assert {:via, Registry, {Lenies.Registry, {:telemetry, :some_world}}} =
+               Lenies.Telemetry.via(:some_world)
     end
 
-    test ":primary's LenieSupervisor is registered under {:lenie_sup, :primary}" do
-      # In test env (auto_start_simulation: false) the Application does not
-      # start the :primary world, so spin it up here via the Worlds facade.
-      {:ok, _world_pid} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
-      on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
+    test "test world's LenieSupervisor is registered under {:lenie_sup, world_id}" do
+      {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+      on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
 
-      assert [{_pid, _}] = Registry.lookup(Lenies.Registry, {:lenie_sup, :primary})
+      assert [{_pid, _}] = Registry.lookup(Lenies.Registry, {:lenie_sup, world_id})
     end
 
-    test ":primary's Telemetry is registered under {:telemetry, :primary}" do
-      # In test env (auto_start_simulation: false) the Application does not
-      # start the :primary world, so spin up the whole sub-tree (which
-      # includes Telemetry) via the Worlds facade.
-      {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
-      on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
+    test "test world's Telemetry is registered under {:telemetry, world_id}" do
+      {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+      on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
 
-      assert [{_pid, _}] = Registry.lookup(Lenies.Registry, {:telemetry, :primary})
+      assert [{_pid, _}] = Registry.lookup(Lenies.Registry, {:telemetry, world_id})
     end
   end
 
   describe "snapshot per-world (T12 smoke)" do
     setup do
-      {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
-      on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
-      :ok
+      {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+      on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
+      {:ok, world_id: world_id}
     end
 
     @tag :tmp_dir
-    test "save/restore round-trip on :primary preserves color_overrides", %{tmp_dir: tmp} do
+    test "save/restore round-trip on test world preserves color_overrides",
+         %{tmp_dir: tmp, world_id: world_id} do
       Application.put_env(:lenies, :snapshot_root, tmp)
       on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
 
-      {:ok, handle} = Lenies.Worlds.handle(:primary)
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
       Lenies.SpeciesColor.set_override(handle, "snap-marker", "#abcdef")
       assert "#abcdef" = Lenies.SpeciesColor.override(handle, "snap-marker")
 
-      assert :ok = Lenies.Worlds.save_snapshot(:primary, "t12_smoke")
-      assert File.dir?(Path.join([tmp, "primary", "t12_smoke"]))
-      assert File.exists?(Path.join([tmp, "primary", "t12_smoke", "color_overrides.tab"]))
+      world_path = Lenies.Worlds.id_to_path(world_id)
+
+      assert :ok = Lenies.Worlds.save_snapshot(world_id, "t12_smoke")
+      assert File.dir?(Path.join([tmp, world_path, "t12_smoke"]))
+      assert File.exists?(Path.join([tmp, world_path, "t12_smoke", "color_overrides.tab"]))
 
       Lenies.SpeciesColor.clear_override(handle, "snap-marker")
       refute Lenies.SpeciesColor.override(handle, "snap-marker")
 
-      assert :ok = Lenies.Worlds.restore_snapshot(:primary, "t12_smoke")
+      assert :ok = Lenies.Worlds.restore_snapshot(world_id, "t12_smoke")
       # The handle's tids are stable across restore — re-fetch defensively
       # so the assertion uses whatever the world reports as current.
-      {:ok, handle} = Lenies.Worlds.handle(:primary)
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
       assert "#abcdef" = Lenies.SpeciesColor.override(handle, "snap-marker")
 
       # cleanup
@@ -162,52 +157,54 @@ defmodule Lenies.WorldsTest do
 
     @tag :tmp_dir
     test "restore tolerates a legacy 4-table snapshot (missing color_overrides.tab)",
-         %{tmp_dir: tmp} do
+         %{tmp_dir: tmp, world_id: world_id} do
       Application.put_env(:lenies, :snapshot_root, tmp)
       on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
 
-      {:ok, handle} = Lenies.Worlds.handle(:primary)
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
+      world_path = Lenies.Worlds.id_to_path(world_id)
 
       # Create a snapshot, then delete color_overrides.tab to simulate legacy.
-      assert :ok = Lenies.Worlds.save_snapshot(:primary, "t12_legacy")
-      legacy_dir = Path.join([tmp, "primary", "t12_legacy"])
+      assert :ok = Lenies.Worlds.save_snapshot(world_id, "t12_legacy")
+      legacy_dir = Path.join([tmp, world_path, "t12_legacy"])
       File.rm!(Path.join(legacy_dir, "color_overrides.tab"))
 
       # Add an override that should be wiped on legacy restore.
       Lenies.SpeciesColor.set_override(handle, "before-restore", "#123456")
 
       # Restore the legacy snapshot — should succeed, color_overrides becomes empty.
-      assert :ok = Lenies.Worlds.restore_snapshot(:primary, "t12_legacy")
-      {:ok, handle} = Lenies.Worlds.handle(:primary)
+      assert :ok = Lenies.Worlds.restore_snapshot(world_id, "t12_legacy")
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
       refute Lenies.SpeciesColor.override(handle, "before-restore")
     end
   end
 
   describe "boot migration (T10 smoke)" do
     setup do
-      # auto_start_simulation: false in test env, so spin up :primary via the
-      # Worlds facade exactly the same way Application would in production.
-      {:ok, _world_pid} = Lenies.WorldTestHelpers.start_primary(%{})
-      on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
-      :ok
+      {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(%{})
+      on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
+      {:ok, world_id: world_id}
     end
 
-    test ":primary world is registered via Lenies.Registry, not the global atom" do
+    test "test world is registered via Lenies.Registry, not the global atom",
+         %{world_id: world_id} do
       # The global atom name is gone.
       assert is_nil(Process.whereis(Lenies.World))
       # Registry has it.
-      assert [{_pid, _}] = Registry.lookup(Lenies.Registry, {:world, :primary})
+      assert [{_pid, _}] = Registry.lookup(Lenies.Registry, {:world, world_id})
     end
 
-    test ":primary's LenieSupervisor/Telemetry no longer have global names" do
+    test "test world's LenieSupervisor/Telemetry no longer have global names",
+         %{world_id: world_id} do
       assert is_nil(Process.whereis(Lenies.LenieSupervisor))
       assert is_nil(Process.whereis(Lenies.Telemetry))
-      assert [{_, _}] = Registry.lookup(Lenies.Registry, {:lenie_sup, :primary})
-      assert [{_, _}] = Registry.lookup(Lenies.Registry, {:telemetry, :primary})
+      assert [{_, _}] = Registry.lookup(Lenies.Registry, {:lenie_sup, world_id})
+      assert [{_, _}] = Registry.lookup(Lenies.Registry, {:telemetry, world_id})
     end
 
-    test ":primary world's supervisor is under Lenies.Worlds.Supervisor" do
-      assert [{sup_pid, _}] = Registry.lookup(Lenies.Registry, {:world_sup, :primary})
+    test "test world's supervisor is under Lenies.Worlds.Supervisor",
+         %{world_id: world_id} do
+      assert [{sup_pid, _}] = Registry.lookup(Lenies.Registry, {:world_sup, world_id})
 
       assert Enum.any?(DynamicSupervisor.which_children(Lenies.Worlds.Supervisor), fn
                {_, ^sup_pid, _, _} -> true
@@ -220,20 +217,10 @@ defmodule Lenies.WorldsTest do
     @moduletag :integration
 
     setup do
-      # Stop :primary so these tests get a clean slate (we'll start :a and :b explicitly).
-      # The :primary world is restarted in on_exit so the rest of the suite (and the dev
-      # server, if running) sees it back.
-      :ok = Lenies.Worlds.stop_world(:primary)
-      Process.sleep(50)
-
       on_exit(fn ->
         Lenies.Worlds.stop_world(:a)
         Lenies.Worlds.stop_world(:b)
         Process.sleep(50)
-
-        unless Lenies.Worlds.alive?(:primary) do
-          {:ok, _} = Lenies.Worlds.start_world(:primary, %{})
-        end
       end)
 
       :ok

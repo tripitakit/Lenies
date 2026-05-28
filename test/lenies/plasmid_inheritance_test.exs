@@ -1,9 +1,8 @@
 defmodule Lenies.PlasmidInheritanceTest do
   use ExUnit.Case, async: false
 
-  alias Lenies.{Lenie, Plasmid, World}
+  alias Lenies.{Lenie, Plasmid}
   alias Lenies.Codeomes.MinimalReplicator
-  alias Lenies.World.Tables
 
   @moduletag timeout: 60_000
 
@@ -15,6 +14,9 @@ defmodule Lenies.PlasmidInheritanceTest do
     Application.put_env(:lenies, :eat_amount, 50)
     Application.put_env(:lenies, :interpreter_steps_per_batch, 50)
 
+    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world()
+    {:ok, handle} = Lenies.Worlds.handle(world_id)
+
     on_exit(fn ->
       Application.delete_env(:lenies, :copy_substitution_rate)
       Application.delete_env(:lenies, :copy_insert_rate)
@@ -23,7 +25,7 @@ defmodule Lenies.PlasmidInheritanceTest do
       Application.delete_env(:lenies, :eat_amount)
       Application.delete_env(:lenies, :interpreter_steps_per_batch)
 
-      case Lenies.WorldTestHelpers.lenie_sup_pid() do
+      case Lenies.WorldTestHelpers.lenie_sup_pid(world_id) do
         sup when is_pid(sup) ->
           DynamicSupervisor.which_children(sup)
           |> Enum.each(fn {_, child, _, _} ->
@@ -34,34 +36,36 @@ defmodule Lenies.PlasmidInheritanceTest do
           :ok
       end
 
-      Lenies.WorldTestHelpers.stop_primary()
+      Lenies.WorldTestHelpers.stop_test_world(world_id)
     end)
 
-    :ok
+    {:ok, world_id: world_id, handle: handle}
   end
 
-  test "child inherits parent's plasmid through divide" do
-    {:ok, _world} = Lenies.WorldTestHelpers.start_primary()
-
+  test "child inherits parent's plasmid through divide",
+       %{world_id: world_id, handle: handle} do
     for x <- 0..254, y <- 0..254 do
-      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
-      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 200}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, y})
+      :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 200}})
     end
 
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
-    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "PARENT"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "PARENT"}})
 
     parent_plasmid = Plasmid.new([:eat, :move, :turn_left])
 
     {:ok, pid} =
       Lenie.start_link(
-        id: "PARENT",
-        codeome: MinimalReplicator.codeome(),
-        energy: 10_000.0,
-        pos: {128, 128},
-        dir: :e,
-        lineage: {nil, 0},
-        plasmids: [parent_plasmid]
+        {handle,
+         [
+           id: "PARENT",
+           codeome: MinimalReplicator.codeome(),
+           energy: 10_000.0,
+           pos: {128, 128},
+           dir: :e,
+           lineage: {nil, 0},
+           plasmids: [parent_plasmid]
+         ]}
       )
 
     Process.unlink(pid)
@@ -70,7 +74,7 @@ defmodule Lenies.PlasmidInheritanceTest do
 
     child_with_plasmid =
       poll_until(deadline, fn ->
-        :ets.tab2list(Lenies.WorldTestHelpers.lenies())
+        :ets.tab2list(Lenies.WorldTestHelpers.lenies(world_id))
         |> Enum.find_value(fn {id, snap} ->
           if id != "PARENT" and Map.get(snap, :plasmids, []) != [] do
             {:done, snap}

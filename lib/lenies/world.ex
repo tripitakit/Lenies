@@ -4,12 +4,12 @@ defmodule Lenies.World do
   environmental tick, applies radiation and carcass decay, and provides the
   public API for snapshots and sterilization.
 
-  ## Multi-world (Task 5)
+  ## Multi-world
 
-  Each World now carries:
+  Each World carries:
 
   - `world_id` — an atom or `{atom, term}` tuple identifying the world
-    (defaults to `:primary`).
+    (required at `start_link/1`).
   - `config` — a `%Lenies.World.Config{}` struct, the source of truth at
     runtime for tunable simulation parameters. The struct is seeded from
     `Application.get_env(:lenies, …)` at `init/1` and then never re-read
@@ -21,8 +21,7 @@ defmodule Lenies.World do
 
   Each World registers under `{:via, Registry, {Lenies.Registry, {:world,
   world_id}}}`. All external callers go through the `Lenies.Worlds.X(world_id,
-  …)` facade — the `:primary`-implicit module-level delegators that existed
-  during the multi-world transition were removed in T11.
+  …)` facade.
 
   See `docs/superpowers/specs/2026-05-11-lenies-design.md` §3, §6, §9.
   """

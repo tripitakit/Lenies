@@ -1,26 +1,26 @@
 defmodule Lenies.WorldReplicationTest do
   use ExUnit.Case, async: false
 
-  alias Lenies.World
-  alias Lenies.World.{ChildSlots, Tables}
+  alias Lenies.World.ChildSlots
 
   setup do
-    on_exit(fn ->
-      Lenies.WorldTestHelpers.stop_primary()
-    end)
+    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+    {:ok, handle} = Lenies.Worlds.handle(world_id)
 
-    {:ok, _world} = Lenies.WorldTestHelpers.start_primary()
-    {:ok, handle} = Lenies.Worlds.handle(:primary)
+    on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
+
     # mark parent's cell
     [{key, cell}] = :ets.lookup(handle.tables.cells, {10, 10})
     :ets.insert(handle.tables.cells, {key, %{cell | lenie_id: "P1"}})
     :ets.insert(handle.tables.lenies, {"P1", %{id: "P1", pid: self(), pos: {10, 10}, dir: :e}})
-    {:ok, handle: handle}
+
+    {:ok, world_id: world_id, handle: handle}
   end
 
   describe "allocate" do
-    test "succeeds when front cell is free; creates child slot", %{handle: h} do
-      result = Lenies.Worlds.action(:primary, {:allocate, 20, {10, 10}, :e, "P1"})
+    test "succeeds when front cell is free; creates child slot",
+         %{world_id: world_id, handle: h} do
+      result = Lenies.Worlds.action(world_id, {:allocate, 20, {10, 10}, :e, "P1"})
       assert {:ok, {:allocated, slot_id, target_cell}} = result
       assert target_cell == {11, 10}
       assert is_binary(slot_id)
@@ -36,38 +36,42 @@ defmodule Lenies.WorldReplicationTest do
       assert lenie_record.child_slot_id == slot_id
     end
 
-    test "fails when front cell is occupied by another Lenie", %{handle: h} do
+    test "fails when front cell is occupied by another Lenie",
+         %{world_id: world_id, handle: h} do
       [{key, cell}] = :ets.lookup(h.tables.cells, {11, 10})
       :ets.insert(h.tables.cells, {key, %{cell | lenie_id: "OTHER"}})
 
-      result = Lenies.Worlds.action(:primary, {:allocate, 20, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(world_id, {:allocate, 20, {10, 10}, :e, "P1"})
       assert result == {:ok, :blocked}
     end
 
-    test "fails when parent already has a slot allocated" do
-      {:ok, _} = Lenies.Worlds.action(:primary, {:allocate, 20, {10, 10}, :e, "P1"})
-      result = Lenies.Worlds.action(:primary, {:allocate, 30, {10, 10}, :e, "P1"})
+    test "fails when parent already has a slot allocated", %{world_id: world_id} do
+      {:ok, _} = Lenies.Worlds.action(world_id, {:allocate, 20, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(world_id, {:allocate, 30, {10, 10}, :e, "P1"})
       assert result == {:ok, :already_allocated}
     end
 
-    test "fails when requested size out of bounds" do
+    test "fails when requested size out of bounds", %{world_id: world_id} do
       # codeome_length_bounds default {5, 1000}
-      result = Lenies.Worlds.action(:primary, {:allocate, 2, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(world_id, {:allocate, 2, {10, 10}, :e, "P1"})
       assert result == {:ok, :invalid_size}
 
-      result = Lenies.Worlds.action(:primary, {:allocate, 1001, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(world_id, {:allocate, 1001, {10, 10}, :e, "P1"})
       assert result == {:ok, :invalid_size}
     end
   end
 
   describe "write_child" do
-    setup %{handle: h} do
+    setup %{world_id: world_id, handle: h} do
       # Ensure parent has an allocated slot at this point
-      {:ok, {:allocated, slot_id, _}} = Lenies.Worlds.action(:primary, {:allocate, 20, {10, 10}, :e, "P1"})
+      {:ok, {:allocated, slot_id, _}} =
+        Lenies.Worlds.action(world_id, {:allocate, 20, {10, 10}, :e, "P1"})
+
       %{slot_id: slot_id, handle: h}
     end
 
     test "writes opcode at addr without mutation when rates are 0", %{
+      world_id: world_id,
       slot_id: slot_id,
       handle: h
     } do
@@ -80,7 +84,7 @@ defmodule Lenies.WorldReplicationTest do
 
       try do
         move_int = Lenies.Codeome.Opcodes.encode(:move)
-        result = Lenies.Worlds.action(:primary, {:write_child, move_int, 3, "P1"})
+        result = Lenies.Worlds.action(world_id, {:write_child, move_int, 3, "P1"})
         assert result == {:ok, :written}
 
         {:ok, slot} = ChildSlots.get(h.tables.child_slots, slot_id)
@@ -92,18 +96,18 @@ defmodule Lenies.WorldReplicationTest do
       end
     end
 
-    test "fails when parent has no slot allocated", %{handle: h} do
+    test "fails when parent has no slot allocated", %{world_id: world_id, handle: h} do
       # remove the child_slot_id by re-inserting the lenies record without it
       :ets.delete(h.tables.lenies, "P1")
       :ets.insert(h.tables.lenies, {"P1", %{id: "P1", pos: {10, 10}, dir: :e}})
 
-      result = Lenies.Worlds.action(:primary, {:write_child, 0, 0, "P1"})
+      result = Lenies.Worlds.action(world_id, {:write_child, 0, 0, "P1"})
       assert result == {:ok, :no_slot}
     end
   end
 
   describe "divide" do
-    setup %{handle: h} do
+    setup %{world_id: world_id, handle: h} do
       # Ensure copy errors are off
       original_min_viable = Application.get_env(:lenies, :min_viable_codeome_opcodes)
 
@@ -121,7 +125,8 @@ defmodule Lenies.WorldReplicationTest do
       end)
 
       # Parent already has an allocated slot — populate it with a real Codeome
-      {:ok, {:allocated, slot_id, _}} = Lenies.Worlds.action(:primary, {:allocate, 5, {10, 10}, :e, "P1"})
+      {:ok, {:allocated, slot_id, _}} =
+        Lenies.Worlds.action(world_id, {:allocate, 5, {10, 10}, :e, "P1"})
 
       cs = h.tables.child_slots
       :ok = ChildSlots.set_opcode(cs, slot_id, 0, :nop_1)
@@ -134,10 +139,11 @@ defmodule Lenies.WorldReplicationTest do
     end
 
     test "successful :divide spawns child Lenie, transfers half energy, clears slot", %{
+      world_id: world_id,
       slot_id: slot_id,
       handle: h
     } do
-      result = Lenies.Worlds.action(:primary, {:divide, 100.0, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(world_id, {:divide, 100.0, {10, 10}, :e, "P1"})
       assert {:ok, {:divided, child_id, energy_given}} = result
       assert is_binary(child_id)
       # floor(100 / 2)
@@ -147,7 +153,7 @@ defmodule Lenies.WorldReplicationTest do
       assert ChildSlots.get(h.tables.child_slots, slot_id) == :not_found
 
       # child registered as Lenie process under tuple key
-      [{child_pid, _}] = Registry.lookup(Lenies.Registry, {:lenie, :primary, child_id})
+      [{child_pid, _}] = Registry.lookup(Lenies.Registry, {:lenie, world_id, child_id})
       assert is_pid(child_pid)
       assert Process.alive?(child_pid)
 
@@ -163,25 +169,27 @@ defmodule Lenies.WorldReplicationTest do
       GenServer.stop(child_pid)
     end
 
-    test "fails if target cell now occupied", %{slot_id: _slot_id, handle: h} do
+    test "fails if target cell now occupied",
+         %{world_id: world_id, slot_id: _slot_id, handle: h} do
       [{key, cell}] = :ets.lookup(h.tables.cells, {11, 10})
       :ets.insert(h.tables.cells, {key, %{cell | lenie_id: "BLOCKER"}})
 
-      result = Lenies.Worlds.action(:primary, {:divide, 100.0, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(world_id, {:divide, 100.0, {10, 10}, :e, "P1"})
       assert result == {:ok, :target_blocked}
     end
 
-    test "fails if no slot allocated", %{handle: h} do
+    test "fails if no slot allocated", %{world_id: world_id, handle: h} do
       :ets.delete(h.tables.lenies, "P1")
       :ets.insert(h.tables.lenies, {"P1", %{id: "P1", pos: {10, 10}, dir: :e}})
 
-      result = Lenies.Worlds.action(:primary, {:divide, 100.0, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(world_id, {:divide, 100.0, {10, 10}, :e, "P1"})
       assert result == {:ok, :no_slot}
     end
   end
 
   describe "Lenie + :allocate end-to-end" do
-    test "Lenie that executes :allocate gets success pushed on stack", %{handle: handle} do
+    test "Lenie that executes :allocate gets success pushed on stack",
+         %{handle: handle} do
       # Codeome: build size 5 on stack via :push1 + :add, then :allocate
       # Push 1 five times then add four times → 5 on stack
       codeome =

@@ -4,10 +4,10 @@ defmodule LeniesWeb.GridRendererTest do
   alias LeniesWeb.GridRenderer
 
   setup do
-    {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
-    {:ok, handle} = Lenies.Worlds.handle(:primary)
+    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+    {:ok, handle} = Lenies.Worlds.handle(world_id)
 
-    on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
+    on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
 
     {:ok, handle: handle}
   end

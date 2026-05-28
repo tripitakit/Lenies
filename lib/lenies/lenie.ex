@@ -55,16 +55,6 @@ defmodule Lenies.Lenie do
     GenServer.start_link(__MODULE__, {handle, opts})
   end
 
-  # Compat shim for in-tree test callers that still pass a bare keyword list.
-  # Resolves the primary world's handle on the spot. Tests that exercise
-  # multi-world behaviour should pass the handle explicitly via the tuple
-  # form above. Removed in a later task once every direct test caller is
-  # multi-world-aware.
-  def start_link(opts) when is_list(opts) do
-    {:ok, handle} = Lenies.Worlds.handle(:primary)
-    GenServer.start_link(__MODULE__, {handle, opts})
-  end
-
   @doc "Returns a snapshot of the internal state (for inspection/test)."
   def inspect_state(pid), do: GenServer.call(pid, :inspect_state)
 

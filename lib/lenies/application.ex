@@ -38,16 +38,7 @@ defmodule Lenies.Application do
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Lenies.Supervisor]
 
-    with {:ok, sup_pid} <- Supervisor.start_link(children, opts) do
-      # Start the :primary world via the Worlds facade — this brings up
-      # Lenies.World, its per-world LenieSupervisor and Telemetry under a
-      # per-world rest_for_one Supervisor (Lenies.World.Supervisor).
-      if Application.get_env(:lenies, :auto_start_simulation, true) do
-        {:ok, _} = Lenies.Worlds.start_world(:primary, %{})
-      end
-
-      {:ok, sup_pid}
-    end
+    Supervisor.start_link(children, opts)
   end
 
   # Tell Phoenix to update the endpoint configuration

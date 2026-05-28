@@ -1,47 +1,40 @@
 defmodule Lenies.IntegrationWalkerTest do
   use ExUnit.Case, async: false
 
-  alias Lenies.{Lenie, World}
+  alias Lenies.Lenie
   alias Lenies.Codeomes.Walker
-  alias Lenies.World.Tables
 
   setup do
-    on_exit(fn ->
-      for pid <- Lenies.WorldTestHelpers.world_pid() |> List.wrap() do
-        try do
-          GenServer.stop(pid)
-        catch
-          :exit, _ -> :ok
-        end
-      end
+    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+    {:ok, handle} = Lenies.Worlds.handle(world_id)
 
-      Tables.delete_all()
-    end)
+    on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
 
-    :ok
+    {:ok, world_id: world_id, handle: handle}
   end
 
-  test "walker moves on the grid and eats biomass" do
-    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
-
+  test "walker moves on the grid and eats biomass", %{world_id: world_id, handle: handle} do
     # seed cells {10..200, 10} with biomass (wide enough to feed the walker for 500ms)
     for x <- 10..200 do
-      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, 10})
-      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 100}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, 10})
+      :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 100}})
     end
 
     # spawn walker at {10, 10} facing east, plenty of energy
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {10, 10})
-    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "walker"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {10, 10})
+    :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "walker"}})
 
     {:ok, pid} =
       Lenie.start_link(
-        id: "walker",
-        codeome: Walker.codeome(),
-        energy: 200.0,
-        pos: {10, 10},
-        dir: :e,
-        lineage: {nil, 0}
+        {handle,
+         [
+           id: "walker",
+           codeome: Walker.codeome(),
+           energy: 200.0,
+           pos: {10, 10},
+           dir: :e,
+           lineage: {nil, 0}
+         ]}
       )
 
     # let it run for ~500ms (≈ many metabolic batches)

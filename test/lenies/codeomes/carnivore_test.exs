@@ -1,9 +1,8 @@
 defmodule Lenies.Codeomes.CarnivoreTest do
   use ExUnit.Case, async: false
 
-  alias Lenies.{Codeome, Lenie, World}
+  alias Lenies.{Codeome, Lenie}
   alias Lenies.Codeomes.{Carnivore, MinimalReplicator}
-  alias Lenies.World.Tables
 
   @moduletag timeout: 30_000
 
@@ -17,6 +16,9 @@ defmodule Lenies.Codeomes.CarnivoreTest do
     Application.put_env(:lenies, :eat_amount, 50)
     Application.put_env(:lenies, :interpreter_steps_per_batch, 50)
 
+    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+    {:ok, handle} = Lenies.Worlds.handle(world_id)
+
     on_exit(fn ->
       Application.delete_env(:lenies, :copy_substitution_rate)
       Application.delete_env(:lenies, :copy_insert_rate)
@@ -27,7 +29,7 @@ defmodule Lenies.Codeomes.CarnivoreTest do
       Application.delete_env(:lenies, :eat_amount)
       Application.delete_env(:lenies, :interpreter_steps_per_batch)
 
-      case Lenies.WorldTestHelpers.lenie_sup_pid() do
+      case Lenies.WorldTestHelpers.lenie_sup_pid(world_id) do
         sup_pid when is_pid(sup_pid) ->
           DynamicSupervisor.which_children(sup_pid)
           |> Enum.each(fn {_, child_pid, _, _} ->
@@ -38,33 +40,19 @@ defmodule Lenies.Codeomes.CarnivoreTest do
           :ok
       end
 
-      case Lenies.WorldTestHelpers.world_pid() do
-        pid when is_pid(pid) ->
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-
-        _ ->
-          :ok
-      end
-
-      Tables.delete_all()
+      Lenies.WorldTestHelpers.stop_test_world(world_id)
     end)
-
-    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
 
     # Seed food so Lenies can survive during the duel.
     # Use 2000 resource: the Sprint plasmid fires an extra move+eat every forage
     # iter, which depletes local food faster than vanilla MR — 2000 prevents
     # starvation before the duel outcome is observed.
     for x <- 0..254, y <- 0..254 do
-      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
-      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 2000}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, y})
+      :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 2000}})
     end
 
-    :ok
+    {:ok, world_id: world_id, handle: handle}
   end
 
   test "carnivore.codeome/0 produces a Codeome with attack inserted before eat" do
@@ -76,37 +64,44 @@ defmodule Lenies.Codeomes.CarnivoreTest do
     assert :attack in carn
   end
 
-  test "duel: carnivore facing herbivore steals energy via :attack" do
+  test "duel: carnivore facing herbivore steals energy via :attack",
+       %{world_id: world_id, handle: handle} do
     # Herbivore at {50, 50} facing west (away from carnivore)
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {50, 50})
-    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "HERB"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {50, 50})
+    :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "HERB"}})
 
     {:ok, herb_pid} =
       Lenie.start_link(
-        id: "HERB",
-        # Large energy: HERB uses codeome/0 which includes the Twitch plasmid
-        # and random-walks, so it needs extra energy to survive the duel window.
-        codeome: MinimalReplicator.codeome(),
-        energy: 50_000.0,
-        pos: {50, 50},
-        dir: :w,
-        lineage: {nil, 0}
+        {handle,
+         [
+           id: "HERB",
+           # Large energy: HERB uses codeome/0 which includes the Twitch plasmid
+           # and random-walks, so it needs extra energy to survive the duel window.
+           codeome: MinimalReplicator.codeome(),
+           energy: 50_000.0,
+           pos: {50, 50},
+           dir: :w,
+           lineage: {nil, 0}
+         ]}
       )
 
     Process.unlink(herb_pid)
 
     # Carnivore at {49, 50} facing east → towards herbivore
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {49, 50})
-    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "CARN"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {49, 50})
+    :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "CARN"}})
 
     {:ok, carn_pid} =
       Lenie.start_link(
-        id: "CARN",
-        codeome: Carnivore.codeome(),
-        energy: 50_000.0,
-        pos: {49, 50},
-        dir: :e,
-        lineage: {nil, 0}
+        {handle,
+         [
+           id: "CARN",
+           codeome: Carnivore.codeome(),
+           energy: 50_000.0,
+           pos: {49, 50},
+           dir: :e,
+           lineage: {nil, 0}
+         ]}
       )
 
     Process.unlink(carn_pid)

@@ -13,7 +13,7 @@ defmodule Lenies.Snapshot do
   Snapshots live under `<snapshot_root>/<id_to_path(world_id)>/<name>/`,
   where `snapshot_root` comes from `Application.get_env(:lenies,
   :snapshot_root, <tmp>/lenies-snapshots)` and `id_to_path/1` renders a
-  `world_id` as a filesystem-safe string (`:primary → "primary"`,
+  `world_id` as a filesystem-safe string (`:arena → "arena"`,
   `{:sandbox, 42} → "sandbox-42"`).
 
   ## Identifying a snapshot by NAME (not a path)

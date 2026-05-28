@@ -10,7 +10,7 @@ defmodule LeniesWeb.DashboardLiveTest do
     # its ETS tables exist BEFORE the LV mounts (most tests pre-populate
     # tables via `:ets.insert(...)` and only then call `live(conn, "/")`).
     # Pausing immediately gives us the same "no autonomous ticks" guarantee
-    # the legacy `start_primary(tick_interval_ms: 0)` setup provided.
+    # that `tick_interval_ms: 0` setups provide for standalone worlds.
     :ok = Lenies.Sandboxes.attach(user.id)
     world_id = {:sandbox, user.id}
     {:ok, handle} = Lenies.Worlds.handle(world_id)
