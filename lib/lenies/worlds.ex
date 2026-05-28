@@ -39,24 +39,6 @@ defmodule Lenies.Worlds do
   end
 
   @doc """
-  Fetch the `%Lenies.WorldHandle{}` for the running `:primary` World.
-
-  Compat helper used during the multi-world refactor — many call sites
-  (Telemetry, GridRenderer, dashboard LiveViews, tests) still operate on
-  the implicit primary world. Thin wrapper around `handle/1`. Exits with
-  `:noproc` if the primary World isn't running (mirrors the legacy
-  `GenServer.call(Lenies.World, :get_handle)` shape so callers that catch
-  `:exit, _` keep working).
-  """
-  @spec primary_handle() :: Lenies.WorldHandle.t()
-  def primary_handle do
-    case handle(:primary) do
-      {:ok, h} -> h
-      :error -> exit({:noproc, {__MODULE__, :primary_handle, []}})
-    end
-  end
-
-  @doc """
   Start a new world with the given id and optional config overrides.
   Returns `{:ok, sup_pid}` (the per-world Supervisor pid) or `{:error, …}`.
 

@@ -9,7 +9,7 @@ defmodule Lenies.WorldTestHelpers do
   unnamed tids held in the world's handle. Tests can either fetch the
   handle in setup —
 
-      handle = Lenies.Worlds.primary_handle()
+      {:ok, handle} = Lenies.Worlds.handle(:primary)
       :ets.insert(handle.tables.cells, ...)
 
   — or use these helpers, which look up the handle on each call.
@@ -23,16 +23,26 @@ defmodule Lenies.WorldTestHelpers do
   """
 
   @doc "ETS tid for the primary world's `:cells` table."
-  def cells, do: Lenies.Worlds.primary_handle().tables.cells
+  def cells, do: primary_handle().tables.cells
 
   @doc "ETS tid for the primary world's `:lenies` table."
-  def lenies, do: Lenies.Worlds.primary_handle().tables.lenies
+  def lenies, do: primary_handle().tables.lenies
 
   @doc "ETS tid for the primary world's `:child_slots` table."
-  def child_slots, do: Lenies.Worlds.primary_handle().tables.child_slots
+  def child_slots, do: primary_handle().tables.child_slots
 
   @doc "ETS tid for the primary world's `:history` table."
-  def history, do: Lenies.Worlds.primary_handle().tables.history
+  def history, do: primary_handle().tables.history
+
+  # Fetch the :primary world's handle, raising if the world isn't running.
+  # Test-internal helper — production code should use Lenies.Worlds.handle/1
+  # and match on the {:ok, _} | :error result.
+  defp primary_handle do
+    case Lenies.Worlds.handle(:primary) do
+      {:ok, h} -> h
+      :error -> raise "Lenies.WorldTestHelpers: :primary world is not running"
+    end
+  end
 
   @doc "Pid of the running `:primary` World GenServer, or nil if not running."
   def world_pid do

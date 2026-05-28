@@ -31,7 +31,7 @@ defmodule Lenies.WorldsTest do
     end
 
     test "primary World exposes a handle with the right tids" do
-      handle = Lenies.Worlds.primary_handle()
+      {:ok, handle} = Lenies.Worlds.handle(:primary)
       assert %Lenies.WorldHandle{id: :primary, pubsub_prefix: "world:primary"} = handle
       assert is_reference(handle.tables.cells)
       assert is_reference(handle.tables.lenies)
@@ -137,7 +137,7 @@ defmodule Lenies.WorldsTest do
       Application.put_env(:lenies, :snapshot_root, tmp)
       on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
 
-      handle = Lenies.Worlds.primary_handle()
+      {:ok, handle} = Lenies.Worlds.handle(:primary)
       Lenies.SpeciesColor.set_override(handle, "snap-marker", "#abcdef")
       assert "#abcdef" = Lenies.SpeciesColor.override(handle, "snap-marker")
 
@@ -151,7 +151,7 @@ defmodule Lenies.WorldsTest do
       assert :ok = Lenies.Worlds.restore_snapshot(:primary, "t12_smoke")
       # The handle's tids are stable across restore — re-fetch defensively
       # so the assertion uses whatever the world reports as current.
-      handle = Lenies.Worlds.primary_handle()
+      {:ok, handle} = Lenies.Worlds.handle(:primary)
       assert "#abcdef" = Lenies.SpeciesColor.override(handle, "snap-marker")
 
       # cleanup
@@ -164,7 +164,7 @@ defmodule Lenies.WorldsTest do
       Application.put_env(:lenies, :snapshot_root, tmp)
       on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
 
-      handle = Lenies.Worlds.primary_handle()
+      {:ok, handle} = Lenies.Worlds.handle(:primary)
 
       # Create a snapshot, then delete color_overrides.tab to simulate legacy.
       assert :ok = Lenies.Worlds.save_snapshot(:primary, "t12_legacy")
@@ -176,7 +176,7 @@ defmodule Lenies.WorldsTest do
 
       # Restore the legacy snapshot — should succeed, color_overrides becomes empty.
       assert :ok = Lenies.Worlds.restore_snapshot(:primary, "t12_legacy")
-      handle = Lenies.Worlds.primary_handle()
+      {:ok, handle} = Lenies.Worlds.handle(:primary)
       refute Lenies.SpeciesColor.override(handle, "before-restore")
     end
   end

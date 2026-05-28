@@ -5,7 +5,7 @@ defmodule LeniesWeb.GridRendererTest do
 
   setup do
     {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
-    handle = Lenies.Worlds.primary_handle()
+    {:ok, handle} = Lenies.Worlds.handle(:primary)
 
     on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
 
@@ -28,7 +28,7 @@ defmodule LeniesWeb.GridRendererTest do
     reset_cells(handle, grid)
 
     {lenies_bin, resource_bin, carcass_bin, carcass_hue_bin} =
-      GridRenderer.encode_layers(grid)
+      GridRenderer.encode_layers(handle, grid)
 
     assert byte_size(lenies_bin) == 16
     assert byte_size(resource_bin) == 16
@@ -51,7 +51,7 @@ defmodule LeniesWeb.GridRendererTest do
 
     expected_byte = Lenies.SpeciesColor.hue_byte(handle, "hash-A")
 
-    {lenies_bin, _, _, _} = GridRenderer.encode_layers(grid)
+    {lenies_bin, _, _, _} = GridRenderer.encode_layers(handle, grid)
 
     # Row-major: byte index = y * w + x = 2 * 4 + 1 = 9
     assert :binary.at(lenies_bin, 9) == expected_byte
@@ -69,7 +69,7 @@ defmodule LeniesWeb.GridRendererTest do
     # Lenie occupies the cell but the `:lenies` snapshot row hasn't been written
     :ets.insert(handle.tables.cells, {{0, 0}, %Lenies.World.Cell{lenie_id: "ORPHAN"}})
 
-    {lenies_bin, _, _, _} = GridRenderer.encode_layers(grid)
+    {lenies_bin, _, _, _} = GridRenderer.encode_layers(handle, grid)
 
     assert :binary.at(lenies_bin, 0) == 0
   end
@@ -83,17 +83,17 @@ defmodule LeniesWeb.GridRendererTest do
       %Lenies.World.Cell{resource: 75, carcass: 30, carcass_hue: 137}
     })
 
-    {_, resource_bin, carcass_bin, carcass_hue_bin} = GridRenderer.encode_layers(grid)
+    {_, resource_bin, carcass_bin, carcass_hue_bin} = GridRenderer.encode_layers(handle, grid)
     assert :binary.at(resource_bin, 0) == 75
     assert :binary.at(carcass_bin, 0) == 30
     assert :binary.at(carcass_hue_bin, 0) == 137
   end
 
-  test "encode_payload/1 returns 4 base64-encoded layers in a map", %{handle: handle} do
+  test "encode_payload/2 returns 4 base64-encoded layers in a map", %{handle: handle} do
     grid = {4, 4}
     reset_cells(handle, grid)
 
-    payload = GridRenderer.encode_payload(grid)
+    payload = GridRenderer.encode_payload(handle, grid)
 
     assert %{
              lenies: lenies_b64,

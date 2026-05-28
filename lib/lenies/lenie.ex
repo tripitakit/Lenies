@@ -61,7 +61,7 @@ defmodule Lenies.Lenie do
   # form above. Removed in a later task once every direct test caller is
   # multi-world-aware.
   def start_link(opts) when is_list(opts) do
-    handle = Lenies.Worlds.primary_handle()
+    {:ok, handle} = Lenies.Worlds.handle(:primary)
     GenServer.start_link(__MODULE__, {handle, opts})
   end
 

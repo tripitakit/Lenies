@@ -10,7 +10,7 @@ defmodule Lenies.WorldReplicationTest do
     end)
 
     {:ok, _world} = Lenies.WorldTestHelpers.start_primary()
-    handle = Lenies.Worlds.primary_handle()
+    {:ok, handle} = Lenies.Worlds.handle(:primary)
     # mark parent's cell
     [{key, cell}] = :ets.lookup(handle.tables.cells, {10, 10})
     :ets.insert(handle.tables.cells, {key, %{cell | lenie_id: "P1"}})

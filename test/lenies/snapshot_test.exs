@@ -38,7 +38,10 @@ defmodule Lenies.SnapshotTest do
   # Fetch the current primary handle. The world process is stable across a
   # single test, but the tids it owns can change across tasks; the helper
   # re-fetches on each call rather than caching.
-  defp h, do: Lenies.Worlds.primary_handle()
+  defp h do
+    {:ok, handle} = Lenies.Worlds.handle(:primary)
+    handle
+  end
 
   # On-disk directory for snapshot `name` under the :primary world's path.
   defp primary_dir(root, name), do: Path.join([root, "primary", name])

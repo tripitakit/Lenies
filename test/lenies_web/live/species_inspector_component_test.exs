@@ -16,13 +16,18 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
     :ok
   end
 
+  defp primary_handle do
+    {:ok, h} = Lenies.Worlds.handle(:primary)
+    h
+  end
+
   defp base_assigns(overrides \\ %{}) do
     Map.merge(
       %{
         id: "test-inspector",
         selected_hash: "abc12345abc12345",
         species_record: %{hash: "abc12345abc12345", population: 7, avg_generation: 3.5},
-        world_handle: Lenies.Worlds.primary_handle()
+        world_handle: primary_handle()
       },
       overrides
     )
@@ -100,7 +105,7 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
           id: "live-inspector",
           selected_hash: hash,
           species_record: record,
-          world_handle: Lenies.Worlds.primary_handle()
+          world_handle: primary_handle()
         })
 
       # MinimalReplicator starts with the LOOP_HEAD anchor (four :nop_1)
@@ -136,7 +141,7 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
           id: "block-inspector",
           selected_hash: hash,
           species_record: %{hash: hash, population: 1, avg_generation: 0.0},
-          world_handle: Lenies.Worlds.primary_handle()
+          world_handle: primary_handle()
         })
 
       assert html =~ ~s(class="codeome-blocks")

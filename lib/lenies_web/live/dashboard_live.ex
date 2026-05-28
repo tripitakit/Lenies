@@ -79,7 +79,7 @@ defmodule LeniesWeb.DashboardLive do
     # (especially after navigating back from the editor).
     socket =
       if connected?(socket) do
-        payload = GridRenderer.encode_payload(grid)
+        payload = GridRenderer.encode_payload(world_handle, grid)
         push_event(socket, "render_frame", payload)
       else
         socket
@@ -545,7 +545,10 @@ defmodule LeniesWeb.DashboardLive do
 
       socket =
         socket
-        |> assign(:latest, List.last(Lenies.Telemetry.history(:last_n, 1)))
+        |> assign(
+          :latest,
+          List.last(Lenies.Telemetry.history(socket.assigns.world_id, :last_n, 1))
+        )
         |> assign(:species, species)
         |> assign(:species_total, species_total)
         |> assign(:all_species, all_species)
@@ -560,7 +563,7 @@ defmodule LeniesWeb.DashboardLive do
         |> maybe_clear_selected_species(all_species)
         |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
 
-      payload = GridRenderer.encode_payload(socket.assigns.grid)
+      payload = GridRenderer.encode_payload(socket.assigns.world_handle, socket.assigns.grid)
       {:noreply, push_event(socket, "render_frame", payload)}
     else
       {:noreply, socket}
@@ -578,7 +581,7 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:all_species, all_species)
       |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
 
-    payload = GridRenderer.encode_payload(socket.assigns.grid)
+    payload = GridRenderer.encode_payload(socket.assigns.world_handle, socket.assigns.grid)
     {:noreply, push_event(socket, "render_frame", payload)}
   end
 

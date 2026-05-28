@@ -42,7 +42,7 @@ defmodule Lenies.TelemetryTest do
     Process.sleep(50)
     drain_telemetry()
 
-    entries = Lenies.Telemetry.history(:last_n, 10)
+    entries = Lenies.Telemetry.history(:primary, :last_n, 10)
     assert length(entries) == 3
 
     for e <- entries do
@@ -60,7 +60,7 @@ defmodule Lenies.TelemetryTest do
     for _ <- 1..20, do: World.tick_now()
     Process.sleep(100)
 
-    entries = Lenies.Telemetry.history(:all)
+    entries = Lenies.Telemetry.history(:primary, :all)
     assert length(entries) == 5
 
     # gli ultimi 5 tick: 16, 17, 18, 19, 20
@@ -100,7 +100,7 @@ defmodule Lenies.TelemetryTest do
       for _ <- 1..6, do: send_tick(nil)
       drain_telemetry()
 
-      entries = Lenies.Telemetry.history(:all)
+      entries = Lenies.Telemetry.history(:primary, :all)
       assert length(entries) == 3
 
       # Ticks 4, 5, 6 must be present; ticks 1, 2, 3 evicted
@@ -122,7 +122,7 @@ defmodule Lenies.TelemetryTest do
       drain_telemetry()
 
       assert :ets.info(Lenies.WorldTestHelpers.history(), :size) == 3
-      entries = Lenies.Telemetry.history(:all)
+      entries = Lenies.Telemetry.history(:primary, :all)
       ticks = Enum.map(entries, & &1.tick) |> Enum.sort()
       assert ticks == [3, 4, 5]
     end
