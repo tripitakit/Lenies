@@ -5,10 +5,32 @@ defmodule LeniesWeb.DashboardLiveTest do
 
   setup :register_and_log_in_user
 
-  setup do
-    {:ok, _} = Lenies.WorldTestHelpers.start_primary()
-    on_exit(&Lenies.WorldTestHelpers.stop_primary/0)
-    :ok
+  setup %{user: user} do
+    # Attach the test pid to the user's sandbox so the world is up and
+    # its ETS tables exist BEFORE the LV mounts (most tests pre-populate
+    # tables via `:ets.insert(...)` and only then call `live(conn, "/")`).
+    # Pausing immediately gives us the same "no autonomous ticks" guarantee
+    # the legacy `start_primary(tick_interval_ms: 0)` setup provided.
+    :ok = Lenies.Sandboxes.attach(user.id)
+    world_id = {:sandbox, user.id}
+    {:ok, handle} = Lenies.Worlds.handle(world_id)
+    :ok = Lenies.Worlds.pause(world_id)
+
+    on_exit(fn ->
+      Lenies.Worlds.stop_world(world_id)
+    end)
+
+    %{world_id: world_id, handle: handle}
+  end
+
+  test "mount uses {:sandbox, user.id} as the world_id and starts the sandbox", %{
+    conn: conn,
+    user: user
+  } do
+    {:ok, view, _html} = live(conn, ~p"/")
+    world_id = :sys.get_state(view.pid).socket.assigns.world_id
+    assert world_id == {:sandbox, user.id}
+    assert Lenies.Worlds.alive?(world_id)
   end
 
   test "mounts on / and renders dashboard panels", %{conn: conn} do
@@ -44,11 +66,15 @@ defmodule LeniesWeb.DashboardLiveTest do
     assert render(view) =~ "Are you sure?"
   end
 
-  test "clicking sterilize_confirm resets the world", %{conn: conn} do
+  test "clicking sterilize_confirm resets the world", %{conn: conn, world_id: world_id} do
+    # Un-pause for this test: tick_now requires the world to be running.
+    :ok = Lenies.Worlds.resume(world_id)
+
     {:ok, view, _html} = live(conn, "/")
 
-    Lenies.World.tick_now()
-    stats_before = Lenies.World.snapshot_stats()
+    {:ok, handle} = Lenies.Worlds.handle(world_id)
+    :ok = GenServer.call(handle.pid, :tick_now)
+    stats_before = Lenies.Worlds.snapshot_stats(world_id)
     assert stats_before.tick_count >= 1
 
     view
@@ -59,26 +85,30 @@ defmodule LeniesWeb.DashboardLiveTest do
     |> element("button", "Yes, sterilize")
     |> render_click()
 
-    stats_after = Lenies.World.snapshot_stats()
+    stats_after = Lenies.Worlds.snapshot_stats(world_id)
     assert stats_after.tick_count == 0
   end
 
-  test "clicking pause toggles state", %{conn: conn} do
+  test "clicking pause toggles state", %{conn: conn, world_id: world_id} do
+    # Setup paused the sandbox; resume so the test's first assertion
+    # (refute paused?) starts from a known running state.
+    :ok = Lenies.Worlds.resume(world_id)
+
     {:ok, view, _html} = live(conn, "/")
 
-    refute Lenies.World.paused?()
+    refute Lenies.Worlds.paused?(world_id)
 
     view
     |> element("button", "Pause")
     |> render_click()
 
-    assert Lenies.World.paused?()
+    assert Lenies.Worlds.paused?(world_id)
 
     view
     |> element("button", "Resume")
     |> render_click()
 
-    refute Lenies.World.paused?()
+    refute Lenies.Worlds.paused?(world_id)
   end
 
   test "toggling layer changes data attribute", %{conn: conn} do
@@ -97,19 +127,19 @@ defmodule LeniesWeb.DashboardLiveTest do
     refute html_after =~ ~r/data-show-lenies/
   end
 
-  test "Species panel shows top-N species table from aggregator", %{conn: conn} do
+  test "Species panel shows top-N species table from aggregator", %{conn: conn, handle: handle} do
     :ets.insert(
-      Lenies.WorldTestHelpers.lenies(),
+      handle.tables.lenies,
       {"a", %{id: "a", codeome_hash: "hashA", lineage: {nil, 0}}}
     )
 
     :ets.insert(
-      Lenies.WorldTestHelpers.lenies(),
+      handle.tables.lenies,
       {"b", %{id: "b", codeome_hash: "hashA", lineage: {nil, 1}}}
     )
 
     :ets.insert(
-      Lenies.WorldTestHelpers.lenies(),
+      handle.tables.lenies,
       {"c", %{id: "c", codeome_hash: "hashB", lineage: {nil, 0}}}
     )
 
@@ -122,12 +152,12 @@ defmodule LeniesWeb.DashboardLiveTest do
   end
 
   test "select_lenie_at_cell on occupied cell navigates to the codeome editor",
-       %{conn: conn} do
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
-    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "CLICKED"}})
+       %{conn: conn, handle: handle} do
+    [{key, cell}] = :ets.lookup(handle.tables.cells, {5, 5})
+    :ets.insert(handle.tables.cells, {key, %{cell | lenie_id: "CLICKED"}})
 
     :ets.insert(
-      Lenies.WorldTestHelpers.lenies(),
+      handle.tables.lenies,
       {"CLICKED", %{id: "CLICKED", codeome_hash: "CLICKED-HASH", lineage: {nil, 0}}}
     )
 
@@ -150,10 +180,10 @@ defmodule LeniesWeb.DashboardLiveTest do
     assert html =~ "Carnivore"
   end
 
-  test "clicking Spawn triggers world spawn_lenie", %{conn: conn} do
+  test "clicking Spawn triggers world spawn_lenie", %{conn: conn, handle: handle} do
     {:ok, view, _html} = live(conn, "/")
 
-    pop_before = :ets.info(Lenies.WorldTestHelpers.lenies(), :size) || 0
+    pop_before = :ets.info(handle.tables.lenies, :size) || 0
 
     view
     |> form("form[phx-submit='spawn_seed']", %{seed_id: "minimal_replicator", count: "1"})
@@ -161,14 +191,14 @@ defmodule LeniesWeb.DashboardLiveTest do
 
     Process.sleep(100)
 
-    pop_after = :ets.info(Lenies.WorldTestHelpers.lenies(), :size) || 0
+    pop_after = :ets.info(handle.tables.lenies, :size) || 0
     assert pop_after >= pop_before + 1
   end
 
-  test "Tuning slider mutates the primary world's state.config in place", %{conn: conn} do
+  test "Tuning slider mutates the sandbox world's state.config in place",
+       %{conn: conn, world_id: world_id, handle: handle} do
     {:ok, view, _html} = live(conn, "/")
 
-    {:ok, handle} = Lenies.Worlds.handle(:primary)
     original = :sys.get_state(handle.pid).config.radiation_per_tick
 
     view
@@ -182,10 +212,11 @@ defmodule LeniesWeb.DashboardLiveTest do
     assert :sys.get_state(handle.pid).config.radiation_per_tick == 250
 
     # restore original so subsequent tests aren't affected
-    :ok = Lenies.Worlds.tune(:primary, :radiation_per_tick, original)
+    :ok = Lenies.Worlds.tune(world_id, :radiation_per_tick, original)
   end
 
-  test "Save snapshot button triggers Worlds.save_snapshot/2", %{conn: conn} do
+  test "Save snapshot button triggers Worlds.save_snapshot/2",
+       %{conn: conn, world_id: world_id, handle: handle} do
     root =
       Path.join(
         System.tmp_dir!(),
@@ -201,14 +232,15 @@ defmodule LeniesWeb.DashboardLiveTest do
 
     {:ok, view, _html} = live(conn, "/")
 
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {2, 2})
-    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 42}})
+    [{key, cell}] = :ets.lookup(handle.tables.cells, {2, 2})
+    :ets.insert(handle.tables.cells, {key, %{cell | resource: 42}})
 
     view
     |> form("form[phx-submit='snapshot_action']", %{snapshot_name: "uitest"})
     |> render_submit(%{action: "save"})
 
-    assert File.exists?(Path.join([root, "primary", "uitest", "cells.tab"]))
+    sandbox_path = Lenies.Worlds.id_to_path(world_id)
+    assert File.exists?(Path.join([root, sandbox_path, "uitest", "cells.tab"]))
   end
 
   describe "inspector dirty notification" do
@@ -226,9 +258,10 @@ defmodule LeniesWeb.DashboardLiveTest do
       refute html2 =~ ~s(data-inspector-dirty="true")
     end
 
-    test "closing the inspector (deselect to nil) resets :inspector_dirty", %{conn: conn} do
+    test "closing the inspector (deselect to nil) resets :inspector_dirty",
+         %{conn: conn, handle: handle} do
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"L1", %{id: "L1", codeome_hash: "HASH-Z", lineage: {nil, 0}}}
       )
 
@@ -260,14 +293,15 @@ defmodule LeniesWeb.DashboardLiveTest do
       refute html =~ ~s(id="species-inspector")
     end
 
-    test "clicking a species row opens the inspector for that hash", %{conn: conn} do
+    test "clicking a species row opens the inspector for that hash",
+         %{conn: conn, handle: handle} do
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"L1", %{id: "L1", codeome_hash: "HASH-X", lineage: {nil, 0}}}
       )
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"L2", %{id: "L2", codeome_hash: "HASH-X", lineage: {nil, 1}}}
       )
 
@@ -282,9 +316,9 @@ defmodule LeniesWeb.DashboardLiveTest do
       assert html =~ "HASH-X"
     end
 
-    test "clicking the same row again closes the inspector", %{conn: conn} do
+    test "clicking the same row again closes the inspector", %{conn: conn, handle: handle} do
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"L1", %{id: "L1", codeome_hash: "HASH-Y", lineage: {nil, 0}}}
       )
 
@@ -302,14 +336,14 @@ defmodule LeniesWeb.DashboardLiveTest do
       refute html =~ ~s(id="species-inspector")
     end
 
-    test "clicking another row swaps the inspected species", %{conn: conn} do
+    test "clicking another row swaps the inspected species", %{conn: conn, handle: handle} do
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"L1", %{id: "L1", codeome_hash: "HASH-A", lineage: {nil, 0}}}
       )
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"L2", %{id: "L2", codeome_hash: "HASH-B", lineage: {nil, 0}}}
       )
 
@@ -346,9 +380,10 @@ defmodule LeniesWeb.DashboardLiveTest do
       assert html =~ ~s(data-highlight-hue="0")
     end
 
-    test "selecting a species row sets the canvas highlight to its hue", %{conn: conn} do
+    test "selecting a species row sets the canvas highlight to its hue",
+         %{conn: conn, handle: handle} do
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"L1", %{id: "L1", codeome_hash: "HASH-SEL-A", lineage: {nil, 0}}}
       )
 
@@ -359,13 +394,14 @@ defmodule LeniesWeb.DashboardLiveTest do
         |> element("tr#species-row-HASH-SEL-A")
         |> render_click()
 
-      hue = Lenies.SpeciesColor.hue_byte(Lenies.Worlds.primary_handle(), "HASH-SEL-A")
+      hue = Lenies.SpeciesColor.hue_byte(handle, "HASH-SEL-A")
       assert html =~ ~s(data-highlight-hue="#{hue}")
     end
 
-    test "clicking the selected row again deselects and clears the highlight", %{conn: conn} do
+    test "clicking the selected row again deselects and clears the highlight",
+         %{conn: conn, handle: handle} do
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"L1", %{id: "L1", codeome_hash: "HASH-SEL-B", lineage: {nil, 0}}}
       )
 
@@ -378,23 +414,23 @@ defmodule LeniesWeb.DashboardLiveTest do
     end
 
     test "highlight is cleared when the selected species drops out of the top-N",
-         %{conn: conn} do
+         %{conn: conn, handle: handle} do
       Application.put_env(:lenies, :dashboard_throttle_ticks, 1)
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"L1", %{id: "L1", codeome_hash: "HASH-GONE", lineage: {nil, 0}}}
       )
 
       {:ok, view, _} = live(conn, "/")
       view |> element("tr#species-row-HASH-GONE") |> render_click()
 
-      hue = Lenies.SpeciesColor.hue_byte(Lenies.Worlds.primary_handle(), "HASH-GONE")
+      hue = Lenies.SpeciesColor.hue_byte(handle, "HASH-GONE")
       assert render(view) =~ ~s(data-highlight-hue="#{hue}")
 
       # The Lenie disappears (extinct) — the next tick recomputes the top-N
       # and the selection should be dropped along with the highlight.
-      :ets.delete(Lenies.WorldTestHelpers.lenies(), "L1")
+      :ets.delete(handle.tables.lenies, "L1")
       send(view.pid, {:tick, 1})
 
       assert render(view) =~ ~s(data-highlight-hue="0")
@@ -433,7 +469,8 @@ defmodule LeniesWeb.DashboardLiveTest do
 
     test "spawning a custom seed grows the population AND sets the color override", %{
       conn: conn,
-      user: user
+      user: user,
+      handle: handle
     } do
       buffer = [
         :nop_1,
@@ -459,7 +496,7 @@ defmodule LeniesWeb.DashboardLiveTest do
 
       {:ok, view, _} = live(conn, "/")
 
-      pop_before = :ets.info(Lenies.WorldTestHelpers.lenies(), :size) || 0
+      pop_before = :ets.info(handle.tables.lenies, :size) || 0
 
       view
       |> form("form[phx-submit='spawn_seed']", %{
@@ -470,12 +507,12 @@ defmodule LeniesWeb.DashboardLiveTest do
 
       Process.sleep(100)
 
-      pop_after = :ets.info(Lenies.WorldTestHelpers.lenies(), :size) || 0
+      pop_after = :ets.info(handle.tables.lenies, :size) || 0
       assert pop_after >= pop_before + 2
 
       # The color override is keyed on the codeome hash
       hash = buffer |> Lenies.Codeome.from_list() |> Lenies.Codeome.hash()
-      assert Lenies.SpeciesColor.override(Lenies.Worlds.primary_handle(), hash) == "#deadbe"
+      assert Lenies.SpeciesColor.override(handle, hash) == "#deadbe"
     end
 
     test "deleting a custom seed removes it from the dropdown", %{conn: conn, user: user} do
@@ -552,25 +589,25 @@ defmodule LeniesWeb.DashboardLiveTest do
   describe "species table sorting" do
     defp row_pos(html, hash), do: html |> :binary.match("species-row-#{hash}") |> elem(0)
 
-    test "defaults to population descending", %{conn: conn} do
+    test "defaults to population descending", %{conn: conn, handle: handle} do
       # POPHI: 3 lenies, POPLO: 1 lenie
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"H1", %{id: "H1", codeome_hash: "POPHI", lineage: {nil, 0}}}
       )
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"H2", %{id: "H2", codeome_hash: "POPHI", lineage: {nil, 0}}}
       )
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"H3", %{id: "H3", codeome_hash: "POPHI", lineage: {nil, 0}}}
       )
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"L1", %{id: "L1", codeome_hash: "POPLO", lineage: {nil, 0}}}
       )
 
@@ -579,24 +616,24 @@ defmodule LeniesWeb.DashboardLiveTest do
       assert row_pos(html, "POPHI") < row_pos(html, "POPLO")
     end
 
-    test "clicking the Pop header toggles to ascending order", %{conn: conn} do
+    test "clicking the Pop header toggles to ascending order", %{conn: conn, handle: handle} do
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"H1", %{id: "H1", codeome_hash: "POPHI", lineage: {nil, 0}}}
       )
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"H2", %{id: "H2", codeome_hash: "POPHI", lineage: {nil, 0}}}
       )
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"H3", %{id: "H3", codeome_hash: "POPHI", lineage: {nil, 0}}}
       )
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"L1", %{id: "L1", codeome_hash: "POPLO", lineage: {nil, 0}}}
       )
 
@@ -611,14 +648,15 @@ defmodule LeniesWeb.DashboardLiveTest do
       assert html =~ "Pop ▲"
     end
 
-    test "sorting by generation descending puts the oldest lineage first", %{conn: conn} do
+    test "sorting by generation descending puts the oldest lineage first",
+         %{conn: conn, handle: handle} do
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"Y1", %{id: "Y1", codeome_hash: "YOUNG", lineage: {nil, 1}}}
       )
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"O1", %{id: "O1", codeome_hash: "OLDGEN", lineage: {nil, 9}}}
       )
 
@@ -635,9 +673,10 @@ defmodule LeniesWeb.DashboardLiveTest do
   end
 
   describe "species table — LiveView stream" do
-    test "species rows are rendered with the expected stream DOM id", %{conn: conn} do
+    test "species rows are rendered with the expected stream DOM id",
+         %{conn: conn, handle: handle} do
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"S1", %{id: "S1", codeome_hash: "STREAM-HASH-1", lineage: {nil, 0}}}
       )
 
@@ -653,14 +692,15 @@ defmodule LeniesWeb.DashboardLiveTest do
       assert html =~ ~s(phx-update="stream")
     end
 
-    test "species_total count is still displayed after stream conversion", %{conn: conn} do
+    test "species_total count is still displayed after stream conversion",
+         %{conn: conn, handle: handle} do
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"T1", %{id: "T1", codeome_hash: "COUNT-A", lineage: {nil, 0}}}
       )
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"T2", %{id: "T2", codeome_hash: "COUNT-B", lineage: {nil, 0}}}
       )
 
@@ -670,9 +710,10 @@ defmodule LeniesWeb.DashboardLiveTest do
       assert html =~ ~r/2 species/
     end
 
-    test "select_species re-streams and highlights the selected row", %{conn: conn} do
+    test "select_species re-streams and highlights the selected row",
+         %{conn: conn, handle: handle} do
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"HL1", %{id: "HL1", codeome_hash: "HASH-HL", lineage: {nil, 0}}}
       )
 
@@ -693,9 +734,10 @@ defmodule LeniesWeb.DashboardLiveTest do
       assert html =~ "ring-1 ring-cyan-400"
     end
 
-    test "deselecting a row removes the highlight class via re-stream", %{conn: conn} do
+    test "deselecting a row removes the highlight class via re-stream",
+         %{conn: conn, handle: handle} do
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"DH1", %{id: "DH1", codeome_hash: "HASH-DH", lineage: {nil, 0}}}
       )
 
@@ -714,25 +756,25 @@ defmodule LeniesWeb.DashboardLiveTest do
       refute html =~ "ring-1 ring-cyan-400"
     end
 
-    test "sort_species re-streams rows in the new order", %{conn: conn} do
+    test "sort_species re-streams rows in the new order", %{conn: conn, handle: handle} do
       # SORTED-HI: 3 lenies; SORTED-LO: 1 lenie — default order: HI first
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"SR1", %{id: "SR1", codeome_hash: "SORTED-HI", lineage: {nil, 0}}}
       )
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"SR2", %{id: "SR2", codeome_hash: "SORTED-HI", lineage: {nil, 0}}}
       )
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"SR3", %{id: "SR3", codeome_hash: "SORTED-HI", lineage: {nil, 0}}}
       )
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"SR4", %{id: "SR4", codeome_hash: "SORTED-LO", lineage: {nil, 0}}}
       )
 
@@ -753,11 +795,11 @@ defmodule LeniesWeb.DashboardLiveTest do
       assert has_element?(view, "#species-row-SORTED-LO")
     end
 
-    test "tick re-streams updated species data", %{conn: conn} do
+    test "tick re-streams updated species data", %{conn: conn, handle: handle} do
       Application.put_env(:lenies, :dashboard_throttle_ticks, 1)
 
       :ets.insert(
-        Lenies.WorldTestHelpers.lenies(),
+        handle.tables.lenies,
         {"TK1", %{id: "TK1", codeome_hash: "TICK-HASH", lineage: {nil, 0}}}
       )
 
@@ -766,7 +808,7 @@ defmodule LeniesWeb.DashboardLiveTest do
       assert has_element?(view, "#species-row-TICK-HASH")
 
       # Remove the lenie and send a tick — stream should clear the row
-      :ets.delete(Lenies.WorldTestHelpers.lenies(), "TK1")
+      :ets.delete(handle.tables.lenies, "TK1")
       send(view.pid, {:tick, 1})
       render(view)
 
@@ -828,16 +870,10 @@ defmodule LeniesWeb.DashboardLiveTest do
   # ML3 — Controls panel reads the ACTUAL paused state at mount
   # ---------------------------------------------------------------------------
   describe "controls panel — paused? state at mount" do
-    test "when world is already paused at mount, pause button shows Resume", %{conn: conn} do
-      :ok = Lenies.World.pause()
-
-      on_exit(fn ->
-        try do
-          Lenies.World.resume()
-        catch
-          :exit, _ -> :ok
-        end
-      end)
+    test "when world is already paused at mount, pause button shows Resume",
+         %{conn: conn, world_id: world_id} do
+      # setup already paused the sandbox — leave it paused.
+      :ok = Lenies.Worlds.pause(world_id)
 
       {:ok, _view, html} = live(conn, "/")
 
@@ -845,7 +881,10 @@ defmodule LeniesWeb.DashboardLiveTest do
       refute html =~ "⏸ Pause"
     end
 
-    test "when world is running at mount, pause button shows Pause", %{conn: conn} do
+    test "when world is running at mount, pause button shows Pause",
+         %{conn: conn, world_id: world_id} do
+      :ok = Lenies.Worlds.resume(world_id)
+
       {:ok, _view, html} = live(conn, "/")
 
       assert html =~ "⏸ Pause"
@@ -865,12 +904,17 @@ defmodule LeniesWeb.DashboardLiveTest do
       assert html =~ "Detritus"
     end
 
-    test "totals panel reflects telemetry data after a tick", %{conn: conn} do
+    test "totals panel reflects telemetry data after a tick",
+         %{conn: conn, world_id: world_id} do
       Application.put_env(:lenies, :dashboard_throttle_ticks, 1)
+
+      # Need the world running to tick.
+      :ok = Lenies.Worlds.resume(world_id)
 
       {:ok, view, _html} = live(conn, "/")
 
-      Lenies.World.tick_now()
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
+      :ok = GenServer.call(handle.pid, :tick_now)
       # Give PubSub a moment to propagate tick → Telemetry, then the dashboard tick
       Process.sleep(50)
       send(view.pid, {:tick, 1})

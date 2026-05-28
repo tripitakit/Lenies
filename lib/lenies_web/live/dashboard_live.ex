@@ -33,17 +33,19 @@ defmodule LeniesWeb.DashboardLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    world_id = :primary
-    world_handle = fetch_primary_handle()
+    user = socket.assigns.current_scope.user
+    user_id = user.id
+    world_id = Lenies.Sandboxes.world_id_for(user_id)
+
+    :ok = Lenies.Sandboxes.attach(user_id)
+    {:ok, world_handle} = Lenies.Worlds.handle(world_id)
 
     if connected?(socket) do
-      # Subscribe to scoped per-world topics. When `world_handle` is nil
-      # (World not running, e.g. some tests) fall back to the primary
-      # prefix so tests that later start the World still receive events.
-      prefix = (world_handle && world_handle.pubsub_prefix) || "world:primary"
+      prefix = world_handle.pubsub_prefix
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:tick")
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:control")
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:fx")
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "sandboxes:manager_up")
     end
 
     grid = Lenies.Config.grid_size()
@@ -395,10 +397,12 @@ defmodule LeniesWeb.DashboardLive do
   defp highlight_hue(%Lenies.WorldHandle{} = handle, hash) when is_binary(hash),
     do: SpeciesColor.hue_byte(handle, hash)
 
-  # Lookup the world handle from socket assigns and, if the World wasn't running
-  # at mount time, retry now (e.g. tests that start the World after mount).
+  # Lookup the world handle from socket assigns. The dashboard mount now
+  # always assigns a %WorldHandle{} (the user's sandbox is attached at
+  # mount time), so the second clause is a defensive fallback for any
+  # stale render path that would otherwise crash.
   defp handle_from_assigns(%{world_handle: %Lenies.WorldHandle{} = h}), do: h
-  defp handle_from_assigns(_), do: fetch_primary_handle()
+  defp handle_from_assigns(_), do: nil
 
   # Compute the per-species hex color. Returns "#000000" if no World is
   # running (caller renders an empty/black swatch, not a crash).
@@ -473,7 +477,7 @@ defmodule LeniesWeb.DashboardLive do
   # editor; misses (empty cells) are a silent no-op.
   def handle_event("select_lenie_at_cell", %{"x" => x, "y" => y}, socket)
       when is_integer(x) and is_integer(y) do
-    case lookup_lenie_at_cell(x, y) do
+    case lookup_lenie_at_cell(socket.assigns.world_handle, x, y) do
       {:ok, hash} -> {:noreply, push_navigate(socket, to: ~p"/editor/edit/#{hash}")}
       :error -> {:noreply, socket}
     end
@@ -488,15 +492,13 @@ defmodule LeniesWeb.DashboardLive do
   # be discarded on the client.
   def handle_event("request_lenie_hover", %{"x" => x, "y" => y}, socket)
       when is_integer(x) and is_integer(y) do
-    payload = lenie_hover_payload(x, y)
+    payload = lenie_hover_payload(socket.assigns.world_handle, x, y)
     {:noreply, push_event(socket, "lenie_hover_info", payload)}
   end
 
   def handle_event(_event, _params, socket), do: {:noreply, socket}
 
-  defp lookup_lenie_at_cell(x, y) do
-    handle = fetch_primary_handle()
-
+  defp lookup_lenie_at_cell(handle, x, y) do
     with handle when not is_nil(handle) <- handle,
          [{_, %{lenie_id: id}}] when is_binary(id) <-
            :ets.lookup(handle.tables.cells, {x, y}),
@@ -508,9 +510,7 @@ defmodule LeniesWeb.DashboardLive do
     end
   end
 
-  defp lenie_hover_payload(x, y) do
-    handle = fetch_primary_handle()
-
+  defp lenie_hover_payload(handle, x, y) do
     with handle when not is_nil(handle) <- handle,
          [{_, %{lenie_id: id}}] when is_binary(id) <-
            :ets.lookup(handle.tables.cells, {x, y}),
@@ -526,14 +526,6 @@ defmodule LeniesWeb.DashboardLive do
       }
     else
       _ -> %{x: x, y: y, present: false}
-    end
-  end
-
-  defp fetch_primary_handle do
-    try do
-      Lenies.Worlds.primary_handle()
-    catch
-      :exit, _ -> nil
     end
   end
 
@@ -592,6 +584,11 @@ defmodule LeniesWeb.DashboardLive do
 
   def handle_info({:inspector_dirty, dirty}, socket) do
     {:noreply, assign(socket, :inspector_dirty, dirty)}
+  end
+
+  def handle_info(:sandboxes_manager_up, socket) do
+    :ok = Lenies.Sandboxes.attach(socket.assigns.current_scope.user.id)
+    {:noreply, socket}
   end
 
   def handle_info({:conjugation, %{} = info}, socket) do
