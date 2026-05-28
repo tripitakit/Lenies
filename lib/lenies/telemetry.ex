@@ -1,29 +1,57 @@
 defmodule Lenies.Telemetry do
   @moduledoc """
-  Collects tick events from the World and maintains a ring buffer in ETS
-  (`:history`, owned by the World).
+  Per-world telemetry collector. Subscribes to its world's `:tick` and
+  `:control` PubSub topics and maintains a ring buffer in the world's
+  `history` ETS table.
 
-  Subscribes to the primary world's `:tick` topic via Phoenix.PubSub; on each
-  `{:tick, n}` it computes an aggregated snapshot and stores it via the
-  primary World's handle.
+  Registered via `{:via, Registry, {Lenies.Registry, {:telemetry, world_id}}}`.
+
+  ## Compat shim (removed in Task 10)
+
+  The `:primary` world's Telemetry is ALSO registered under the global atom
+  name `Lenies.Telemetry` so legacy callers (`:sys.get_state(Lenies.Telemetry)`,
+  `Lenies.Telemetry.history/1`) keep working during the transition. All other
+  worlds register only under the via-Registry tuple.
   """
 
   use GenServer
 
-  alias Lenies.World
-
-  @name __MODULE__
   @default_max_entries 10_000
   @species_per_snapshot 20
 
   # ----- Public API -----
 
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: @name)
+    world_id = Keyword.get(opts, :world_id, :primary)
+    init_arg = {world_id, opts}
+
+    case GenServer.start_link(__MODULE__, init_arg, name: via(world_id)) do
+      {:ok, pid} = ok ->
+        # Compat shim (removed in Task 10): the `:primary` world's Telemetry
+        # is ALSO registered under the global atom name `Lenies.Telemetry`.
+        if world_id == :primary do
+          try do
+            Process.register(pid, __MODULE__)
+          rescue
+            ArgumentError -> :ok
+          end
+        end
+
+        ok
+
+      other ->
+        other
+    end
   end
 
+  @doc """
+  Via-tuple name for the Telemetry of `world_id`.
+  """
+  def via(world_id),
+    do: {:via, Registry, {Lenies.Registry, {:telemetry, world_id}}}
+
   def history(:all) do
-    case fetch_handle() do
+    case fetch_handle(:primary) do
       {:ok, handle} ->
         :ets.tab2list(handle.tables.history)
         |> Enum.map(fn {_k, v} -> v end)
@@ -41,28 +69,32 @@ defmodule Lenies.Telemetry do
   # ----- Server -----
 
   @impl true
-  def init(opts) do
+  def init({world_id, opts}) do
     max_entries = Keyword.get(opts, :max_entries, @default_max_entries)
-    # Cache the primary world's handle so we don't pay a GenServer.call on
-    # every tick. The handle struct is immutable; the tids inside survive
-    # World restarts only if the GenServer crashes, in which case Telemetry
-    # would be restarted by its supervisor and re-read the handle here.
+    # Cache this world's handle so we don't pay a GenServer.call on every
+    # tick. The handle struct is immutable; the tids inside survive World
+    # restarts only if the GenServer crashes, in which case Telemetry would
+    # be restarted by its supervisor and re-read the handle here.
     handle =
-      case fetch_handle() do
+      case fetch_handle(world_id) do
         {:ok, h} -> h
         :error -> nil
       end
 
-    pubsub_prefix = if handle, do: handle.pubsub_prefix, else: "world:primary"
+    pubsub_prefix =
+      if handle, do: handle.pubsub_prefix, else: "world:" <> Lenies.Worlds.id_to_path(world_id)
+
     Phoenix.PubSub.subscribe(Lenies.PubSub, "#{pubsub_prefix}:tick")
     Phoenix.PubSub.subscribe(Lenies.PubSub, "#{pubsub_prefix}:control")
-    {:ok, %{max_entries: max_entries, counter: 0, handle: handle}}
+
+    {:ok,
+     %{world_id: world_id, max_entries: max_entries, counter: 0, handle: handle}}
   end
 
   @impl true
   def handle_info({:tick, tick_n}, state) do
-    stats = World.snapshot_stats()
     state = ensure_handle(state)
+    stats = GenServer.call(state.handle.pid, :snapshot_stats)
 
     entry = %{
       tick: tick_n,
@@ -101,15 +133,15 @@ defmodule Lenies.Telemetry do
   defp ensure_handle(state), do: refresh_handle(state)
 
   defp refresh_handle(state) do
-    case fetch_handle() do
+    case fetch_handle(state.world_id) do
       {:ok, h} -> %{state | handle: h}
       :error -> state
     end
   end
 
-  defp fetch_handle do
+  defp fetch_handle(world_id) do
     try do
-      {:ok, Lenies.Worlds.primary_handle()}
+      Lenies.Worlds.handle(world_id)
     catch
       :exit, _ -> :error
     end

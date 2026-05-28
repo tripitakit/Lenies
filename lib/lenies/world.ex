@@ -200,7 +200,7 @@ defmodule Lenies.World do
   end
 
   def handle_call(:sterilize, _from, state) do
-    terminate_all_lenies()
+    terminate_all_lenies(state.world_id)
     if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
     if state.reconcile_ref, do: Process.cancel_timer(state.reconcile_ref)
     # Color overrides survive sterilize per the SpeciesColor contract — they
@@ -388,7 +388,7 @@ defmodule Lenies.World do
 
         {:ok, _pid} =
           DynamicSupervisor.start_child(
-            Lenies.LenieSupervisor,
+            Lenies.LenieSupervisor.via(state.world_id),
             Supervisor.child_spec({Lenies.Lenie, {state.handle, child_opts}},
               restart: :temporary
             )
@@ -733,17 +733,19 @@ defmodule Lenies.World do
     end
   end
 
-  defp terminate_all_lenies do
-    case Process.whereis(Lenies.LenieSupervisor) do
-      nil ->
+  defp terminate_all_lenies(world_id) do
+    case Registry.lookup(Lenies.Registry, {:lenie_sup, world_id}) do
+      [] ->
         :ok
 
-      _pid ->
-        Lenies.LenieSupervisor
+      [{_pid, _}] ->
+        sup = Lenies.LenieSupervisor.via(world_id)
+
+        sup
         |> DynamicSupervisor.which_children()
         |> Enum.each(fn {_, child_pid, _, _} ->
           if is_pid(child_pid),
-            do: DynamicSupervisor.terminate_child(Lenies.LenieSupervisor, child_pid)
+            do: DynamicSupervisor.terminate_child(sup, child_pid)
         end)
     end
   end
@@ -968,7 +970,7 @@ defmodule Lenies.World do
 
     {:ok, _child_pid} =
       DynamicSupervisor.start_child(
-        Lenies.LenieSupervisor,
+        Lenies.LenieSupervisor.via(state.world_id),
         Supervisor.child_spec({Lenies.Lenie, {state.handle, child_opts}},
           restart: :temporary
         )

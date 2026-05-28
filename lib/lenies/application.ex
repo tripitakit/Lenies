@@ -33,13 +33,13 @@ defmodule Lenies.Application do
       Lenies.Worlds.Supervisor,
       Lenies.Snippets.Store,
       Lenies.Manual,
-      Lenies.LenieSupervisor,
+      {Lenies.LenieSupervisor, world_id: :primary},
       LeniesWeb.Endpoint
     ]
 
     children =
       if Application.get_env(:lenies, :auto_start_simulation, true) do
-        children ++ [Lenies.World, Lenies.Telemetry]
+        children ++ [Lenies.World, {Lenies.Telemetry, world_id: :primary}]
       else
         children
       end

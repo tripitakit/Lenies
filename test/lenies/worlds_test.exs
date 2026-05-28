@@ -109,4 +109,50 @@ defmodule Lenies.WorldsTest do
       assert {:error, {:unknown_tunable, :nope}} = Lenies.Worlds.tune(:primary, :nope, 0)
     end
   end
+
+  describe "per-world supervisor (T9 smoke)" do
+    test "Lenies.World.Supervisor module exists with start_link/1 and child_spec/1" do
+      # Force the module to be loaded so function_exported?/3 reflects its
+      # actual exports (purged modules return false until first invocation).
+      Code.ensure_loaded!(Lenies.World.Supervisor)
+      assert function_exported?(Lenies.World.Supervisor, :start_link, 1)
+      assert function_exported?(Lenies.World.Supervisor, :child_spec, 1)
+    end
+
+    test "Lenies.LenieSupervisor.via/1 returns a Registry via-tuple" do
+      assert {:via, Registry, {Lenies.Registry, {:lenie_sup, :primary}}} =
+               Lenies.LenieSupervisor.via(:primary)
+    end
+
+    test "Lenies.Telemetry.via/1 returns a Registry via-tuple" do
+      assert {:via, Registry, {Lenies.Registry, {:telemetry, :primary}}} =
+               Lenies.Telemetry.via(:primary)
+    end
+
+    test ":primary's LenieSupervisor is registered under {:lenie_sup, :primary}" do
+      assert [{_pid, _}] = Registry.lookup(Lenies.Registry, {:lenie_sup, :primary})
+    end
+
+    test ":primary's Telemetry is registered under {:telemetry, :primary}" do
+      # Telemetry is not in the Application's base children in the test env
+      # (auto_start_simulation: false) so we start it for this smoke check
+      # and tear it down after.
+      {:ok, world_pid} = Lenies.World.start_link(tick_interval_ms: 0)
+      {:ok, tel_pid} = Lenies.Telemetry.start_link(world_id: :primary)
+
+      on_exit(fn ->
+        for pid <- [tel_pid, world_pid], Process.alive?(pid) do
+          try do
+            GenServer.stop(pid)
+          catch
+            :exit, _ -> :ok
+          end
+        end
+
+        Lenies.World.Tables.delete_all()
+      end)
+
+      assert [{_pid, _}] = Registry.lookup(Lenies.Registry, {:telemetry, :primary})
+    end
+  end
 end
