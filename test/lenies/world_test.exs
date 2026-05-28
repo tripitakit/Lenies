@@ -2,7 +2,9 @@ defmodule Lenies.WorldTest do
   use ExUnit.Case, async: false
 
   setup ctx do
-    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: ctx[:tick_interval_ms] || 0)
+    {:ok, world_id} =
+      Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: ctx[:tick_interval_ms] || 0)
+
     on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
     {:ok, world_id: world_id}
   end

@@ -69,7 +69,10 @@ defmodule Lenies.SnapshotTest do
   test "save_snapshot/2 includes color_overrides.tab (T12: 5th table)",
        %{root: root, world_id: world_id, world_path: world_path} do
     :ok = Worlds.save_snapshot(world_id, "withcolors")
-    assert File.exists?(Path.join(world_dir(root, world_path, "withcolors"), "color_overrides.tab"))
+
+    assert File.exists?(
+             Path.join(world_dir(root, world_path, "withcolors"), "color_overrides.tab")
+           )
   end
 
   test "atomic save leaves no .tab.tmp files behind",

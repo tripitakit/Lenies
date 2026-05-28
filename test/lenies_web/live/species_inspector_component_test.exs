@@ -59,7 +59,10 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       record = %{hash: "abc12345abc12345", population: 12, avg_generation: 2.25}
 
       html =
-        render_component(SpeciesInspectorComponent, base_assigns(handle, %{species_record: record}))
+        render_component(
+          SpeciesInspectorComponent,
+          base_assigns(handle, %{species_record: record})
+        )
 
       assert html =~ ~r/>\s*12\s*</
       assert html =~ ~r/>\s*2\.25\s*</
@@ -70,7 +73,10 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       record = %{hash: "abc12345abc12345", population: 0, avg_generation: 0.0}
 
       html =
-        render_component(SpeciesInspectorComponent, base_assigns(handle, %{species_record: record}))
+        render_component(
+          SpeciesInspectorComponent,
+          base_assigns(handle, %{species_record: record})
+        )
 
       assert html =~ ~r/>\s*0\s*</
     end

@@ -21,10 +21,14 @@ defmodule Lenies.SandboxesTest do
       user_id = unique_user_id()
       assert :ok = Lenies.Sandboxes.attach(user_id)
 
-      task = Task.async(fn ->
-        :ok = Lenies.Sandboxes.attach(user_id)
-        receive do {:exit, parent} -> send(parent, :done) end
-      end)
+      task =
+        Task.async(fn ->
+          :ok = Lenies.Sandboxes.attach(user_id)
+
+          receive do
+            {:exit, parent} -> send(parent, :done)
+          end
+        end)
 
       # Give the task time to register.
       Process.sleep(50)
@@ -43,11 +47,16 @@ defmodule Lenies.SandboxesTest do
   describe "detach via :DOWN" do
     test "last pid disconnect schedules a grace timer; world still running" do
       user_id = unique_user_id()
+
       task =
         Task.async(fn ->
           :ok = Lenies.Sandboxes.attach(user_id)
-          receive do :exit -> :ok end
+
+          receive do
+            :exit -> :ok
+          end
         end)
+
       Process.sleep(50)
       send(task.pid, :exit)
       Task.await(task)
@@ -70,8 +79,12 @@ defmodule Lenies.SandboxesTest do
       task =
         Task.async(fn ->
           :ok = Lenies.Sandboxes.attach(user_id)
-          receive do :exit -> :ok end
+
+          receive do
+            :exit -> :ok
+          end
         end)
+
       Process.sleep(50)
       send(task.pid, :exit)
       Task.await(task)
@@ -96,11 +109,16 @@ defmodule Lenies.SandboxesTest do
 
     test "grace expires with no re-attach: world stops, entry removed" do
       user_id = unique_user_id()
+
       task =
         Task.async(fn ->
           :ok = Lenies.Sandboxes.attach(user_id)
-          receive do :exit -> :ok end
+
+          receive do
+            :exit -> :ok
+          end
         end)
+
       Process.sleep(20)
       send(task.pid, :exit)
       Task.await(task)
@@ -109,29 +127,39 @@ defmodule Lenies.SandboxesTest do
 
       refute Lenies.Worlds.alive?({:sandbox, user_id}),
              "expected world to stop after grace expiry"
+
       state = :sys.get_state(Lenies.Sandboxes)
+
       refute Map.has_key?(state, user_id),
              "expected sandbox entry to be removed"
     end
 
     test "re-attach during grace cancels the timer and keeps the world" do
       user_id = unique_user_id()
+
       task1 =
         Task.async(fn ->
           :ok = Lenies.Sandboxes.attach(user_id)
-          receive do :exit -> :ok end
+
+          receive do
+            :exit -> :ok
+          end
         end)
+
       Process.sleep(20)
       send(task1.pid, :exit)
       Task.await(task1)
-      Process.sleep(10)  # 10 ms into the 50 ms grace
+      # 10 ms into the 50 ms grace
+      Process.sleep(10)
 
       # Re-attach
       :ok = Lenies.Sandboxes.attach(user_id)
-      Process.sleep(200)  # Past the original grace window
+      # Past the original grace window
+      Process.sleep(200)
 
       assert Lenies.Worlds.alive?({:sandbox, user_id}),
              "expected world to survive after re-attach"
+
       # cleanup
       :ok = Lenies.Worlds.stop_world({:sandbox, user_id})
     end
@@ -206,6 +234,7 @@ defmodule Lenies.SandboxesTest do
         Path.join([tmp, Lenies.Worlds.id_to_path(world_id)])
         |> File.ls!()
         |> Enum.filter(&String.starts_with?(&1, "auto.broken."))
+
       assert length(broken_dirs) == 1
 
       :ok = Lenies.Worlds.stop_world(world_id)
@@ -247,6 +276,7 @@ defmodule Lenies.SandboxesTest do
     test "spawn lenies, detach, wait grace, re-attach: lenies restored", %{tmp_dir: tmp} do
       Application.put_env(:lenies, :snapshot_root, tmp)
       Application.put_env(:lenies, :sandbox_grace_ms, 50)
+
       on_exit(fn ->
         Application.delete_env(:lenies, :snapshot_root)
         Application.delete_env(:lenies, :sandbox_grace_ms)

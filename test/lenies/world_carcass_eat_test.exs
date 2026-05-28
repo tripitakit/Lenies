@@ -27,7 +27,11 @@ defmodule Lenies.WorldCarcassEatTest do
   # MH3: updated from 1.5x to 1:1 energy conservation
   test ":eat consumes carcass first, energy 1:1 (no bonus)", %{world_id: world_id} do
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 5})
-    :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 50, carcass: 10}})
+
+    :ets.insert(
+      Lenies.WorldTestHelpers.cells(world_id),
+      {key, %{cell | resource: 50, carcass: 10}}
+    )
 
     # eat_amount = 20 default. Carcass-first: carcass_taken = 10 (1:1 energy),
     # remaining_quota = 10, resource_taken = min(50, 10) = 10. total = 10 + 10 = 20.
@@ -61,7 +65,11 @@ defmodule Lenies.WorldCarcassEatTest do
   test ":eat on carcass-only cell with carcass > eat_amount yields exactly eat_amount",
        %{world_id: world_id} do
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {7, 7})
-    :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 0, carcass: 100}})
+
+    :ets.insert(
+      Lenies.WorldTestHelpers.cells(world_id),
+      {key, %{cell | resource: 0, carcass: 100}}
+    )
 
     # eat_amount = 20; carcass = 100, so carcass_taken = 20, energy = 20
     {:ok, {:ate, amount}} = Lenies.Worlds.action(world_id, {:eat, {7, 7}})
@@ -80,7 +88,10 @@ defmodule Lenies.WorldCarcassEatTest do
 
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {8, 8})
     # carcass=5 < eat_amount=15, so carcass_taken=5, remaining=10, resource_taken=min(20,10)=10
-    :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 20, carcass: 5}})
+    :ets.insert(
+      Lenies.WorldTestHelpers.cells(world_id),
+      {key, %{cell | resource: 20, carcass: 5}}
+    )
 
     {:ok, {:ate, amount}} = Lenies.Worlds.action(world_id, {:eat, {8, 8}})
     # energy must equal carcass_taken + resource_taken = 5 + 10 = 15
@@ -106,7 +117,11 @@ defmodule Lenies.WorldCarcassEatTest do
   test ":eat takes carcass + resource if both present and eat_amount is large",
        %{world_id: world_id} do
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 5})
-    :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 50, carcass: 5}})
+
+    :ets.insert(
+      Lenies.WorldTestHelpers.cells(world_id),
+      {key, %{cell | resource: 50, carcass: 5}}
+    )
 
     # default eat_amount = 20; takes 5 carcass (5 energy, 1:1)
     # then 15 remaining quota from resource → result energy = 5 + 15 = 20
@@ -130,7 +145,11 @@ defmodule Lenies.WorldCarcassEatTest do
 
     carcass = 1000
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {9, 9})
-    :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 0, carcass: carcass}})
+
+    :ets.insert(
+      Lenies.WorldTestHelpers.cells(world_id),
+      {key, %{cell | resource: 0, carcass: carcass}}
+    )
 
     # Drain the carcass with repeated eats; sum every unit of energy handed out.
     total =

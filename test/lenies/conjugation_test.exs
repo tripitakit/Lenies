@@ -451,21 +451,19 @@ defmodule Lenies.ConjugationTest do
     start_energy = 5_000.0
 
     {:ok, donor_pid} =
-      Lenie.start_link(
-        {handle,
-         [
-           id: "TX2",
-           # Use :nop_0 as second op so the conjugation loops but max_codeome
-           # eventually blocks re-transfer (recipient already_present → failure cost).
-           # We only care about the FIRST iteration which succeeds.
-           codeome: Codeome.from_list([:conjugate, :nop_0]),
-           energy: start_energy,
-           pos: {128, 128},
-           dir: :e,
-           lineage: {nil, 0},
-           plasmids: [plasmid]
-         ]}
-      )
+      Lenie.start_link({handle,
+       [
+         id: "TX2",
+         # Use :nop_0 as second op so the conjugation loops but max_codeome
+         # eventually blocks re-transfer (recipient already_present → failure cost).
+         # We only care about the FIRST iteration which succeeds.
+         codeome: Codeome.from_list([:conjugate, :nop_0]),
+         energy: start_energy,
+         pos: {128, 128},
+         dir: :e,
+         lineage: {nil, 0},
+         plasmids: [plasmid]
+       ]})
 
     Process.unlink(donor_pid)
 

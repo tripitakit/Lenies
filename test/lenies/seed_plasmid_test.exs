@@ -57,20 +57,18 @@ defmodule Lenies.SeedPlasmidTest do
     plasmid = Plasmid.new(MinimalReplicator.plasmid())
 
     {:ok, pid} =
-      Lenie.start_link(
-        {handle,
-         [
-           id: "TWITCH",
-           codeome: MinimalReplicator.codeome(),
-           # Large energy so the Twitch Lenie (random-walk) doesn't starve before
-           # it leaves the starting row.
-           energy: 100_000.0,
-           pos: {128, 128},
-           dir: :e,
-           lineage: {nil, 0},
-           plasmids: [plasmid]
-         ]}
-      )
+      Lenie.start_link({handle,
+       [
+         id: "TWITCH",
+         codeome: MinimalReplicator.codeome(),
+         # Large energy so the Twitch Lenie (random-walk) doesn't starve before
+         # it leaves the starting row.
+         energy: 100_000.0,
+         pos: {128, 128},
+         dir: :e,
+         lineage: {nil, 0},
+         plasmids: [plasmid]
+       ]})
 
     Process.unlink(pid)
 
@@ -105,21 +103,19 @@ defmodule Lenies.SeedPlasmidTest do
     plasmid = Plasmid.new(MinimalReplicator.plasmid())
 
     {:ok, twitch_pid} =
-      Lenie.start_link(
-        {handle,
-         [
-           id: "TWITCH",
-           # Use plasmid-free base codeome so TWITCH marches east and conjugates
-           # VANILLA on the first forage iteration. The plasmid buffer carries the
-           # Twitch opcodes for transfer — that is what we are testing here.
-           codeome: Codeome.from_list(MinimalReplicator.opcodes()),
-           energy: 10_000.0,
-           pos: {128, 128},
-           dir: :e,
-           lineage: {nil, 0},
-           plasmids: [plasmid]
-         ]}
-      )
+      Lenie.start_link({handle,
+       [
+         id: "TWITCH",
+         # Use plasmid-free base codeome so TWITCH marches east and conjugates
+         # VANILLA on the first forage iteration. The plasmid buffer carries the
+         # Twitch opcodes for transfer — that is what we are testing here.
+         codeome: Codeome.from_list(MinimalReplicator.opcodes()),
+         energy: 10_000.0,
+         pos: {128, 128},
+         dir: :e,
+         lineage: {nil, 0},
+         plasmids: [plasmid]
+       ]})
 
     {:ok, vanilla_pid} =
       Lenie.start_link(
@@ -175,21 +171,19 @@ defmodule Lenies.SeedPlasmidTest do
     plasmid = Plasmid.new(MinimalReplicator.plasmid())
 
     {:ok, a_pid} =
-      Lenie.start_link(
-        {handle,
-         [
-           id: "A",
-           # Use plasmid-free base codeome: this test is about the deadlock fix,
-           # not Twitch behavior. The plasmid buffer carries the Twitch opcodes
-           # so `:conjugate` triggers the symmetric-donor scenario.
-           codeome: Codeome.from_list(MinimalReplicator.opcodes()),
-           energy: 10_000.0,
-           pos: {128, 128},
-           dir: :e,
-           lineage: {nil, 0},
-           plasmids: [plasmid]
-         ]}
-      )
+      Lenie.start_link({handle,
+       [
+         id: "A",
+         # Use plasmid-free base codeome: this test is about the deadlock fix,
+         # not Twitch behavior. The plasmid buffer carries the Twitch opcodes
+         # so `:conjugate` triggers the symmetric-donor scenario.
+         codeome: Codeome.from_list(MinimalReplicator.opcodes()),
+         energy: 10_000.0,
+         pos: {128, 128},
+         dir: :e,
+         lineage: {nil, 0},
+         plasmids: [plasmid]
+       ]})
 
     {:ok, b_pid} =
       Lenie.start_link(

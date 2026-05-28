@@ -49,6 +49,7 @@ defmodule Lenies.Sandboxes do
       |> Enum.filter(&match?({:sandbox, _}, &1))
       |> Enum.reduce(%{}, fn {:sandbox, user_id} = world_id, acc ->
         ref = Process.send_after(self(), {:maybe_stop, user_id, 1}, grace_ms())
+
         Map.put(acc, user_id, %{
           world_id: world_id,
           connections: MapSet.new(),
@@ -69,6 +70,7 @@ defmodule Lenies.Sandboxes do
         case start_sandbox(user_id) do
           {:ok, _world_pid} ->
             ref = Process.monitor(pid)
+
             entry = %{
               world_id: world_id_for(user_id),
               connections: MapSet.new([pid]),
@@ -76,7 +78,9 @@ defmodule Lenies.Sandboxes do
               pending_stop: nil,
               generation: 1
             }
+
             {:reply, :ok, Map.put(state, user_id, entry)}
+
           {:error, _} = err ->
             {:reply, err, state}
         end
@@ -87,6 +91,7 @@ defmodule Lenies.Sandboxes do
           |> add_connection(pid)
           |> cancel_pending_stop()
           |> bump_generation()
+
         {:reply, :ok, Map.put(state, user_id, new_entry)}
     end
   end
@@ -177,13 +182,17 @@ defmodule Lenies.Sandboxes do
       entry
     else
       ref = Process.monitor(pid)
-      %{entry |
-        connections: MapSet.put(entry.connections, pid),
-        monitors: Map.put(entry.monitors, pid, ref)}
+
+      %{
+        entry
+        | connections: MapSet.put(entry.connections, pid),
+          monitors: Map.put(entry.monitors, pid, ref)
+      }
     end
   end
 
   defp cancel_pending_stop(%{pending_stop: nil} = entry), do: entry
+
   defp cancel_pending_stop(%{pending_stop: ref} = entry) do
     _ = Process.cancel_timer(ref)
     %{entry | pending_stop: nil}
@@ -272,6 +281,7 @@ defmodule Lenies.Sandboxes do
         {:maybe_stop, user_id, entry.generation},
         grace_ms()
       )
+
     %{entry | pending_stop: ref}
   end
 
