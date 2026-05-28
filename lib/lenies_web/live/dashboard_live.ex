@@ -47,7 +47,7 @@ defmodule LeniesWeb.DashboardLive do
     end
 
     grid = Lenies.Config.grid_size()
-    {species, all_species, species_total} = aggregate_with_top(10)
+    {species, all_species, species_total} = aggregate_with_top(world_handle, 10)
 
     sort_by = :population
     sort_dir = :desc
@@ -86,23 +86,23 @@ defmodule LeniesWeb.DashboardLive do
     {:ok, socket}
   end
 
-  # Returns {top_n, all_species, total_count} from a single Species.aggregate()
+  # Returns {top_n, all_species, total_count} from a single Species.aggregate/1
   # pass. The dashboard table uses `top_n`; the World Detail modal needs the
   # full `all_species` list (sorted by population descending, already).
-  defp aggregate_with_top(n) do
-    all = Lenies.Species.aggregate()
+  defp aggregate_with_top(handle, n) do
+    all = Lenies.Species.aggregate(handle)
     {Enum.take(all, n), all, length(all)}
   end
 
-  defp find_selected_record(nil, _species), do: nil
+  defp find_selected_record(_handle, nil, _species), do: nil
 
-  defp find_selected_record(hash, species) do
+  defp find_selected_record(handle, hash, species) do
     case Enum.find(species, &(&1.hash == hash)) do
       %{} = found ->
         found
 
       nil ->
-        case Lenies.Species.for_hash(hash) do
+        case Lenies.Species.for_hash(handle, hash) do
           [] ->
             %{hash: hash, population: 0, avg_generation: 0.0}
 
@@ -421,7 +421,7 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:selected_hash, new_hash)
       |> assign(
         :selected_species_record,
-        find_selected_record(new_hash, all_species)
+        find_selected_record(socket.assigns.world_handle, new_hash, all_species)
       )
       |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
 
@@ -548,7 +548,7 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:throttle_counter, new_counter)
 
     if rem(new_counter, throttle) == 0 do
-      {species, all_species, species_total} = aggregate_with_top(10)
+      {species, all_species, species_total} = aggregate_with_top(socket.assigns.world_handle, 10)
       %{sort_by: sort_by, sort_dir: sort_dir} = socket.assigns
 
       socket =
@@ -559,7 +559,11 @@ defmodule LeniesWeb.DashboardLive do
         |> assign(:all_species, all_species)
         |> assign(
           :selected_species_record,
-          find_selected_record(socket.assigns.selected_hash, all_species)
+          find_selected_record(
+            socket.assigns.world_handle,
+            socket.assigns.selected_hash,
+            all_species
+          )
         )
         |> maybe_clear_selected_species(all_species)
         |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
@@ -572,7 +576,7 @@ defmodule LeniesWeb.DashboardLive do
   end
 
   def handle_info({:sterilized, _ts}, socket) do
-    {species, all_species, species_total} = aggregate_with_top(10)
+    {species, all_species, species_total} = aggregate_with_top(socket.assigns.world_handle, 10)
     %{sort_by: sort_by, sort_dir: sort_dir} = socket.assigns
 
     socket =

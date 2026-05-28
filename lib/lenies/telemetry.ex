@@ -77,7 +77,7 @@ defmodule Lenies.Telemetry do
       total_resource: stats.total_resource,
       total_carcass: stats.total_carcass,
       cells: stats.cells,
-      species: species_snapshot(),
+      species: species_snapshot(state.handle),
       timestamp_ms: System.system_time(:millisecond)
     }
 
@@ -124,8 +124,11 @@ defmodule Lenies.Telemetry do
 
   # Snapshot of populations for the top-K species at this tick.
   # Bounded to @species_per_snapshot to keep history entries small.
-  defp species_snapshot do
-    Lenies.Species.aggregate()
+  # Reads from THIS Telemetry's bound world (state.handle) — passing the
+  # primary handle here for a non-primary world would write :primary's
+  # species snapshot into the wrong world's history.
+  defp species_snapshot(handle) do
+    Lenies.Species.aggregate(handle)
     |> Enum.take(@species_per_snapshot)
     |> Map.new(fn s -> {s.hash, s.population} end)
   end

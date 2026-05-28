@@ -33,7 +33,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
     if hash == socket.assigns.cached_codeome_hash do
       {:ok, assign(socket, assigns)}
     else
-      {status, lines} = fetch_codeome(hash)
+      {status, lines} = fetch_codeome(Map.get(assigns, :world_handle), hash)
 
       {:ok,
        socket
@@ -148,8 +148,8 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
 
   # Pull a representative Lenie process for the species and disassemble its
   # codeome. Returns {:ok, lines} | {:no_sample, []} | {:error, []}.
-  defp fetch_codeome(hash) do
-    case Lenies.Species.for_hash(hash) do
+  defp fetch_codeome(handle, hash) do
+    case Lenies.Species.for_hash(handle, hash) do
       [] ->
         {:no_sample, []}
 

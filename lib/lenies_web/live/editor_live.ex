@@ -21,10 +21,9 @@ defmodule LeniesWeb.EditorLive do
 
   @impl true
   def mount(params, _session, socket) do
-    {mode, selected_hash, buffer} = init_for_route(socket.assigns.live_action, params)
-
     world_id = :primary
     world_handle = fetch_primary_handle()
+    {mode, selected_hash, buffer} = init_for_route(socket.assigns.live_action, params, world_handle)
 
     socket =
       socket
@@ -56,13 +55,13 @@ defmodule LeniesWeb.EditorLive do
     {:ok, socket}
   end
 
-  defp init_for_route(:new, _params) do
+  defp init_for_route(:new, _params, _handle) do
     {:new_seed, nil, []}
   end
 
-  defp init_for_route(:edit, %{"hash" => hash}) do
+  defp init_for_route(:edit, %{"hash" => hash}, handle) do
     buffer =
-      case Lenies.Species.for_hash(hash) do
+      case Lenies.Species.for_hash(handle, hash) do
         [{sample_id, _} | _] ->
           case safe_get_codeome(sample_id) do
             {:ok, codeome} -> Lenies.Codeome.to_list(codeome)
@@ -1028,8 +1027,9 @@ defmodule LeniesWeb.EditorLive do
   # → spawns Y" keeps Y labelled as descending from Minimal Replicator.
   defp spawn_seed_origin(%{mode: :new_seed}), do: nil
 
-  defp spawn_seed_origin(%{mode: :edit, selected_hash: hash}) when is_binary(hash) do
-    case Lenies.Species.for_hash(hash) do
+  defp spawn_seed_origin(%{mode: :edit, selected_hash: hash, world_handle: handle})
+       when is_binary(hash) do
+    case Lenies.Species.for_hash(handle, hash) do
       [{_id, snap} | _] -> Map.get(snap, :seed_origin)
       _ -> nil
     end

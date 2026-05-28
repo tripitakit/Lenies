@@ -38,7 +38,7 @@ defmodule LeniesWeb.SpeciesLive do
 
   defp load_species(socket) do
     hash = socket.assigns.hash
-    records = Species.for_hash(hash)
+    records = Species.for_hash(socket.assigns.world_handle, hash)
 
     if Enum.empty?(records) do
       socket

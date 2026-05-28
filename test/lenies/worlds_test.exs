@@ -266,12 +266,55 @@ defmodule Lenies.WorldsTest do
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{hb.pubsub_prefix}:tick")
       assert_receive {:tick, _}, 1_000
 
-      # Subscribe to :a's control topic; sterilizing :a broadcasts there, NOT to :b.
+      # Subscribe to BOTH worlds' control topics BEFORE triggering :a's
+      # sterilize. If the broadcast leaked into :b's topic (regression), TWO
+      # {:sterilized, _} messages would land in the test pid's mailbox and
+      # the refute_receive below would fire. Subscribing to only one topic
+      # and refuting AFTER assert_receive (the previous version) is
+      # trivially true: assert_receive drains the matching message before
+      # refute_receive ever runs.
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{ha.pubsub_prefix}:control")
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "#{hb.pubsub_prefix}:control")
       :ok = Lenies.Worlds.sterilize(:a)
-      assert_receive {:sterilized, _}, 1_000
-      # :b's control topic must NOT receive :sterilized for :a.
-      refute_receive {:sterilized, _}, 200
+      assert_receive {:sterilized, _ts}, 1_000
+      # A second :sterilized would mean the broadcast also reached :b's topic.
+      refute_receive {:sterilized, _}, 300
+    end
+
+    test "Species aggregation is per-world: :a's aggregate sees only :a's lenies" do
+      {:ok, _} = Lenies.Worlds.start_world(:a, %{})
+      {:ok, _} = Lenies.Worlds.start_world(:b, %{})
+      {:ok, ha} = Lenies.Worlds.handle(:a)
+      {:ok, hb} = Lenies.Worlds.handle(:b)
+
+      # Clear whatever the World seeded so the assertions below reason about
+      # exactly the records we insert in this test.
+      :ets.delete_all_objects(ha.tables.lenies)
+      :ets.delete_all_objects(hb.tables.lenies)
+
+      # Inject one fake snapshot into :a's :lenies table. Same shape used by
+      # the SpeciesTest module — direct ETS insert is the standard way to
+      # drive Species without spawning a real Lenie process.
+      :ets.insert(
+        ha.tables.lenies,
+        {"lenie-a-1", %{id: "lenie-a-1", codeome_hash: "hash-a", lineage: {nil, 0}}}
+      )
+
+      # :b's table stays empty.
+      assert :ets.tab2list(hb.tables.lenies) == []
+
+      a_species = Lenies.Species.aggregate(ha)
+      b_species = Lenies.Species.aggregate(hb)
+
+      assert Enum.any?(a_species, fn s -> s.hash == "hash-a" end),
+             "expected :a's aggregate to contain hash-a; got: #{inspect(a_species)}"
+
+      refute Enum.any?(b_species, fn s -> s.hash == "hash-a" end),
+             "expected :b's aggregate NOT to contain hash-a; got: #{inspect(b_species)}"
+
+      # The for_hash/2 sister function is also per-world.
+      assert [{"lenie-a-1", _}] = Lenies.Species.for_hash(ha, "hash-a")
+      assert [] = Lenies.Species.for_hash(hb, "hash-a")
     end
 
     test "3. per-world tuning isolated" do

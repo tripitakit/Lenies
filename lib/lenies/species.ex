@@ -1,6 +1,11 @@
 defmodule Lenies.Species do
   @moduledoc """
-  Aggregator for the `:lenies` ETS table, grouping by `codeome_hash`.
+  Aggregator for a world's `:lenies` ETS table, grouping by `codeome_hash`.
+
+  All read functions take a `%Lenies.WorldHandle{}` (or `nil`) explicitly so
+  the same module can serve every per-world Telemetry / LiveView without
+  silently pinning to `:primary` (a real isolation leak for non-primary
+  worlds — fixed after the multi-world engine landed).
 
   Each species record:
   - `hash`: the codeome_hash binary
@@ -31,18 +36,14 @@ defmodule Lenies.Species do
         }
 
   @doc """
-  Aggregate the `:lenies` ETS table by codeome_hash. Returns a list of species records sorted
-  by population descending.
+  Aggregate a world's `:lenies` ETS table by codeome_hash. Returns a list of
+  species records sorted by population descending. `nil` handle (e.g. world
+  not running yet) returns `[]`.
   """
-  @spec aggregate() :: [species_record()]
-  def aggregate do
-    case primary_handle() do
-      nil -> []
-      handle -> do_aggregate(handle)
-    end
-  end
+  @spec aggregate(Lenies.WorldHandle.t() | nil) :: [species_record()]
+  def aggregate(nil), do: []
 
-  defp do_aggregate(handle) do
+  def aggregate(%Lenies.WorldHandle{} = handle) do
     eat_amount = Application.get_env(:lenies, :eat_amount, 20)
     attack_damage = Application.get_env(:lenies, :attack_damage, 10)
 
@@ -113,7 +114,7 @@ defmodule Lenies.Species do
 
   # Reads the cached opcode list for a species hash and computes energy
   # metrics via `LeniesWeb.CodeomeBuffer.economics/3`. Returns zeros when
-  # the cache miss (briefly possible if `aggregate/0` runs before
+  # the cache miss (briefly possible if `aggregate/1` runs before
   # `Lenie.init/1` finishes — population would also be 0 in that case,
   # so the row is harmless).
   defp codeome_metrics(hash, eat_amount, attack_damage) do
@@ -134,32 +135,21 @@ defmodule Lenies.Species do
     end
   end
 
-  @doc "Return all `:lenies` records (raw {id, snap} tuples) with the given codeome_hash."
-  @spec for_hash(binary()) :: [{binary(), map()}]
-  def for_hash(hash) do
-    case primary_handle() do
-      nil ->
-        []
+  @doc """
+  Return all `:lenies` records (raw `{id, snap}` tuples) in `handle`'s world
+  with the given codeome_hash. `nil` handle returns `[]`.
+  """
+  @spec for_hash(Lenies.WorldHandle.t() | nil, binary()) :: [{binary(), map()}]
+  def for_hash(nil, _hash), do: []
 
-      handle ->
-        :ets.tab2list(handle.tables.lenies)
-        |> Enum.filter(fn {_id, snap} -> snap.codeome_hash == hash end)
-    end
+  def for_hash(%Lenies.WorldHandle{} = handle, hash) do
+    :ets.tab2list(handle.tables.lenies)
+    |> Enum.filter(fn {_id, snap} -> snap.codeome_hash == hash end)
   end
 
-  # Returns the primary World's handle or nil if the World isn't running.
-  # Species aggregation is best-effort: the dashboard renders an empty
-  # species panel rather than crashing if the world hasn't booted yet.
-  defp primary_handle do
-    case Lenies.Worlds.handle(:primary) do
-      {:ok, h} -> h
-      :error -> nil
-    end
-  end
-
-  @doc "Top N species by population. N defaults to 10."
-  @spec top_n(pos_integer()) :: [species_record()]
-  def top_n(n \\ 10) when is_integer(n) and n > 0 do
-    aggregate() |> Enum.take(n)
+  @doc "Top N species by population in `handle`'s world. N defaults to 10."
+  @spec top_n(Lenies.WorldHandle.t() | nil, pos_integer()) :: [species_record()]
+  def top_n(handle, n \\ 10) when is_integer(n) and n > 0 do
+    aggregate(handle) |> Enum.take(n)
   end
 end
