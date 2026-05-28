@@ -36,7 +36,12 @@ defmodule Lenies.WorldPredationTest do
     # Mark cell, insert minimal lenies snapshot for "P1"
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {10, 10})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "P1"}})
-    :ets.insert(Lenies.WorldTestHelpers.lenies(), {"P1", %{id: "P1", pid: self(), pos: {10, 10}, dir: :e}})
+
+    :ets.insert(
+      Lenies.WorldTestHelpers.lenies(),
+      {"P1", %{id: "P1", pid: self(), pos: {10, 10}, dir: :e}}
+    )
+
     :ok
   end
 
@@ -128,7 +133,11 @@ defmodule Lenies.WorldPredationTest do
       Process.sleep(50)
       # Manually set defending_until in :lenies record for T1
       [{"T1", record}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(), "T1")
-      :ets.insert(Lenies.WorldTestHelpers.lenies(), {"T1", Map.put(record, :defending_until, 100)})
+
+      :ets.insert(
+        Lenies.WorldTestHelpers.lenies(),
+        {"T1", Map.put(record, :defending_until, 100)}
+      )
 
       result = World.action({:attack, {10, 10}, :e, "P1"})
       assert {:ok, {:defended, 5}} = result

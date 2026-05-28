@@ -2,32 +2,14 @@ defmodule Lenies.LenieTest do
   use ExUnit.Case, async: false
 
   alias Lenies.{Codeome, Lenie}
-  alias Lenies.World.Tables
 
   setup do
-    on_exit(fn ->
-      for name <- [Lenies.World] do
-        case Process.whereis(name) do
-          pid when is_pid(pid) ->
-            try do
-              GenServer.stop(pid)
-            catch
-              :exit, _ -> :ok
-            end
-
-          _ ->
-            :ok
-        end
-      end
-
-      Tables.delete_all()
-    end)
-
+    on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
     :ok
   end
 
   test "start_link/1 registers the Lenie under its id" do
-    {:ok, _world} = Lenies.World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
 
     # mark cell {5,5} as occupied (the Lenie expects to find itself there)
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
@@ -52,7 +34,7 @@ defmodule Lenies.LenieTest do
   end
 
   test "inspect_state/1 returns current snapshot" do
-    {:ok, _world} = Lenies.World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L2"}})
 
@@ -78,7 +60,7 @@ defmodule Lenies.LenieTest do
   end
 
   test "dies of starvation when energy depletes" do
-    {:ok, _world} = Lenies.World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L3"}})
 

@@ -2,27 +2,12 @@ defmodule LeniesWeb.GridRendererTest do
   use ExUnit.Case, async: false
 
   alias LeniesWeb.GridRenderer
-  alias Lenies.World.Tables
 
   setup do
-    {:ok, _world} = Lenies.World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
     handle = Lenies.Worlds.primary_handle()
 
-    on_exit(fn ->
-      case Lenies.WorldTestHelpers.world_pid() do
-        pid when is_pid(pid) ->
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-
-        _ ->
-          :ok
-      end
-
-      Tables.delete_all()
-    end)
+    on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
 
     {:ok, handle: handle}
   end

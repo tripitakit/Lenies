@@ -25,20 +25,8 @@ defmodule Lenies.WorldsTest do
     # must be started by hand. Other tests do the same; tear it down here to
     # avoid a name clash with any subsequent test.
     setup do
-      {:ok, pid} = Lenies.World.start_link(tick_interval_ms: 0)
-
-      on_exit(fn ->
-        if Process.alive?(pid) do
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-        end
-
-        Lenies.World.Tables.delete_all()
-      end)
-
+      {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
+      on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
       :ok
     end
 
@@ -55,20 +43,8 @@ defmodule Lenies.WorldsTest do
     # The facade is exercised against the :primary World, which (with
     # auto_start_simulation: false in test env) must be started by hand.
     setup do
-      {:ok, pid} = Lenies.World.start_link(tick_interval_ms: 0)
-
-      on_exit(fn ->
-        if Process.alive?(pid) do
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-        end
-
-        Lenies.World.Tables.delete_all()
-      end)
-
+      {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
+      on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
       :ok
     end
 
@@ -132,35 +108,18 @@ defmodule Lenies.WorldsTest do
     test ":primary's LenieSupervisor is registered under {:lenie_sup, :primary}" do
       # In test env (auto_start_simulation: false) the Application does not
       # start the :primary world, so spin it up here via the Worlds facade.
-      {:ok, sup_pid} = Lenies.Worlds.start_world(:primary, %{tick_interval_ms: 0})
-
-      on_exit(fn ->
-        Lenies.Worlds.stop_world(:primary)
-        if Process.alive?(sup_pid), do: Process.exit(sup_pid, :kill)
-        Lenies.World.Tables.delete_all()
-      end)
+      {:ok, _world_pid} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
+      on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
 
       assert [{_pid, _}] = Registry.lookup(Lenies.Registry, {:lenie_sup, :primary})
     end
 
     test ":primary's Telemetry is registered under {:telemetry, :primary}" do
-      # Telemetry is not in the Application's base children in the test env
-      # (auto_start_simulation: false) so we start it for this smoke check
-      # and tear it down after.
-      {:ok, world_pid} = Lenies.World.start_link(tick_interval_ms: 0)
-      {:ok, tel_pid} = Lenies.Telemetry.start_link(world_id: :primary)
-
-      on_exit(fn ->
-        for pid <- [tel_pid, world_pid], Process.alive?(pid) do
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-        end
-
-        Lenies.World.Tables.delete_all()
-      end)
+      # In test env (auto_start_simulation: false) the Application does not
+      # start the :primary world, so spin up the whole sub-tree (which
+      # includes Telemetry) via the Worlds facade.
+      {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
+      on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
 
       assert [{_pid, _}] = Registry.lookup(Lenies.Registry, {:telemetry, :primary})
     end
@@ -168,20 +127,8 @@ defmodule Lenies.WorldsTest do
 
   describe "snapshot per-world (T12 smoke)" do
     setup do
-      {:ok, pid} = Lenies.World.start_link(tick_interval_ms: 0)
-
-      on_exit(fn ->
-        if Process.alive?(pid) do
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-        end
-
-        Lenies.World.Tables.delete_all()
-      end)
-
+      {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
+      on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
       :ok
     end
 
@@ -238,13 +185,8 @@ defmodule Lenies.WorldsTest do
     setup do
       # auto_start_simulation: false in test env, so spin up :primary via the
       # Worlds facade exactly the same way Application would in production.
-      {:ok, _sup} = Lenies.Worlds.start_world(:primary, %{})
-
-      on_exit(fn ->
-        Lenies.Worlds.stop_world(:primary)
-        Lenies.World.Tables.delete_all()
-      end)
-
+      {:ok, _world_pid} = Lenies.WorldTestHelpers.start_primary(%{})
+      on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
       :ok
     end
 
@@ -286,6 +228,7 @@ defmodule Lenies.WorldsTest do
         Lenies.Worlds.stop_world(:a)
         Lenies.Worlds.stop_world(:b)
         Process.sleep(50)
+
         unless Lenies.Worlds.alive?(:primary) do
           {:ok, _} = Lenies.Worlds.start_world(:primary, %{})
         end
@@ -419,14 +362,27 @@ defmodule Lenies.WorldsTest do
       # Register two distinct values under {:lenie, :a, "X"} and {:lenie, :b, "X"}.
       # Registry.register/3 uses the calling process — so use two Tasks to register
       # under different worlds simultaneously.
-      task_a = Task.async(fn ->
-        Registry.register(Lenies.Registry, {:lenie, :a, "X"}, :a_marker)
-        receive do :exit -> :ok after 5_000 -> :ok end
-      end)
-      task_b = Task.async(fn ->
-        Registry.register(Lenies.Registry, {:lenie, :b, "X"}, :b_marker)
-        receive do :exit -> :ok after 5_000 -> :ok end
-      end)
+      task_a =
+        Task.async(fn ->
+          Registry.register(Lenies.Registry, {:lenie, :a, "X"}, :a_marker)
+
+          receive do
+            :exit -> :ok
+          after
+            5_000 -> :ok
+          end
+        end)
+
+      task_b =
+        Task.async(fn ->
+          Registry.register(Lenies.Registry, {:lenie, :b, "X"}, :b_marker)
+
+          receive do
+            :exit -> :ok
+          after
+            5_000 -> :ok
+          end
+        end)
 
       Process.sleep(50)
 
@@ -443,7 +399,7 @@ defmodule Lenies.WorldsTest do
     test "8. supervision: per-world tree contains World + LenieSupervisor + Telemetry" do
       {:ok, _} = Lenies.Worlds.start_world(:a, %{})
 
-      assert [{world_pid, _}]    = Registry.lookup(Lenies.Registry, {:world, :a})
+      assert [{world_pid, _}] = Registry.lookup(Lenies.Registry, {:world, :a})
       assert [{lenie_sup_pid, _}] = Registry.lookup(Lenies.Registry, {:lenie_sup, :a})
       assert [{telemetry_pid, _}] = Registry.lookup(Lenies.Registry, {:telemetry, :a})
 

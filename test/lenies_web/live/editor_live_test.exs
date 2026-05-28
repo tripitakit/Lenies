@@ -6,10 +6,7 @@ defmodule LeniesWeb.EditorLiveTest do
   setup :register_and_log_in_user
 
   setup do
-    case Lenies.WorldTestHelpers.world_pid() do
-      nil -> {:ok, _} = Lenies.World.start_link(tick_interval_ms: 0)
-      _ -> :ok
-    end
+    {:ok, _} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
 
     case Process.whereis(Lenies.Manual) do
       nil -> {:ok, _} = Lenies.Manual.start_link([])
@@ -21,22 +18,7 @@ defmodule LeniesWeb.EditorLiveTest do
       _ -> :ok
     end
 
-    on_exit(fn ->
-      case Lenies.WorldTestHelpers.world_pid() do
-        pid when is_pid(pid) ->
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-
-        _ ->
-          :ok
-      end
-
-      Lenies.World.Tables.delete_all()
-    end)
-
+    on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
     :ok
   end
 
@@ -94,7 +76,10 @@ defmodule LeniesWeb.EditorLiveTest do
         lineage: {nil, 0}
       )
 
-    :ets.insert(Lenies.WorldTestHelpers.lenies(), {"TEST-EDITOR-L1", %{id: "TEST-EDITOR-L1", codeome_hash: hash}})
+    :ets.insert(
+      Lenies.WorldTestHelpers.lenies(),
+      {"TEST-EDITOR-L1", %{id: "TEST-EDITOR-L1", codeome_hash: hash}}
+    )
 
     {:ok, _view, html} = live(conn, "/editor/edit/#{hash}")
     assert html =~ "155 ops"

@@ -63,8 +63,7 @@ defmodule Lenies.Telemetry do
     Phoenix.PubSub.subscribe(Lenies.PubSub, "#{pubsub_prefix}:tick")
     Phoenix.PubSub.subscribe(Lenies.PubSub, "#{pubsub_prefix}:control")
 
-    {:ok,
-     %{world_id: world_id, max_entries: max_entries, counter: 0, handle: handle}}
+    {:ok, %{world_id: world_id, max_entries: max_entries, counter: 0, handle: handle}}
   end
 
   @impl true

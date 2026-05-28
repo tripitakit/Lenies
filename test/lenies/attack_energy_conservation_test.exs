@@ -188,7 +188,11 @@ defmodule Lenies.AttackEnergyConservationTest do
 
       # Make the victim defending
       [{"VIC_DEF", record}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(), "VIC_DEF")
-      :ets.insert(Lenies.WorldTestHelpers.lenies(), {"VIC_DEF", Map.put(record, :defending_until, 999_999)})
+
+      :ets.insert(
+        Lenies.WorldTestHelpers.lenies(),
+        {"VIC_DEF", Map.put(record, :defending_until, 999_999)}
+      )
 
       {:ok, {:defended, ^half_damage}} =
         World.action({:attack, {20, 22}, :e, "ATK_DEF"})
@@ -260,7 +264,11 @@ defmodule Lenies.AttackEnergyConservationTest do
 
       # Set victim as permanently defending (must happen before attacker spawns).
       [{"VIC_SYNC", record}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(), "VIC_SYNC")
-      :ets.insert(Lenies.WorldTestHelpers.lenies(), {"VIC_SYNC", Map.put(record, :defending_until, 999_999)})
+
+      :ets.insert(
+        Lenies.WorldTestHelpers.lenies(),
+        {"VIC_SYNC", Map.put(record, :defending_until, 999_999)}
+      )
 
       attacker_pid =
         spawn_lenie("ATK_SYNC", {20, 24}, 500.0, dir: :e, paused?: false, codeome: [:attack])

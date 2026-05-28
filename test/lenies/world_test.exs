@@ -103,27 +103,8 @@ defmodule Lenies.WorldTest do
 
   describe "lenie_died/4 — carcass_hue" do
     setup do
-      case Lenies.WorldTestHelpers.world_pid() do
-        nil -> {:ok, _} = Lenies.World.start_link(tick_interval_ms: 0)
-        _ -> :ok
-      end
-
-      on_exit(fn ->
-        case Lenies.WorldTestHelpers.world_pid() do
-          pid when is_pid(pid) ->
-            try do
-              GenServer.stop(pid)
-            catch
-              :exit, _ -> :ok
-            end
-
-          _ ->
-            :ok
-        end
-
-        Lenies.World.Tables.delete_all()
-      end)
-
+      {:ok, _} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
+      on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
       :ok
     end
 
@@ -252,7 +233,10 @@ defmodule Lenies.WorldTest do
       end)
 
       # Plant a cell with carcass = 5 (less than eat_amount) and a hue marker
-      :ets.insert(Lenies.WorldTestHelpers.cells(), {{1, 1}, %Lenies.World.Cell{carcass: 5, carcass_hue: 137}})
+      :ets.insert(
+        Lenies.WorldTestHelpers.cells(),
+        {{1, 1}, %Lenies.World.Cell{carcass: 5, carcass_hue: 137}}
+      )
 
       {:ok, {:ate, _}} = World.action({:eat, {1, 1}})
 
@@ -271,7 +255,10 @@ defmodule Lenies.WorldTest do
           else: Application.delete_env(:lenies, :eat_amount)
       end)
 
-      :ets.insert(Lenies.WorldTestHelpers.cells(), {{2, 2}, %Lenies.World.Cell{carcass: 20, carcass_hue: 99}})
+      :ets.insert(
+        Lenies.WorldTestHelpers.cells(),
+        {{2, 2}, %Lenies.World.Cell{carcass: 20, carcass_hue: 99}}
+      )
 
       {:ok, {:ate, _}} = World.action({:eat, {2, 2}})
 

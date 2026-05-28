@@ -492,7 +492,14 @@ defmodule Lenies.Lenie do
           [{_, %{lenie_id: recipient_id}}] when is_binary(recipient_id) ->
             case Registry.lookup(Lenies.Registry, {:lenie, state.world.id, recipient_id}) do
               [{recipient_pid, _}] ->
-                attempt_transfer(interp, state.id, recipient_pid, recipient_id, plasmid_opcodes, state)
+                attempt_transfer(
+                  interp,
+                  state.id,
+                  recipient_pid,
+                  recipient_id,
+                  plasmid_opcodes,
+                  state
+                )
 
               [] ->
                 conjugate_failure(interp)

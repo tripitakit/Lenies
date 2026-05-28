@@ -137,7 +137,10 @@ defmodule Lenies.WorldReconcileTest do
       dead_id = "deaddeaddeaddead"
 
       # Manually plant an orphaned :lenies record — no live pid, no cell
-      :ets.insert(Lenies.WorldTestHelpers.lenies(), {dead_id, %{id: dead_id, pos: {5, 5}, energy: 1.0}})
+      :ets.insert(
+        Lenies.WorldTestHelpers.lenies(),
+        {dead_id, %{id: dead_id, pos: {5, 5}, energy: 1.0}}
+      )
 
       assert :ets.lookup(Lenies.WorldTestHelpers.lenies(), dead_id) != []
 

@@ -19,12 +19,6 @@ defmodule Lenies.World do
   - `handle` — a `%Lenies.WorldHandle{}` rendered once in `init/1` and
     exposed via `handle_call(:get_handle, …)`.
 
-  ### Compat shims (removed in later tasks)
-
-  - PubSub broadcasts for `:primary` are dual-published to BOTH the new
-    scoped topic (`"world:primary:tick"`) AND the legacy unscoped topic
-    (`"world:tick"`). **Removed once subscribers migrate (T11/T14).**
-
   Each World registers under `{:via, Registry, {Lenies.Registry, {:world,
   world_id}}}`. The module-level helpers (`Lenies.World.action/1`,
   `Lenies.World.sterilize/0`, …) are thin delegators to
@@ -45,7 +39,10 @@ defmodule Lenies.World do
   def start_link(opts \\ []) do
     world_id = Keyword.get(opts, :world_id, :primary)
     config_overrides = Keyword.get(opts, :config, %{})
-    GenServer.start_link(__MODULE__, {world_id, config_overrides, opts}, name: server_name(world_id))
+
+    GenServer.start_link(__MODULE__, {world_id, config_overrides, opts},
+      name: server_name(world_id)
+    )
   end
 
   defp server_name(world_id),
@@ -1033,11 +1030,9 @@ defmodule Lenies.World do
 
   # ----- PubSub helpers -----
   #
-  # Publishing strategy: each broadcast goes to the world's scoped topic
-  # (`"world:<id>:<channel>"`). For the `:primary` world we ALSO publish to
-  # the legacy unscoped topic (`"world:<channel>"`) as a compat shim so the
-  # existing subscribers (LiveViews, Telemetry, tests) keep working. The
-  # shim is removed once subscribers migrate.
+  # Each broadcast goes to the world's scoped topic
+  # (`"world:<id>:<channel>"`). Subscribers (LiveViews, Telemetry, tests)
+  # subscribe via the handle's `pubsub_prefix`.
 
   defp broadcast(state, channel, message) do
     Phoenix.PubSub.broadcast(
@@ -1045,11 +1040,5 @@ defmodule Lenies.World do
       "#{state.handle.pubsub_prefix}:#{channel}",
       message
     )
-
-    if state.world_id == :primary do
-      Phoenix.PubSub.broadcast(Lenies.PubSub, "world:#{channel}", message)
-    end
-
-    :ok
   end
 end

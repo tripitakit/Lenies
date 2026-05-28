@@ -38,7 +38,8 @@ defmodule Lenies.Collection do
   @doc "Delete a codeome by id, scoped to `user`."
   def delete_codeome(%{id: owner_id}, id) do
     with cid when not is_nil(cid) <- normalize_id(id),
-         %Codeome{} = c <- Repo.one(from c in Codeome, where: c.owner_id == ^owner_id and c.id == ^cid) do
+         %Codeome{} = c <-
+           Repo.one(from c in Codeome, where: c.owner_id == ^owner_id and c.id == ^cid) do
       Repo.delete(c)
     else
       _ -> {:error, :not_found}
