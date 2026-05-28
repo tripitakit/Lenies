@@ -33,10 +33,17 @@ defmodule LeniesWeb.DashboardLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    world_id = :primary
+    world_handle = fetch_primary_handle()
+
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(Lenies.PubSub, "world:tick")
-      Phoenix.PubSub.subscribe(Lenies.PubSub, "world:control")
-      Phoenix.PubSub.subscribe(Lenies.PubSub, "world:fx")
+      # Subscribe to scoped per-world topics. When `world_handle` is nil
+      # (World not running, e.g. some tests) fall back to the primary
+      # prefix so tests that later start the World still receive events.
+      prefix = (world_handle && world_handle.pubsub_prefix) || "world:primary"
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:tick")
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:control")
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:fx")
     end
 
     grid = Lenies.Config.grid_size()
@@ -47,6 +54,8 @@ defmodule LeniesWeb.DashboardLive do
 
     socket =
       socket
+      |> assign(:world_id, world_id)
+      |> assign(:world_handle, world_handle)
       |> assign(:grid, grid)
       |> assign(:tick_count, 0)
       |> assign(:layers_visible, %{lenies: true, resource: true, carcass: true})
@@ -60,7 +69,6 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:inspector_dirty, false)
       |> assign(:sort_by, sort_by)
       |> assign(:sort_dir, sort_dir)
-      |> assign(:world_handle, fetch_primary_handle())
       |> stream_configure(:species_table, dom_id: fn sp -> "species-row-#{sp.hash}" end)
       |> stream(:species_table, sort_species(all_species, sort_by, sort_dir))
 
@@ -369,6 +377,8 @@ defmodule LeniesWeb.DashboardLive do
             module={LeniesWeb.ControlsPanelComponent}
             id="controls"
             current_scope={@current_scope}
+            world_id={@world_id}
+            world_handle={handle_from_assigns(assigns)}
           />
         </div>
       </div>

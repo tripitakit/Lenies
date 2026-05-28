@@ -41,17 +41,13 @@ defmodule LeniesWeb.ControlsPanelComponent do
 
   @impl true
   def mount(socket) do
-    paused? =
-      try do
-        Lenies.World.paused?()
-      catch
-        :exit, _ -> false
-      end
-
+    # The parent LiveView (Dashboard) passes :world_id and :world_handle
+    # via update/2. Until the first update/2 we can't query the World,
+    # so default :paused? to false; it gets refreshed at update/2 time.
     {:ok,
      socket
      |> assign(:sterilize_confirming, false)
-     |> assign(:paused?, paused?)
+     |> assign(:paused?, false)
      |> assign(:snapshot_status, nil)
      |> assign(:show_custom_manage, false)}
   end
@@ -67,6 +63,25 @@ defmodule LeniesWeb.ControlsPanelComponent do
         assign(socket, :custom_seeds, custom_seeds(user))
       else
         socket
+      end
+
+    # Refresh the live :paused? mirror from the world we're now scoped to.
+    # Defensive: if the world isn't running (some tests), keep the previous
+    # value rather than crashing the LiveView mount.
+    socket =
+      case socket.assigns[:world_id] do
+        nil ->
+          socket
+
+        world_id ->
+          paused? =
+            try do
+              Lenies.Worlds.paused?(world_id)
+            catch
+              :exit, _ -> socket.assigns.paused?
+            end
+
+          assign(socket, :paused?, paused?)
       end
 
     {:ok, socket}
@@ -313,7 +328,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
   end
 
   def handle_event("sterilize_confirm", _, socket) do
-    :ok = Lenies.World.sterilize()
+    :ok = Lenies.Worlds.sterilize(socket.assigns.world_id)
     {:noreply, assign(socket, :sterilize_confirming, false)}
   end
 
@@ -323,10 +338,10 @@ defmodule LeniesWeb.ControlsPanelComponent do
 
   def handle_event("toggle_pause", _, socket) do
     if socket.assigns.paused? do
-      :ok = Lenies.World.resume()
+      :ok = Lenies.Worlds.resume(socket.assigns.world_id)
       {:noreply, assign(socket, :paused?, false)}
     else
-      :ok = Lenies.World.pause()
+      :ok = Lenies.Worlds.pause(socket.assigns.world_id)
       {:noreply, assign(socket, :paused?, true)}
     end
   end
@@ -338,16 +353,15 @@ defmodule LeniesWeb.ControlsPanelComponent do
       %Lenies.Collection.Codeome{} = seed ->
         codeome = Lenies.Codeome.from_list(Lenies.Collection.to_opcode_atoms(seed))
         hash = Lenies.Codeome.hash(codeome)
-        # Multi-world refactor T7: color overrides are per-world. While the
-        # dashboard isn't yet world-aware (lands in T11), assume the primary
-        # world for the spawn endpoint.
-        Lenies.SpeciesColor.set_override(Lenies.Worlds.primary_handle(), hash, seed.color_hex)
+        # Color overrides are per-world; the parent dashboard passes the
+        # world handle in @world_handle.
+        Lenies.SpeciesColor.set_override(socket.assigns.world_handle, hash, seed.color_hex)
 
         count = String.to_integer(count_str) |> max(1) |> min(50)
         dirs = [:n, :s, :e, :w]
 
         for _ <- 1..count do
-          Lenies.World.spawn_lenie(codeome,
+          Lenies.Worlds.spawn_lenie(socket.assigns.world_id, codeome,
             energy: seed.energy_default,
             dir: Enum.random(dirs),
             seed_origin: "★ " <> seed.name
@@ -386,7 +400,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
               seed_origin: seed_name
             ] ++ plasmid_opt
 
-          Lenies.World.spawn_lenie(codeome, spawn_opts)
+          Lenies.Worlds.spawn_lenie(socket.assigns.world_id, codeome, spawn_opts)
         end
 
       nil ->
@@ -399,7 +413,13 @@ defmodule LeniesWeb.ControlsPanelComponent do
   def handle_event("tune_param", %{"key" => key_str, "value" => value_str}, socket) do
     key = String.to_existing_atom(key_str)
     value = parse_tune_value(value_str)
+    # World#cfg/2 still falls back to `Application.get_env(:lenies, key, …)`
+    # for live tunables (see the @cfg_defaults shim in Lenies.World) — keep
+    # the Application.put_env until that shim is removed, but also call the
+    # facade so the world's Config struct stays in sync and broadcasts a
+    # :config_changed event on its control topic.
     Application.put_env(:lenies, key, value)
+    _ = Lenies.Worlds.tune(socket.assigns.world_id, key, value)
     {:noreply, socket}
   end
 

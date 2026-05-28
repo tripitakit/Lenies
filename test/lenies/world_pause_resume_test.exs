@@ -40,7 +40,7 @@ defmodule Lenies.WorldPauseResumeTest do
   end
 
   test "resume/0 restarts auto-tick" do
-    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:tick")
+    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:primary:tick")
     {:ok, _world} = World.start_link(tick_interval_ms: 50)
 
     assert_receive {:tick, 1}, 500

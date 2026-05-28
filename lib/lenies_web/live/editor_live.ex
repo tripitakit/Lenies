@@ -23,8 +23,13 @@ defmodule LeniesWeb.EditorLive do
   def mount(params, _session, socket) do
     {mode, selected_hash, buffer} = init_for_route(socket.assigns.live_action, params)
 
+    world_id = :primary
+    world_handle = fetch_primary_handle()
+
     socket =
       socket
+      |> assign(:world_id, world_id)
+      |> assign(:world_handle, world_handle)
       |> assign(:mode, mode)
       |> assign(:selected_hash, selected_hash)
       |> assign(:buffer, buffer)
@@ -167,7 +172,7 @@ defmodule LeniesWeb.EditorLive do
         seed_origin = spawn_seed_origin(socket.assigns)
 
         Enum.each(1..count, fn _ ->
-          Lenies.World.spawn_lenie(codeome,
+          Lenies.Worlds.spawn_lenie(socket.assigns.world_id, codeome,
             energy: energy * 1.0,
             dir: Enum.random(dirs),
             seed_origin: seed_origin

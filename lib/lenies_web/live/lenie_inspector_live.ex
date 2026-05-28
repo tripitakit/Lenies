@@ -15,20 +15,31 @@ defmodule LeniesWeb.LenieInspectorLive do
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
+    world_id = :primary
+    world_handle = fetch_primary_handle()
+
     if connected?(socket) do
-      # Multi-world refactor T6: the Lenie broadcasts its own update topic
-      # scoped to the world it belongs to. Subscribe to the primary world's
-      # scoped topic; once LiveViews become world-aware (Task 11) this
-      # picks up the world_id from the route.
-      Phoenix.PubSub.subscribe(Lenies.PubSub, "world:primary:lenie:#{id}")
+      # Subscribe to the per-Lenie scoped topic, e.g. "world:primary:lenie:<id>".
+      prefix = (world_handle && world_handle.pubsub_prefix) || "world:primary"
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:lenie:#{id}")
     end
 
     socket =
       socket
+      |> assign(:world_id, world_id)
+      |> assign(:world_handle, world_handle)
       |> assign(:id, id)
       |> load_lenie()
 
     {:ok, socket}
+  end
+
+  defp fetch_primary_handle do
+    try do
+      Lenies.Worlds.primary_handle()
+    catch
+      :exit, _ -> nil
+    end
   end
 
   defp load_lenie(socket) do
