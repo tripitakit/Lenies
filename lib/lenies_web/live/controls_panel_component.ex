@@ -413,12 +413,11 @@ defmodule LeniesWeb.ControlsPanelComponent do
   def handle_event("tune_param", %{"key" => key_str, "value" => value_str}, socket) do
     key = String.to_existing_atom(key_str)
     value = parse_tune_value(value_str)
-    # World#cfg/2 still falls back to `Application.get_env(:lenies, key, …)`
-    # for live tunables (see the @cfg_defaults shim in Lenies.World) — keep
-    # the Application.put_env until that shim is removed, but also call the
-    # facade so the world's Config struct stays in sync and broadcasts a
-    # :config_changed event on its control topic.
-    Application.put_env(:lenies, key, value)
+    # Lenies.Worlds.tune/3 is the single source of truth for live tuning: it
+    # mutates state.config in the target world's GenServer and broadcasts a
+    # :config_changed event on the world's control topic. The engine
+    # (Lenies.World.cfg/2) reads directly from state.config, so no
+    # Application.put_env shim is needed.
     _ = Lenies.Worlds.tune(socket.assigns.world_id, key, value)
     {:noreply, socket}
   end

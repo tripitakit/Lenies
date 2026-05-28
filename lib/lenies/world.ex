@@ -128,7 +128,18 @@ defmodule Lenies.World do
   @impl true
   def init({world_id, config_overrides, opts}) do
     # Seed per-world Config from Application env, then layer caller overrides.
-    config = Lenies.World.Config.merge(Lenies.World.Config.defaults(), config_overrides)
+    # The legacy `tick_interval_ms:` keyword opt (heavily used by tests to
+    # disable auto-ticking with `0`) wins over both config_overrides and
+    # defaults — we fold it into the per-world Config so the engine has a
+    # single source of truth and the cfg/2 helper just reads state.config.
+    base_config = Lenies.World.Config.merge(Lenies.World.Config.defaults(), config_overrides)
+
+    config =
+      case Keyword.fetch(opts, :tick_interval_ms) do
+        {:ok, value} -> %{base_config | tick_interval_ms: value}
+        :error -> base_config
+      end
+
     tables = Tables.create_all(world_id)
 
     pubsub_prefix = "world:" <> Lenies.Worlds.id_to_path(world_id)
@@ -143,7 +154,6 @@ defmodule Lenies.World do
     # `grid` is still sourced from Lenies.Config (system bounds), not from the
     # per-world Config. Multi-grid support is a later step.
     grid = Config.grid_size()
-    tick_interval = Keyword.get(opts, :tick_interval_ms, config.tick_interval_ms)
     hotspots = Hotspots.initial(grid, Config.hotspot_count())
 
     init_cells(grid, tables)
@@ -156,7 +166,6 @@ defmodule Lenies.World do
       handle: handle,
       grid: grid,
       hotspots: hotspots,
-      tick_interval_ms: tick_interval,
       tick_ref: nil,
       tick_count: 0,
       paused?: false,
@@ -391,29 +400,17 @@ defmodule Lenies.World do
     schedule_reconcile(new_state)
   end
 
-  # Live config read with hardcoded-default fallback (compat shim during the
-  # multi-world refactor). The intent of the spec is that `state.config.<key>`
-  # be the source of truth — but the existing suite relies on
-  # `Application.put_env(:lenies, …)` / `Application.delete_env(:lenies, …)`
-  # taking effect on a running World, so we re-read app env on each access.
-  # When a test has deleted the key we fall back to the SAME literal default
-  # the pre-Task-5 `Application.get_env(:lenies, key, <default>)` calls used,
-  # NOT to `state.config.<key>` — otherwise the slightly different defaults
-  # in `Lenies.World.Config.defaults/0` would shift behaviour. The shim is
-  # removed in a later task once `Worlds.tune/3` writes into state.
-  @cfg_defaults %{
-    radiation_per_tick: 100,
-    eat_amount: 20,
-    carcass_decay: 0.05,
-    tick_interval_ms: 100,
-    copy_substitution_rate: 0.005,
-    copy_insert_rate: 0.0005,
-    copy_delete_rate: 0.0005,
-    background_mutation_rate_per_1000_ticks: 1,
-    attack_damage: 10
-  }
-  defp cfg(_state, key) do
-    Application.get_env(:lenies, key, Map.fetch!(@cfg_defaults, key))
+  # Runtime source of truth for per-world tunables. The 9 keys previously
+  # served by @cfg_defaults (radiation_per_tick, eat_amount, carcass_decay,
+  # tick_interval_ms, copy_substitution_rate, copy_insert_rate,
+  # copy_delete_rate, background_mutation_rate_per_1000_ticks, attack_damage)
+  # have all been promoted to %Lenies.World.Config{} fields (see config.ex).
+  # `Lenies.Worlds.tune/3` mutates state.config and broadcasts
+  # {:config_changed, key, value} on the world's control topic — the engine
+  # just reads from state. `Map.fetch!` crashes loudly on a typo, which is
+  # what we want.
+  defp cfg(state, key) do
+    Map.fetch!(state.config, key)
   end
 
   defp init_cells({w, h}, tables) do
@@ -558,18 +555,20 @@ defmodule Lenies.World do
     )
   end
 
-  defp maybe_schedule_tick(%{tick_interval_ms: 0} = state), do: state
-  defp maybe_schedule_tick(%{tick_interval_ms: nil} = state), do: state
   defp maybe_schedule_tick(%{paused?: true} = state), do: state
 
   defp maybe_schedule_tick(state) do
-    # Re-read from Application env so the dashboard slider can change tick rate
-    # live on a running world. Falls back to the value supplied at start_link.
-    # NOTE: we don't refresh state.config here — the live-tuning path stays on
-    # app env for this task; per-world config update is a later step.
-    interval = Application.get_env(:lenies, :tick_interval_ms, state.tick_interval_ms)
-    ref = Process.send_after(self(), :tick, interval)
-    %{state | tick_ref: ref}
+    # state.config.tick_interval_ms is the single source of truth (seeded from
+    # opts in init/1, mutated live by Lenies.Worlds.tune/3). 0 or nil disables
+    # auto-ticking — heavily used by tests via start_link(tick_interval_ms: 0).
+    case state.config.tick_interval_ms do
+      interval when interval in [0, nil] ->
+        state
+
+      interval ->
+        ref = Process.send_after(self(), :tick, interval)
+        %{state | tick_ref: ref}
+    end
   end
 
   defp schedule_reconcile(state) do
