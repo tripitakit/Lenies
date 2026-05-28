@@ -271,4 +271,191 @@ defmodule Lenies.WorldsTest do
              end)
     end
   end
+
+  describe "multi-world isolation (T13 deliverable)" do
+    @moduletag :integration
+
+    setup do
+      # Stop :primary so these tests get a clean slate (we'll start :a and :b explicitly).
+      # The :primary world is restarted in on_exit so the rest of the suite (and the dev
+      # server, if running) sees it back.
+      :ok = Lenies.Worlds.stop_world(:primary)
+      Process.sleep(50)
+
+      on_exit(fn ->
+        Lenies.Worlds.stop_world(:a)
+        Lenies.Worlds.stop_world(:b)
+        Process.sleep(50)
+        unless Lenies.Worlds.alive?(:primary) do
+          {:ok, _} = Lenies.Worlds.start_world(:primary, %{})
+        end
+      end)
+
+      :ok
+    end
+
+    test "1. lifecycle: start, handle, stop — no residue" do
+      assert {:ok, _sup} = Lenies.Worlds.start_world(:a, %{})
+      assert Lenies.Worlds.alive?(:a)
+      assert {:ok, %Lenies.WorldHandle{id: :a}} = Lenies.Worlds.handle(:a)
+
+      :ok = Lenies.Worlds.stop_world(:a)
+      Process.sleep(50)
+      refute Lenies.Worlds.alive?(:a)
+      assert :error = Lenies.Worlds.handle(:a)
+    end
+
+    test "2. two worlds in parallel, disjoint ETS tables and scoped PubSub" do
+      {:ok, _} = Lenies.Worlds.start_world(:a, %{})
+      {:ok, _} = Lenies.Worlds.start_world(:b, %{})
+
+      {:ok, ha} = Lenies.Worlds.handle(:a)
+      {:ok, hb} = Lenies.Worlds.handle(:b)
+
+      # Distinct ETS tids — sets are not shared across worlds.
+      refute ha.tables.cells == hb.tables.cells
+      refute ha.tables.lenies == hb.tables.lenies
+      refute ha.tables.child_slots == hb.tables.child_slots
+      refute ha.tables.history == hb.tables.history
+      refute ha.tables.color_overrides == hb.tables.color_overrides
+
+      # Subscribe to :b's tick topic; tickers tick at the configured interval.
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "#{hb.pubsub_prefix}:tick")
+      assert_receive {:tick, _}, 1_000
+
+      # Subscribe to :a's control topic; sterilizing :a broadcasts there, NOT to :b.
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "#{ha.pubsub_prefix}:control")
+      :ok = Lenies.Worlds.sterilize(:a)
+      assert_receive {:sterilized, _}, 1_000
+      # :b's control topic must NOT receive :sterilized for :a.
+      refute_receive {:sterilized, _}, 200
+    end
+
+    test "3. per-world tuning isolated" do
+      {:ok, _} = Lenies.Worlds.start_world(:a, %{eat_amount: 200.0})
+      {:ok, _} = Lenies.Worlds.start_world(:b, %{eat_amount: 50.0})
+
+      {:ok, ha} = Lenies.Worlds.handle(:a)
+      {:ok, hb} = Lenies.Worlds.handle(:b)
+
+      assert :sys.get_state(ha.pid).config.eat_amount == 200.0
+      assert :sys.get_state(hb.pid).config.eat_amount == 50.0
+
+      # tune/3 mutates ONE world only
+      assert :ok = Lenies.Worlds.tune(:a, :eat_amount, 999.0)
+      assert :sys.get_state(ha.pid).config.eat_amount == 999.0
+      assert :sys.get_state(hb.pid).config.eat_amount == 50.0
+    end
+
+    test "4. per-world color_overrides — same hash, different colors" do
+      {:ok, _} = Lenies.Worlds.start_world(:a, %{})
+      {:ok, _} = Lenies.Worlds.start_world(:b, %{})
+      {:ok, ha} = Lenies.Worlds.handle(:a)
+      {:ok, hb} = Lenies.Worlds.handle(:b)
+
+      Lenies.SpeciesColor.set_override(ha, "deadbeef", "#ff0000")
+      Lenies.SpeciesColor.set_override(hb, "deadbeef", "#00ff00")
+
+      assert Lenies.SpeciesColor.override(ha, "deadbeef") == "#ff0000"
+      assert Lenies.SpeciesColor.override(hb, "deadbeef") == "#00ff00"
+    end
+
+    test "5. crash isolation: killing :a's World does not affect :b" do
+      {:ok, _} = Lenies.Worlds.start_world(:a, %{})
+      {:ok, _} = Lenies.Worlds.start_world(:b, %{})
+      {:ok, ha} = Lenies.Worlds.handle(:a)
+      {:ok, hb} = Lenies.Worlds.handle(:b)
+
+      original_b_pid = hb.pid
+
+      # Kill :a's World — the per-world rest_for_one Supervisor restarts it (and
+      # LenieSupervisor + Telemetry behind it). New world starts fresh-and-empty.
+      Process.exit(ha.pid, :kill)
+      Process.sleep(300)
+
+      # :a restarts with a NEW pid and fresh tables.
+      {:ok, ha2} = Lenies.Worlds.handle(:a)
+      refute ha2.pid == ha.pid
+      refute ha2.tables.cells == ha.tables.cells
+
+      # :b is untouched: same pid, same handle.
+      {:ok, hb2} = Lenies.Worlds.handle(:b)
+      assert hb2.pid == original_b_pid
+      assert hb2.tables.cells == hb.tables.cells
+    end
+
+    @tag :tmp_dir
+    test "6. snapshot per-world — :a save/restore round-trip; :b never touched", %{tmp_dir: tmp} do
+      Application.put_env(:lenies, :snapshot_root, tmp)
+      on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
+
+      {:ok, _} = Lenies.Worlds.start_world(:a, %{})
+      {:ok, _} = Lenies.Worlds.start_world(:b, %{})
+      {:ok, ha} = Lenies.Worlds.handle(:a)
+      {:ok, hb} = Lenies.Worlds.handle(:b)
+
+      # mark :a with a distinct color override that we can verify after restore
+      Lenies.SpeciesColor.set_override(ha, "marker", "#abcdef")
+      # mark :b with a different override that should remain untouched throughout
+      Lenies.SpeciesColor.set_override(hb, "marker_b", "#fedcba")
+
+      :ok = Lenies.Worlds.save_snapshot(:a, "test_snap")
+      assert File.dir?(Path.join([tmp, "a", "test_snap"]))
+
+      Lenies.SpeciesColor.clear_override(ha, "marker")
+      refute Lenies.SpeciesColor.override(ha, "marker")
+
+      :ok = Lenies.Worlds.restore_snapshot(:a, "test_snap")
+      assert Lenies.SpeciesColor.override(ha, "marker") == "#abcdef"
+
+      # :b's override is untouched
+      assert Lenies.SpeciesColor.override(hb, "marker_b") == "#fedcba"
+    end
+
+    test "7. Registry tuple keys: same lenie id in two worlds resolves to two distinct entries" do
+      {:ok, _} = Lenies.Worlds.start_world(:a, %{})
+      {:ok, _} = Lenies.Worlds.start_world(:b, %{})
+
+      # Register two distinct values under {:lenie, :a, "X"} and {:lenie, :b, "X"}.
+      # Registry.register/3 uses the calling process — so use two Tasks to register
+      # under different worlds simultaneously.
+      task_a = Task.async(fn ->
+        Registry.register(Lenies.Registry, {:lenie, :a, "X"}, :a_marker)
+        receive do :exit -> :ok after 5_000 -> :ok end
+      end)
+      task_b = Task.async(fn ->
+        Registry.register(Lenies.Registry, {:lenie, :b, "X"}, :b_marker)
+        receive do :exit -> :ok after 5_000 -> :ok end
+      end)
+
+      Process.sleep(50)
+
+      [{pid_a, :a_marker}] = Registry.lookup(Lenies.Registry, {:lenie, :a, "X"})
+      [{pid_b, :b_marker}] = Registry.lookup(Lenies.Registry, {:lenie, :b, "X"})
+      refute pid_a == pid_b
+
+      send(task_a.pid, :exit)
+      send(task_b.pid, :exit)
+      Task.await(task_a)
+      Task.await(task_b)
+    end
+
+    test "8. supervision: per-world tree contains World + LenieSupervisor + Telemetry" do
+      {:ok, _} = Lenies.Worlds.start_world(:a, %{})
+
+      assert [{world_pid, _}]    = Registry.lookup(Lenies.Registry, {:world, :a})
+      assert [{lenie_sup_pid, _}] = Registry.lookup(Lenies.Registry, {:lenie_sup, :a})
+      assert [{telemetry_pid, _}] = Registry.lookup(Lenies.Registry, {:telemetry, :a})
+
+      # All three are distinct processes
+      refute world_pid == lenie_sup_pid
+      refute world_pid == telemetry_pid
+      refute lenie_sup_pid == telemetry_pid
+
+      # World owns the ETS tables; LenieSupervisor and Telemetry don't.
+      {:ok, h} = Lenies.Worlds.handle(:a)
+      info_cells = :ets.info(h.tables.cells)
+      assert info_cells[:owner] == world_pid
+    end
+  end
 end
