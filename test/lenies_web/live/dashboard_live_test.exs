@@ -165,18 +165,24 @@ defmodule LeniesWeb.DashboardLiveTest do
     assert pop_after >= pop_before + 1
   end
 
-  test "Tuning slider changes Application config in place", %{conn: conn} do
-    original = Application.get_env(:lenies, :radiation_per_tick)
-    Application.put_env(:lenies, :radiation_per_tick, 100)
+  test "Tuning slider mutates the primary world's state.config in place", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/")
+
+    {:ok, handle} = Lenies.Worlds.handle(:primary)
+    original = :sys.get_state(handle.pid).config.radiation_per_tick
 
     view
     |> element("#tune-radiation_per_tick form")
     |> render_change(%{"key" => "radiation_per_tick", "value" => "250"})
 
-    assert Application.get_env(:lenies, :radiation_per_tick) == 250
+    # The tune_param handler now hits Lenies.Worlds.tune/3, which writes to
+    # state.config and broadcasts {:config_changed, …}. Allow a beat for the
+    # synchronous call to land, then assert the world saw it.
+    Process.sleep(50)
+    assert :sys.get_state(handle.pid).config.radiation_per_tick == 250
 
-    Application.put_env(:lenies, :radiation_per_tick, original)
+    # restore original so subsequent tests aren't affected
+    :ok = Lenies.Worlds.tune(:primary, :radiation_per_tick, original)
   end
 
   test "Save snapshot button triggers Worlds.save_snapshot/2", %{conn: conn} do

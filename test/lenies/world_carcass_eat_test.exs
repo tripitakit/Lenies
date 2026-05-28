@@ -87,15 +87,8 @@ defmodule Lenies.WorldCarcassEatTest do
   test ":eat mixed cell conserves energy (energy == carcass_taken + resource_taken)" do
     {:ok, _pid} = Lenies.WorldTestHelpers.start_primary()
 
-    # Set eat_amount explicitly to avoid config dependency
-    original_eat_amount = Application.get_env(:lenies, :eat_amount)
-    Application.put_env(:lenies, :eat_amount, 15)
-
-    on_exit(fn ->
-      if original_eat_amount,
-        do: Application.put_env(:lenies, :eat_amount, original_eat_amount),
-        else: Application.delete_env(:lenies, :eat_amount)
-    end)
+    # World already booted; mutate state.config live via the facade.
+    :ok = Lenies.Worlds.tune(:primary, :eat_amount, 15)
 
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {8, 8})
     # carcass=5 < eat_amount=15, so carcass_taken=5, remaining=10, resource_taken=min(20,10)=10
@@ -148,14 +141,8 @@ defmodule Lenies.WorldCarcassEatTest do
   test "repeatedly eating a carcass creates no energy (sum == carcass, not 1.5x)" do
     {:ok, _pid} = Lenies.WorldTestHelpers.start_primary()
 
-    original_eat_amount = Application.get_env(:lenies, :eat_amount)
-    Application.put_env(:lenies, :eat_amount, 20)
-
-    on_exit(fn ->
-      if original_eat_amount,
-        do: Application.put_env(:lenies, :eat_amount, original_eat_amount),
-        else: Application.delete_env(:lenies, :eat_amount)
-    end)
+    # World already booted; mutate state.config live via the facade.
+    :ok = Lenies.Worlds.tune(:primary, :eat_amount, 20)
 
     carcass = 1000
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {9, 9})

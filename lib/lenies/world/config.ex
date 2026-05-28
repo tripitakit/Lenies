@@ -9,16 +9,21 @@ defmodule Lenies.World.Config do
   whitelist, snapshot root, reconcile interval) stay in `Lenies.Config`.
   """
 
-  defstruct radiation_per_tick: 0.05,
-            eat_amount: 100.0,
-            carcass_decay: 0.01,
+  # Field defaults intentionally match the historical
+  # `Application.get_env(:lenies, key, <default>)` fallbacks used pre-Task-5
+  # (see the removed `@cfg_defaults` in Lenies.World). Tests that
+  # `Application.delete_env(:lenies, key)` on_exit expect this fallback to
+  # match the pre-refactor behaviour.
+  defstruct radiation_per_tick: 100,
+            eat_amount: 20,
+            carcass_decay: 0.05,
             lenie_metabolize_delay_ms: 0,
             tick_interval_ms: 100,
-            copy_substitution_rate: 0.001,
+            copy_substitution_rate: 0.005,
             copy_insert_rate: 0.0005,
             copy_delete_rate: 0.0005,
-            background_mutation_rate_per_1000_ticks: 0.0,
-            attack_damage: 50,
+            background_mutation_rate_per_1000_ticks: 1,
+            attack_damage: 10,
             grid_width: 256,
             grid_height: 256
 
@@ -31,16 +36,16 @@ defmodule Lenies.World.Config do
   @spec defaults() :: t()
   def defaults do
     %__MODULE__{
-      radiation_per_tick: get(:radiation_per_tick, 0.05),
-      eat_amount: get(:eat_amount, 100.0),
-      carcass_decay: get(:carcass_decay, 0.01),
+      radiation_per_tick: get(:radiation_per_tick, 100),
+      eat_amount: get(:eat_amount, 20),
+      carcass_decay: get(:carcass_decay, 0.05),
       lenie_metabolize_delay_ms: get(:lenie_metabolize_delay_ms, 0),
       tick_interval_ms: get(:tick_interval_ms, 100),
-      copy_substitution_rate: get(:copy_substitution_rate, 0.001),
+      copy_substitution_rate: get(:copy_substitution_rate, 0.005),
       copy_insert_rate: get(:copy_insert_rate, 0.0005),
       copy_delete_rate: get(:copy_delete_rate, 0.0005),
-      background_mutation_rate_per_1000_ticks: get(:background_mutation_rate_per_1000_ticks, 0.0),
-      attack_damage: get(:attack_damage, 50),
+      background_mutation_rate_per_1000_ticks: get(:background_mutation_rate_per_1000_ticks, 1),
+      attack_damage: get(:attack_damage, 10),
       grid_width: get(:grid_width, 256),
       grid_height: get(:grid_height, 256)
     }

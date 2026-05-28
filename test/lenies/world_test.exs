@@ -153,7 +153,8 @@ defmodule Lenies.WorldTest do
     end
 
     test "cached total_carcass equals direct sum after seeding carcass and ticking" do
-      Application.put_env(:lenies, :carcass_decay, 0.1)
+      # World already booted in setup; mutate state.config live via the facade.
+      :ok = Lenies.Worlds.tune(:primary, :carcass_decay, 0.1)
       on_exit(fn -> Application.put_env(:lenies, :carcass_decay, 0) end)
 
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {7, 7})
@@ -169,7 +170,8 @@ defmodule Lenies.WorldTest do
     end
 
     test "carcass total decreases across ticks when decay is enabled" do
-      Application.put_env(:lenies, :carcass_decay, 0.2)
+      # World already booted in setup; mutate state.config live via the facade.
+      :ok = Lenies.Worlds.tune(:primary, :carcass_decay, 0.2)
       on_exit(fn -> Application.put_env(:lenies, :carcass_decay, 0) end)
 
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {3, 3})
@@ -190,7 +192,8 @@ defmodule Lenies.WorldTest do
     test "cached total_carcass after decay matches fresh fold (totals-drift canary)" do
       # This test would catch a bug where we cache the PRE-decay carcass
       # rather than the post-decay value.
-      Application.put_env(:lenies, :carcass_decay, 0.5)
+      # World already booted in setup; mutate state.config live via the facade.
+      :ok = Lenies.Worlds.tune(:primary, :carcass_decay, 0.5)
       on_exit(fn -> Application.put_env(:lenies, :carcass_decay, 0) end)
 
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {15, 15})
@@ -223,14 +226,8 @@ defmodule Lenies.WorldTest do
     end
 
     test "eating the last carcass unit clears carcass_hue" do
-      original_eat_amount = Application.get_env(:lenies, :eat_amount)
-      Application.put_env(:lenies, :eat_amount, 50)
-
-      on_exit(fn ->
-        if original_eat_amount,
-          do: Application.put_env(:lenies, :eat_amount, original_eat_amount),
-          else: Application.delete_env(:lenies, :eat_amount)
-      end)
+      # World already booted in setup; mutate state.config live via the facade.
+      :ok = Lenies.Worlds.tune(:primary, :eat_amount, 50)
 
       # Plant a cell with carcass = 5 (less than eat_amount) and a hue marker
       :ets.insert(
@@ -246,14 +243,8 @@ defmodule Lenies.WorldTest do
     end
 
     test "eating but leaving some carcass preserves carcass_hue" do
-      original_eat_amount = Application.get_env(:lenies, :eat_amount)
-      Application.put_env(:lenies, :eat_amount, 3)
-
-      on_exit(fn ->
-        if original_eat_amount,
-          do: Application.put_env(:lenies, :eat_amount, original_eat_amount),
-          else: Application.delete_env(:lenies, :eat_amount)
-      end)
+      # World already booted in setup; mutate state.config live via the facade.
+      :ok = Lenies.Worlds.tune(:primary, :eat_amount, 3)
 
       :ets.insert(
         Lenies.WorldTestHelpers.cells(),
