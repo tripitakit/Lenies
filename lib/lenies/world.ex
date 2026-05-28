@@ -484,9 +484,9 @@ defmodule Lenies.World do
         # Pick a random Lenie's id
         {id, _record} = Enum.random(records)
 
-        case Lenies.Registry.whereis(id) do
-          pid when is_pid(pid) -> send(pid, :background_mutate)
-          _ -> :ok
+        case Registry.lookup(Lenies.Registry, id) do
+          [{pid, _}] -> send(pid, :background_mutate)
+          [] -> :ok
         end
     end
   end
@@ -538,7 +538,7 @@ defmodule Lenies.World do
       stale_cell_keys =
         :ets.foldl(
           fn {key, cell}, acc ->
-            if is_binary(cell.lenie_id) and not is_pid(Lenies.Registry.whereis(cell.lenie_id)) do
+            if is_binary(cell.lenie_id) and Registry.lookup(Lenies.Registry, cell.lenie_id) == [] do
               [key | acc]
             else
               acc
@@ -560,7 +560,7 @@ defmodule Lenies.World do
       stale_lenie_ids =
         :ets.foldl(
           fn {id, _record}, acc ->
-            if not is_pid(Lenies.Registry.whereis(id)) do
+            if Registry.lookup(Lenies.Registry, id) == [] do
               [id | acc]
             else
               acc
@@ -741,9 +741,9 @@ defmodule Lenies.World do
         # Send async damage message to the target Lenie, including the
         # attacker id so the victim can reward the attacker with exactly
         # what it actually lost (energy conservation fix).
-        case Lenies.Registry.whereis(target_id) do
-          pid when is_pid(pid) -> send(pid, {:take_damage, damage, attacker_id})
-          _ -> :ok
+        case Registry.lookup(Lenies.Registry, target_id) do
+          [{pid, _}] -> send(pid, {:take_damage, damage, attacker_id})
+          [] -> :ok
         end
 
         {{:ok, {result_tag, damage}}, state}

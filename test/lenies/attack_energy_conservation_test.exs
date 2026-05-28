@@ -334,7 +334,7 @@ defmodule Lenies.AttackEnergyConservationTest do
 
       _fake_attacker =
         spawn(fn ->
-          {:ok, _} = Lenies.Registry.register(attacker_id)
+          {:ok, _} = Registry.register(Lenies.Registry, attacker_id, nil)
           # Signal the test that registration is complete so there is no race.
           send(test_pid, {:registered, attacker_id})
 
@@ -391,7 +391,7 @@ defmodule Lenies.AttackEnergyConservationTest do
 
       _fake_attacker =
         spawn(fn ->
-          {:ok, _} = Lenies.Registry.register(attacker_id)
+          {:ok, _} = Registry.register(Lenies.Registry, attacker_id, nil)
           # Signal the test that registration is complete so there is no race.
           send(test_pid, {:registered, attacker_id})
 

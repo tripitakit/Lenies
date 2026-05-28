@@ -46,6 +46,14 @@ defmodule Lenies.WorldReconcileTest do
     :ok
   end
 
+  # Look up a Lenie by id via the OTP Registry. Returns the pid or nil.
+  defp whereis(id) do
+    case Registry.lookup(Lenies.Registry, id) do
+      [{pid, _}] -> pid
+      [] -> nil
+    end
+  end
+
   # Poll until `fun.()` is truthy, or `retries` × 10 ms have elapsed.
   defp wait_until(fun, retries \\ 100) do
     if fun.() do
@@ -69,7 +77,7 @@ defmodule Lenies.WorldReconcileTest do
       codeome = Codeome.from_list([:nop_0, :nop_0, :nop_0])
       {:ok, {lenie_id, pos}} = World.spawn_lenie(codeome, energy: 500.0)
 
-      pid = Lenies.Registry.whereis(lenie_id)
+      pid = whereis(lenie_id)
       assert is_pid(pid), "Lenie should be alive after spawn"
 
       # Verify the cell is occupied
@@ -85,7 +93,7 @@ defmodule Lenies.WorldReconcileTest do
 
       # Wait until Registry auto-purges the entry (Registry ETS is updated
       # asynchronously by the Registry GenServer after the process DOWN)
-      :ok = wait_until(fn -> Lenies.Registry.whereis(lenie_id) == nil end)
+      :ok = wait_until(fn -> whereis(lenie_id) == nil end)
 
       # Before reconcile: cell is still marked occupied, :lenies record still exists
       [{_, cell_stale}] = :ets.lookup(:cells, pos)
@@ -115,7 +123,7 @@ defmodule Lenies.WorldReconcileTest do
       codeome = Codeome.from_list([:nop_0, :nop_0, :nop_0])
       {:ok, {lenie_id, pos}} = World.spawn_lenie(codeome, energy: 500.0)
 
-      pid = Lenies.Registry.whereis(lenie_id)
+      pid = whereis(lenie_id)
       assert is_pid(pid)
 
       # Wait for the Lenie's initial snapshot to appear in :lenies

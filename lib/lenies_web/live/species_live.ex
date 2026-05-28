@@ -54,8 +54,8 @@ defmodule LeniesWeb.SpeciesLive do
   end
 
   defp fetch_sample_codeome(sample_id) do
-    case Lenies.Registry.whereis(sample_id) do
-      pid when is_pid(pid) ->
+    case Registry.lookup(Lenies.Registry, sample_id) do
+      [{pid, _}] ->
         try do
           case GenServer.call(pid, :get_codeome) do
             {:ok, codeome} -> Disassembler.disassemble(codeome, nil)
@@ -65,7 +65,7 @@ defmodule LeniesWeb.SpeciesLive do
           :exit, _ -> []
         end
 
-      _ ->
+      [] ->
         []
     end
   end

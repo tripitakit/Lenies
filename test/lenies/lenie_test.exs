@@ -46,7 +46,7 @@ defmodule Lenies.LenieTest do
       )
 
     assert Process.alive?(pid)
-    assert Lenies.Registry.whereis("L1") == pid
+    assert [{^pid, _}] = Registry.lookup(Lenies.Registry, "L1")
 
     GenServer.stop(pid)
   end

@@ -154,7 +154,7 @@ defmodule Lenies.WorldReplicationTest do
       assert Lenies.World.ChildSlots.get(slot_id) == :not_found
 
       # child registered as Lenie process
-      child_pid = Lenies.Registry.whereis(child_id)
+      [{child_pid, _}] = Registry.lookup(Lenies.Registry, child_id)
       assert is_pid(child_pid)
       assert Process.alive?(child_pid)
 

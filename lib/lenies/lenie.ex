@@ -81,7 +81,7 @@ defmodule Lenies.Lenie do
       error_logger: false
     })
 
-    {:ok, _} = Lenies.Registry.register(id)
+    {:ok, _} = Registry.register(Lenies.Registry, id, nil)
 
     interp = State.new(energy: energy, pos: pos, dir: dir)
 
@@ -269,9 +269,9 @@ defmodule Lenies.Lenie do
 
     # Reward the attacker with exactly what this victim lost.
     # Do this BEFORE returning {:stop, ...} so a dying victim still pays out.
-    case Lenies.Registry.whereis(attacker_id) do
-      pid when is_pid(pid) -> send(pid, {:attack_reward, actual})
-      _ -> :ok
+    case Registry.lookup(Lenies.Registry, attacker_id) do
+      [{pid, _}] -> send(pid, {:attack_reward, actual})
+      [] -> :ok
     end
 
     if new_energy <= 0 do
@@ -454,11 +454,11 @@ defmodule Lenies.Lenie do
             conjugate_failure(interp)
 
           [{_, %{lenie_id: recipient_id}}] when is_binary(recipient_id) ->
-            case Lenies.Registry.whereis(recipient_id) do
-              recipient_pid when is_pid(recipient_pid) ->
+            case Registry.lookup(Lenies.Registry, recipient_id) do
+              [{recipient_pid, _}] ->
                 attempt_transfer(interp, donor_id, recipient_pid, recipient_id, plasmid_opcodes)
 
-              nil ->
+              [] ->
                 conjugate_failure(interp)
             end
 

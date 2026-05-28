@@ -48,7 +48,7 @@ defmodule Lenies.WorldSpawnTest do
     [{_, cell}] = :ets.lookup(:cells, {x, y})
     assert cell.lenie_id == lenie_id
 
-    pid = Lenies.Registry.whereis(lenie_id)
+    [{pid, _}] = Registry.lookup(Lenies.Registry, lenie_id)
     assert is_pid(pid)
     Process.unlink(pid)
     GenServer.stop(pid)

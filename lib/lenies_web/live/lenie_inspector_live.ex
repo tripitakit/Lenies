@@ -30,8 +30,8 @@ defmodule LeniesWeb.LenieInspectorLive do
   defp load_lenie(socket) do
     id = socket.assigns.id
 
-    case Lenies.Registry.whereis(id) do
-      pid when is_pid(pid) ->
+    case Registry.lookup(Lenies.Registry, id) do
+      [{pid, _}] ->
         snap =
           try do
             Lenies.Lenie.inspect_state(pid)
@@ -48,7 +48,7 @@ defmodule LeniesWeb.LenieInspectorLive do
           assign(socket, :found?, false)
         end
 
-      _ ->
+      [] ->
         case :ets.lookup(:lenies, id) do
           [{^id, snap}] ->
             socket
@@ -86,9 +86,9 @@ defmodule LeniesWeb.LenieInspectorLive do
         |> assign(:found?, true)
 
       socket =
-        case Lenies.Registry.whereis(snap.id) do
-          pid when is_pid(pid) -> assign(socket, :codeome_lines, fetch_codeome_lines(pid, snap))
-          _ -> socket
+        case Registry.lookup(Lenies.Registry, snap.id) do
+          [{pid, _}] -> assign(socket, :codeome_lines, fetch_codeome_lines(pid, snap))
+          [] -> socket
         end
 
       {:noreply, socket}
