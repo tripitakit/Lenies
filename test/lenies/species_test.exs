@@ -11,7 +11,7 @@ defmodule Lenies.SpeciesTest do
     :ets.delete_all_objects(handle.tables.lenies)
 
     on_exit(fn ->
-      case Process.whereis(Lenies.World) do
+      case Lenies.WorldTestHelpers.world_pid() do
         pid when is_pid(pid) ->
           try do
             GenServer.stop(pid)

@@ -3,16 +3,17 @@ defmodule Lenies.TelemetryTest do
 
   alias Lenies.World
   alias Lenies.World.Tables
+  alias Lenies.WorldTestHelpers
 
   setup do
     on_exit(fn ->
-      for name <- [Lenies.Telemetry, Lenies.World] do
-        case Process.whereis(name) do
-          pid when is_pid(pid) ->
-            if Process.alive?(pid), do: GenServer.stop(pid)
-
-          _ ->
-            :ok
+      for pid <- [WorldTestHelpers.telemetry_pid(), WorldTestHelpers.world_pid()] do
+        if is_pid(pid) and Process.alive?(pid) do
+          try do
+            GenServer.stop(pid)
+          catch
+            :exit, _ -> :ok
+          end
         end
       end
 
@@ -22,9 +23,15 @@ defmodule Lenies.TelemetryTest do
     :ok
   end
 
+  # Synchronously drain Telemetry's mailbox so any pending {:tick, _} or
+  # {:sterilized, _} message has been processed before we read history.
+  defp drain_telemetry do
+    :sys.get_state(WorldTestHelpers.telemetry_pid())
+  end
+
   test "records a history entry on each world tick" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
-    {:ok, _tel} = Lenies.Telemetry.start_link([])
+    {:ok, _tel} = Lenies.Telemetry.start_link(world_id: :primary)
 
     World.tick_now()
     World.tick_now()
@@ -33,7 +40,7 @@ defmodule Lenies.TelemetryTest do
     # tempo di propagazione del PubSub; :sys.get_state/1 drena la mailbox prima
     # di leggere la storia
     Process.sleep(50)
-    :sys.get_state(Lenies.Telemetry)
+    drain_telemetry()
 
     entries = Lenies.Telemetry.history(:last_n, 10)
     assert length(entries) == 3
@@ -48,7 +55,7 @@ defmodule Lenies.TelemetryTest do
 
   test "ring buffer keeps at most max_entries" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
-    {:ok, _tel} = Lenies.Telemetry.start_link(max_entries: 5)
+    {:ok, _tel} = Lenies.Telemetry.start_link(world_id: :primary, max_entries: 5)
 
     for _ <- 1..20, do: World.tick_now()
     Process.sleep(100)
@@ -66,7 +73,7 @@ defmodule Lenies.TelemetryTest do
   describe "ring buffer O(1) eviction — correct oldest-entry removal" do
     setup do
       {:ok, _world} = World.start_link(tick_interval_ms: 0)
-      {:ok, _tel} = Lenies.Telemetry.start_link(max_entries: 3)
+      {:ok, _tel} = Lenies.Telemetry.start_link(world_id: :primary, max_entries: 3)
       :ok
     end
 
@@ -85,13 +92,13 @@ defmodule Lenies.TelemetryTest do
     test "buffer size is capped at max_entries after overflow" do
       for _ <- 1..7, do: send_tick(nil)
       # Drain Telemetry mailbox synchronously
-      :sys.get_state(Lenies.Telemetry)
+      drain_telemetry()
       assert :ets.info(Lenies.WorldTestHelpers.history(), :size) == 3
     end
 
     test "retained entries are the most recent ones (oldest evicted)" do
       for _ <- 1..6, do: send_tick(nil)
-      :sys.get_state(Lenies.Telemetry)
+      drain_telemetry()
 
       entries = Lenies.Telemetry.history(:all)
       assert length(entries) == 3
@@ -105,14 +112,14 @@ defmodule Lenies.TelemetryTest do
       # Sterilize resets counter to 0 in Telemetry; subsequent ticks should
       # still evict oldest correctly.
       for _ <- 1..4, do: send_tick(nil)
-      :sys.get_state(Lenies.Telemetry)
+      drain_telemetry()
 
       World.sterilize()
       # sterilize broadcasts {:sterilized, ts} which resets Telemetry counter
-      :sys.get_state(Lenies.Telemetry)
+      drain_telemetry()
 
       for _ <- 1..5, do: send_tick(nil)
-      :sys.get_state(Lenies.Telemetry)
+      drain_telemetry()
 
       assert :ets.info(Lenies.WorldTestHelpers.history(), :size) == 3
       entries = Lenies.Telemetry.history(:all)

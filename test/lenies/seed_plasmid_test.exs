@@ -23,7 +23,7 @@ defmodule Lenies.SeedPlasmidTest do
       Application.delete_env(:lenies, :eat_amount)
       Application.delete_env(:lenies, :interpreter_steps_per_batch)
 
-      case Process.whereis(Lenies.LenieSupervisor) do
+      case Lenies.WorldTestHelpers.lenie_sup_pid() do
         sup when is_pid(sup) ->
           DynamicSupervisor.which_children(sup)
           |> Enum.each(fn {_, child, _, _} ->
@@ -34,26 +34,14 @@ defmodule Lenies.SeedPlasmidTest do
           :ok
       end
 
-      case Process.whereis(Lenies.World) do
-        pid when is_pid(pid) ->
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-
-        _ ->
-          :ok
-      end
-
-      Tables.delete_all()
+      Lenies.WorldTestHelpers.stop_primary()
     end)
 
     :ok
   end
 
   test "MR-Twitch moves on both x and y axes (twitch signature)" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = Lenies.WorldTestHelpers.start_primary()
 
     # Use 2000 resource so the Lenie (which random-walks due to Twitch) does not
     # deplete local food before it has a chance to move off-axis.
@@ -97,7 +85,7 @@ defmodule Lenies.SeedPlasmidTest do
   end
 
   test "MR-Twitch infects an adjacent vanilla MR" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = Lenies.WorldTestHelpers.start_primary()
 
     # Use 2000 resource so the Twitch Lenie (random-walk) and vanilla MR both
     # survive long enough to meet and perform conjugation.
@@ -162,7 +150,7 @@ defmodule Lenies.SeedPlasmidTest do
   end
 
   test "two MR-Twitch Lenies facing each other both survive (no deadlock crash)" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = Lenies.WorldTestHelpers.start_primary()
 
     # Use 2000 resource: both Lenies random-walk (Twitch) and need enough food
     # to survive the 2.5s observation window without starving.

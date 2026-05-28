@@ -32,7 +32,7 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
       Application.delete_env(:lenies, :eat_amount)
       Application.delete_env(:lenies, :interpreter_steps_per_batch)
 
-      case Process.whereis(Lenies.LenieSupervisor) do
+      case Lenies.WorldTestHelpers.lenie_sup_pid() do
         sup_pid when is_pid(sup_pid) ->
           DynamicSupervisor.which_children(sup_pid)
           |> Enum.each(fn {_, child_pid, _, _} ->
@@ -43,26 +43,14 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
           :ok
       end
 
-      case Process.whereis(Lenies.World) do
-        pid when is_pid(pid) ->
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-
-        _ ->
-          :ok
-      end
-
-      Tables.delete_all()
+      Lenies.WorldTestHelpers.stop_primary()
     end)
 
     :ok
   end
 
   test "minimal_replicator reaches at least generation 3 in 30 seconds" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = Lenies.WorldTestHelpers.start_primary()
 
     # Seed a large biomass area. With the Twitch plasmid in the expressed codeome,
     # offspring do a random walk rather than a straight march, so the colony
@@ -133,7 +121,7 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
     # from energy halving (parent keeps ~half after divide) across many generations.
     Application.put_env(:lenies, :eat_amount, 2000)
 
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = Lenies.WorldTestHelpers.start_primary()
 
     # Seed the full grid with abundant food so each eat() can draw 2000 units
     for x <- 0..254, y <- 0..254 do

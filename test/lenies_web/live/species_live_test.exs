@@ -9,7 +9,7 @@ defmodule LeniesWeb.SpeciesLiveTest do
   setup :register_and_log_in_user
 
   setup do
-    case Process.whereis(Lenies.World) do
+    case Lenies.WorldTestHelpers.world_pid() do
       nil ->
         {:ok, _} = World.start_link(tick_interval_ms: 0)
 
@@ -18,7 +18,7 @@ defmodule LeniesWeb.SpeciesLiveTest do
     end
 
     on_exit(fn ->
-      case Process.whereis(Lenies.World) do
+      case Lenies.WorldTestHelpers.world_pid() do
         pid when is_pid(pid) ->
           try do
             GenServer.stop(pid)

@@ -43,11 +43,11 @@ defmodule Lenies.WorldsTest do
     end
 
     test "primary World exposes a handle with the right tids" do
-      handle = GenServer.call(Lenies.World, :get_handle)
+      handle = Lenies.Worlds.primary_handle()
       assert %Lenies.WorldHandle{id: :primary, pubsub_prefix: "world:primary"} = handle
       assert is_reference(handle.tables.cells)
       assert is_reference(handle.tables.lenies)
-      assert handle.pid == Process.whereis(Lenies.World)
+      assert handle.pid == Lenies.WorldTestHelpers.world_pid()
     end
   end
 
@@ -130,6 +130,16 @@ defmodule Lenies.WorldsTest do
     end
 
     test ":primary's LenieSupervisor is registered under {:lenie_sup, :primary}" do
+      # In test env (auto_start_simulation: false) the Application does not
+      # start the :primary world, so spin it up here via the Worlds facade.
+      {:ok, sup_pid} = Lenies.Worlds.start_world(:primary, %{tick_interval_ms: 0})
+
+      on_exit(fn ->
+        Lenies.Worlds.stop_world(:primary)
+        if Process.alive?(sup_pid), do: Process.exit(sup_pid, :kill)
+        Lenies.World.Tables.delete_all()
+      end)
+
       assert [{_pid, _}] = Registry.lookup(Lenies.Registry, {:lenie_sup, :primary})
     end
 
@@ -153,6 +163,44 @@ defmodule Lenies.WorldsTest do
       end)
 
       assert [{_pid, _}] = Registry.lookup(Lenies.Registry, {:telemetry, :primary})
+    end
+  end
+
+  describe "boot migration (T10 smoke)" do
+    setup do
+      # auto_start_simulation: false in test env, so spin up :primary via the
+      # Worlds facade exactly the same way Application would in production.
+      {:ok, _sup} = Lenies.Worlds.start_world(:primary, %{})
+
+      on_exit(fn ->
+        Lenies.Worlds.stop_world(:primary)
+        Lenies.World.Tables.delete_all()
+      end)
+
+      :ok
+    end
+
+    test ":primary world is registered via Lenies.Registry, not the global atom" do
+      # The global atom name is gone.
+      assert is_nil(Process.whereis(Lenies.World))
+      # Registry has it.
+      assert [{_pid, _}] = Registry.lookup(Lenies.Registry, {:world, :primary})
+    end
+
+    test ":primary's LenieSupervisor/Telemetry no longer have global names" do
+      assert is_nil(Process.whereis(Lenies.LenieSupervisor))
+      assert is_nil(Process.whereis(Lenies.Telemetry))
+      assert [{_, _}] = Registry.lookup(Lenies.Registry, {:lenie_sup, :primary})
+      assert [{_, _}] = Registry.lookup(Lenies.Registry, {:telemetry, :primary})
+    end
+
+    test ":primary world's supervisor is under Lenies.Worlds.Supervisor" do
+      assert [{sup_pid, _}] = Registry.lookup(Lenies.Registry, {:world_sup, :primary})
+
+      assert Enum.any?(DynamicSupervisor.which_children(Lenies.Worlds.Supervisor), fn
+               {_, ^sup_pid, _, _} -> true
+               _ -> false
+             end)
     end
   end
 end

@@ -1,6 +1,7 @@
 defmodule Lenies.WorldTestHelpers do
   @moduledoc ~S"""
-  Shorthand helpers for tests that operate on the primary world's ETS tables.
+  Shorthand helpers for tests that operate on the primary world's ETS tables
+  and processes.
 
   Pre-T6 tests freely accessed the per-world ETS tables by bare atom name
   (`:ets.lookup(:cells, ...)`) because the `:primary` world's tables were
@@ -12,6 +13,13 @@ defmodule Lenies.WorldTestHelpers do
       :ets.insert(handle.tables.cells, ...)
 
   — or use these helpers, which look up the handle on each call.
+
+  Post-T10 the `:primary` World is registered only via
+  `{:via, Registry, {Lenies.Registry, {:world, :primary}}}`, NOT the global
+  atom `Lenies.World`. Tests that previously called
+  `Process.whereis(Lenies.World)` to check liveness should call
+  `world_pid/0` instead; same for the per-world LenieSupervisor and
+  Telemetry.
   """
 
   @doc "ETS tid for the primary world's `:cells` table."
@@ -25,4 +33,60 @@ defmodule Lenies.WorldTestHelpers do
 
   @doc "ETS tid for the primary world's `:history` table."
   def history, do: Lenies.Worlds.primary_handle().tables.history
+
+  @doc "Pid of the running `:primary` World GenServer, or nil if not running."
+  def world_pid do
+    case Registry.lookup(Lenies.Registry, {:world, :primary}) do
+      [{pid, _}] -> pid
+      [] -> nil
+    end
+  end
+
+  @doc "Pid of the running `:primary` LenieSupervisor, or nil if not running."
+  def lenie_sup_pid do
+    case Registry.lookup(Lenies.Registry, {:lenie_sup, :primary}) do
+      [{pid, _}] -> pid
+      [] -> nil
+    end
+  end
+
+  @doc "Pid of the running `:primary` Telemetry, or nil if not running."
+  def telemetry_pid do
+    case Registry.lookup(Lenies.Registry, {:telemetry, :primary}) do
+      [{pid, _}] -> pid
+      [] -> nil
+    end
+  end
+
+  @doc """
+  Start the full `:primary` world (World + per-world LenieSupervisor +
+  Telemetry) the way `Lenies.Application` does in production, via
+  `Lenies.Worlds.start_world(:primary, …)`.
+
+  Returns the World GenServer pid (NOT the per-world supervisor pid) so
+  existing tests that match `{:ok, _world} = World.start_link(...)` can
+  simply replace the right-hand side with a call to this helper and the
+  semantics line up. The whole sub-tree is torn down in `on_exit` via
+  `stop_primary/0`.
+
+  Idempotent: if the primary world is already running, returns the
+  existing World pid.
+  """
+  def start_primary(config_overrides \\ %{tick_interval_ms: 0}) do
+    case Lenies.Worlds.start_world(:primary, config_overrides) do
+      {:ok, _sup_pid} -> {:ok, world_pid()}
+      {:error, {:already_started, _sup_pid}} -> {:ok, world_pid()}
+    end
+  end
+
+  @doc """
+  Stop the full `:primary` world tree (Supervisor + World +
+  LenieSupervisor + Telemetry) and clean up named-table fixtures.
+  Idempotent.
+  """
+  def stop_primary do
+    Lenies.Worlds.stop_world(:primary)
+    Lenies.World.Tables.delete_all()
+    :ok
+  end
 end

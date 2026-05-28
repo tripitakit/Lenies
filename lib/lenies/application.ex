@@ -33,21 +33,23 @@ defmodule Lenies.Application do
       Lenies.Worlds.Supervisor,
       Lenies.Snippets.Store,
       Lenies.Manual,
-      {Lenies.LenieSupervisor, world_id: :primary},
       LeniesWeb.Endpoint
     ]
-
-    children =
-      if Application.get_env(:lenies, :auto_start_simulation, true) do
-        children ++ [Lenies.World, {Lenies.Telemetry, world_id: :primary}]
-      else
-        children
-      end
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Lenies.Supervisor]
-    Supervisor.start_link(children, opts)
+
+    with {:ok, sup_pid} <- Supervisor.start_link(children, opts) do
+      # Start the :primary world via the Worlds facade — this brings up
+      # Lenies.World, its per-world LenieSupervisor and Telemetry under a
+      # per-world rest_for_one Supervisor (Lenies.World.Supervisor).
+      if Application.get_env(:lenies, :auto_start_simulation, true) do
+        {:ok, _} = Lenies.Worlds.start_world(:primary, %{})
+      end
+
+      {:ok, sup_pid}
+    end
   end
 
   # Tell Phoenix to update the endpoint configuration

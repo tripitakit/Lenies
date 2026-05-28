@@ -14,7 +14,7 @@ defmodule Lenies.SnapshotTest do
     Application.put_env(:lenies, :snapshot_root, root)
 
     on_exit(fn ->
-      case Process.whereis(Lenies.World) do
+      case Lenies.WorldTestHelpers.world_pid() do
         pid when is_pid(pid) ->
           try do
             GenServer.stop(pid)
@@ -136,7 +136,7 @@ defmodule Lenies.SnapshotTest do
       :ok = Snapshot.save_to_disk("owned")
       :ok = Snapshot.restore_from_disk("owned")
 
-      world = Process.whereis(Lenies.World)
+      world = Lenies.WorldTestHelpers.world_pid()
 
       for table <- [:cells, :lenies, :child_slots, :history] do
         tid = Map.fetch!(h().tables, table)

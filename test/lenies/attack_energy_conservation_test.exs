@@ -13,7 +13,7 @@ defmodule Lenies.AttackEnergyConservationTest do
 
   setup do
     on_exit(fn ->
-      case Process.whereis(Lenies.LenieSupervisor) do
+      case Lenies.WorldTestHelpers.lenie_sup_pid() do
         sup_pid when is_pid(sup_pid) ->
           DynamicSupervisor.which_children(sup_pid)
           |> Enum.each(fn {_, child_pid, _, _} ->
@@ -24,7 +24,7 @@ defmodule Lenies.AttackEnergyConservationTest do
           :ok
       end
 
-      case Process.whereis(Lenies.World) do
+      case Lenies.WorldTestHelpers.world_pid() do
         pid when is_pid(pid) ->
           try do
             GenServer.stop(pid)

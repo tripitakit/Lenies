@@ -6,30 +6,8 @@ defmodule LeniesWeb.DashboardLiveTest do
   setup :register_and_log_in_user
 
   setup do
-    case Process.whereis(Lenies.World) do
-      nil ->
-        {:ok, _} = Lenies.World.start_link(tick_interval_ms: 0)
-
-      _ ->
-        :ok
-    end
-
-    on_exit(fn ->
-      case Process.whereis(Lenies.World) do
-        pid when is_pid(pid) ->
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-
-        _ ->
-          :ok
-      end
-
-      Lenies.World.Tables.delete_all()
-    end)
-
+    {:ok, _} = Lenies.WorldTestHelpers.start_primary()
+    on_exit(&Lenies.WorldTestHelpers.stop_primary/0)
     :ok
   end
 

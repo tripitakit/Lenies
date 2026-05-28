@@ -6,37 +6,25 @@ defmodule Lenies.WorldCarcassEatTest do
 
   setup do
     on_exit(fn ->
-      case Process.whereis(Lenies.World) do
-        pid when is_pid(pid) ->
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-
-        _ ->
-          :ok
-      end
-
-      Tables.delete_all()
+      Lenies.WorldTestHelpers.stop_primary()
     end)
 
     :ok
   end
 
   test "lenie_died accumulates carcass instead of replacing" do
-    {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+    {:ok, _pid} = Lenies.WorldTestHelpers.start_primary()
 
     World.lenie_died("dead1", {3, 3}, 20.0, "test-hash")
     # wait for the async cast to complete
-    GenServer.call(Lenies.World, :tick_now)
+    World.tick_now()
 
     [{_, cell1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {3, 3})
     # 20 * 0.5 = 10
     assert cell1.carcass == 10
 
     World.lenie_died("dead2", {3, 3}, 30.0, "test-hash")
-    GenServer.call(Lenies.World, :tick_now)
+    World.tick_now()
 
     [{_, cell2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {3, 3})
     # Existing 10 + new 15 (30*0.5) = 25, possibly minus 5% decay from one tick
@@ -45,7 +33,7 @@ defmodule Lenies.WorldCarcassEatTest do
 
   # MH3: updated from 1.5x to 1:1 energy conservation
   test ":eat consumes carcass first, energy 1:1 (no bonus)" do
-    {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+    {:ok, _pid} = Lenies.WorldTestHelpers.start_primary()
 
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 50, carcass: 10}})
@@ -64,7 +52,7 @@ defmodule Lenies.WorldCarcassEatTest do
 
   # MH3: conservation check — carcass-only cell, carcass ≤ eat_amount
   test ":eat on carcass-only cell conserves energy (carcass_taken == energy_gained)" do
-    {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+    {:ok, _pid} = Lenies.WorldTestHelpers.start_primary()
 
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {6, 6})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 0, carcass: 8}})
@@ -81,7 +69,7 @@ defmodule Lenies.WorldCarcassEatTest do
 
   # MH3: conservation check — carcass-only partial (carcass > eat_amount)
   test ":eat on carcass-only cell with carcass > eat_amount yields exactly eat_amount" do
-    {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+    {:ok, _pid} = Lenies.WorldTestHelpers.start_primary()
 
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {7, 7})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 0, carcass: 100}})
@@ -97,7 +85,7 @@ defmodule Lenies.WorldCarcassEatTest do
 
   # MH3: conservation in mixed cell — energy_gained == carcass_taken + resource_taken
   test ":eat mixed cell conserves energy (energy == carcass_taken + resource_taken)" do
-    {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+    {:ok, _pid} = Lenies.WorldTestHelpers.start_primary()
 
     # Set eat_amount explicitly to avoid config dependency
     original_eat_amount = Application.get_env(:lenies, :eat_amount)
@@ -123,7 +111,7 @@ defmodule Lenies.WorldCarcassEatTest do
   end
 
   test ":eat falls through to resource when carcass empty" do
-    {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+    {:ok, _pid} = Lenies.WorldTestHelpers.start_primary()
 
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 30}})
@@ -137,7 +125,7 @@ defmodule Lenies.WorldCarcassEatTest do
   end
 
   test ":eat takes carcass + resource if both present and eat_amount is large" do
-    {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+    {:ok, _pid} = Lenies.WorldTestHelpers.start_primary()
 
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 50, carcass: 5}})
@@ -158,7 +146,7 @@ defmodule Lenies.WorldCarcassEatTest do
   # loop — accumulated without bound (detritus blew up to ~1e23). With 1:1
   # conservation the total extracted equals exactly the carcass, never more.
   test "repeatedly eating a carcass creates no energy (sum == carcass, not 1.5x)" do
-    {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+    {:ok, _pid} = Lenies.WorldTestHelpers.start_primary()
 
     original_eat_amount = Application.get_env(:lenies, :eat_amount)
     Application.put_env(:lenies, :eat_amount, 20)

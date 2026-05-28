@@ -43,23 +43,27 @@ defmodule Lenies.Worlds do
 
   Compat helper used during the multi-world refactor — many call sites
   (Telemetry, GridRenderer, dashboard LiveViews, tests) still operate on
-  the implicit primary world. Goes through the `Lenies.World` singleton
-  GenServer name (compat shim removed in Task 10). Raises if the primary
-  World isn't running.
+  the implicit primary world. Thin wrapper around `handle/1`. Exits with
+  `:noproc` if the primary World isn't running (mirrors the legacy
+  `GenServer.call(Lenies.World, :get_handle)` shape so callers that catch
+  `:exit, _` keep working).
   """
   @spec primary_handle() :: Lenies.WorldHandle.t()
   def primary_handle do
-    GenServer.call(Lenies.World, :get_handle)
+    case handle(:primary) do
+      {:ok, h} -> h
+      :error -> exit({:noproc, {__MODULE__, :primary_handle, []}})
+    end
   end
 
   @doc """
   Start a new world with the given id and optional config overrides.
   Returns `{:ok, sup_pid}` (the per-world Supervisor pid) or `{:error, …}`.
 
-  Note: until Task 9 adds `Lenies.World.Supervisor`, this function will
-  return `{:error, :not_implemented}` or similar — the existing :primary
-  world is still booted via the legacy child in Lenies.Application and
-  reachable via `primary_handle/0` / `Lenies.World.X(...)` module helpers.
+  Spawns a `Lenies.World.Supervisor` (per-world `rest_for_one` Supervisor)
+  under `Lenies.Worlds.Supervisor`. The per-world Supervisor in turn brings
+  up `Lenies.World`, its per-world `Lenies.LenieSupervisor`, and the
+  per-world `Lenies.Telemetry` collector.
   """
   @spec start_world(term(), map()) :: DynamicSupervisor.on_start_child()
   def start_world(world_id, config_overrides \\ %{}) do
@@ -85,20 +89,9 @@ defmodule Lenies.Worlds do
 
   Accepts an already-built handle (returned as-is) for callsites that can
   cache it.
-
-  Special case: `:primary` is currently registered under the global atom
-  name `Lenies.World` (compat shim, removed in Task 10), NOT in the
-  Registry, so we resolve it via `Process.whereis/1` until T10.
   """
   @spec handle(term() | Lenies.WorldHandle.t()) :: {:ok, Lenies.WorldHandle.t()} | :error
   def handle(%Lenies.WorldHandle{} = h), do: {:ok, h}
-
-  def handle(:primary) do
-    case Process.whereis(Lenies.World) do
-      nil -> :error
-      pid -> {:ok, GenServer.call(pid, :get_handle)}
-    end
-  end
 
   def handle(world_id) do
     case Registry.lookup(Lenies.Registry, {:world, world_id}) do
@@ -107,29 +100,14 @@ defmodule Lenies.Worlds do
     end
   end
 
-  @doc """
-  List the ids of currently running worlds.
-
-  Until Task 10, the `:primary` world is registered under the global atom
-  name `Lenies.World` (not in the Registry), so we prepend it manually if
-  it's alive.
-  """
+  @doc "List the ids of currently running worlds."
   @spec list() :: [term()]
   def list do
-    via_registry =
-      Registry.select(Lenies.Registry, [{{{:world, :"$1"}, :_, :_}, [], [:"$1"]}])
-
-    if Process.whereis(Lenies.World) do
-      [:primary | via_registry] |> Enum.uniq()
-    else
-      via_registry
-    end
+    Registry.select(Lenies.Registry, [{{{:world, :"$1"}, :_, :_}, [], [:"$1"]}])
   end
 
   @doc "Is a world with this id alive?"
   @spec alive?(term()) :: boolean
-  def alive?(:primary), do: Process.whereis(Lenies.World) != nil
-
   def alive?(world_id) do
     match?([{_, _}], Registry.lookup(Lenies.Registry, {:world, world_id}))
   end

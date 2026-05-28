@@ -5,10 +5,9 @@ defmodule Lenies.Worlds.Supervisor do
   `DynamicSupervisor.start_child(__MODULE__, ...)` to spin up a world.
 
   The child spec is `Lenies.World.Supervisor` (a per-world `Supervisor`
-  module — to be added in Task 9). For now this DynamicSupervisor exists
-  but no worlds are started through it; the existing `:primary` world is
-  still booted via the legacy `Lenies.World` child in `Lenies.Application`
-  (migrated in Task 10).
+  module). The `:primary` world is booted by `Lenies.Application` immediately
+  after the top-level supervisor is up by calling
+  `Lenies.Worlds.start_world(:primary, %{})`.
   """
   use DynamicSupervisor
 

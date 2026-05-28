@@ -6,22 +6,10 @@ defmodule Lenies.WorldReplicationTest do
 
   setup do
     on_exit(fn ->
-      case Process.whereis(Lenies.World) do
-        pid when is_pid(pid) ->
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-
-        _ ->
-          :ok
-      end
-
-      Tables.delete_all()
+      Lenies.WorldTestHelpers.stop_primary()
     end)
 
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = Lenies.WorldTestHelpers.start_primary()
     handle = Lenies.Worlds.primary_handle()
     # mark parent's cell
     [{key, cell}] = :ets.lookup(handle.tables.cells, {10, 10})

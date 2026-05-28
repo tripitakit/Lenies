@@ -9,7 +9,7 @@ defmodule LeniesWeb.GridRendererTest do
     handle = Lenies.Worlds.primary_handle()
 
     on_exit(fn ->
-      case Process.whereis(Lenies.World) do
+      case Lenies.WorldTestHelpers.world_pid() do
         pid when is_pid(pid) ->
           try do
             GenServer.stop(pid)

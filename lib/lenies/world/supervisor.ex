@@ -16,14 +16,6 @@ defmodule Lenies.World.Supervisor do
   Snapshot restore is the way to recover content.
 
   Registered under `{:via, Registry, {Lenies.Registry, {:world_sup, world_id}}}`.
-
-  ## Status (Task 9)
-
-  This module is created in Task 9 but not actually used until Task 10
-  switches the `:primary` world's boot from the legacy Application children
-  to `Lenies.Worlds.start_world(:primary, %{})`. Until then `:primary` is
-  still booted via the three flat Application children (`Lenies.World`,
-  `Lenies.LenieSupervisor`, `Lenies.Telemetry`).
   """
 
   use Supervisor

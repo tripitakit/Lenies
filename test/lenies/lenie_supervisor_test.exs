@@ -1,34 +1,25 @@
 defmodule Lenies.LenieSupervisorTest do
   use ExUnit.Case, async: false
 
-  alias Lenies.LenieSupervisor
+  alias Lenies.WorldTestHelpers
 
   setup do
-    on_exit(fn ->
-      case Process.whereis(LenieSupervisor) do
-        nil ->
-          :ok
+    {:ok, _sup} = Lenies.Worlds.start_world(:primary, %{tick_interval_ms: 0})
 
-        pid ->
-          if Process.alive?(pid) do
-            try do
-              Supervisor.stop(pid)
-            catch
-              :exit, _ -> :ok
-            end
-          end
-      end
+    on_exit(fn ->
+      Lenies.Worlds.stop_world(:primary)
+      Lenies.World.Tables.delete_all()
     end)
 
     :ok
   end
 
   test "starts as DynamicSupervisor with zero children" do
-    pid = Process.whereis(LenieSupervisor)
+    pid = WorldTestHelpers.lenie_sup_pid()
     assert is_pid(pid)
     assert Process.alive?(pid)
 
-    counts = DynamicSupervisor.count_children(LenieSupervisor)
+    counts = DynamicSupervisor.count_children(Lenies.LenieSupervisor.via(:primary))
     assert counts.specs == 0
     assert counts.active == 0
   end

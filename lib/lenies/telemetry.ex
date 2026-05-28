@@ -5,13 +5,6 @@ defmodule Lenies.Telemetry do
   `history` ETS table.
 
   Registered via `{:via, Registry, {Lenies.Registry, {:telemetry, world_id}}}`.
-
-  ## Compat shim (removed in Task 10)
-
-  The `:primary` world's Telemetry is ALSO registered under the global atom
-  name `Lenies.Telemetry` so legacy callers (`:sys.get_state(Lenies.Telemetry)`,
-  `Lenies.Telemetry.history/1`) keep working during the transition. All other
-  worlds register only under the via-Registry tuple.
   """
 
   use GenServer
@@ -21,27 +14,10 @@ defmodule Lenies.Telemetry do
 
   # ----- Public API -----
 
-  def start_link(opts \\ []) do
-    world_id = Keyword.get(opts, :world_id, :primary)
+  def start_link(opts) do
+    world_id = Keyword.fetch!(opts, :world_id)
     init_arg = {world_id, opts}
-
-    case GenServer.start_link(__MODULE__, init_arg, name: via(world_id)) do
-      {:ok, pid} = ok ->
-        # Compat shim (removed in Task 10): the `:primary` world's Telemetry
-        # is ALSO registered under the global atom name `Lenies.Telemetry`.
-        if world_id == :primary do
-          try do
-            Process.register(pid, __MODULE__)
-          rescue
-            ArgumentError -> :ok
-          end
-        end
-
-        ok
-
-      other ->
-        other
-    end
+    GenServer.start_link(__MODULE__, init_arg, name: via(world_id))
   end
 
   @doc """

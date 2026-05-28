@@ -7,7 +7,7 @@ defmodule Lenies.IntegrationWalkerTest do
 
   setup do
     on_exit(fn ->
-      for pid <- Process.whereis(Lenies.World) |> List.wrap() do
+      for pid <- Lenies.WorldTestHelpers.world_pid() |> List.wrap() do
         try do
           GenServer.stop(pid)
         catch

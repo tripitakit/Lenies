@@ -151,10 +151,9 @@ defmodule Lenies.Species do
   # Species aggregation is best-effort: the dashboard renders an empty
   # species panel rather than crashing if the world hasn't booted yet.
   defp primary_handle do
-    try do
-      Lenies.Worlds.primary_handle()
-    catch
-      :exit, _ -> nil
+    case Lenies.Worlds.handle(:primary) do
+      {:ok, h} -> h
+      :error -> nil
     end
   end
 

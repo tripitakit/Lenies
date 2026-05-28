@@ -11,13 +11,13 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       _ -> :ok
     end
 
-    case Process.whereis(Lenies.World) do
+    case Lenies.WorldTestHelpers.world_pid() do
       nil -> {:ok, _} = Lenies.World.start_link(tick_interval_ms: 0)
       _ -> :ok
     end
 
     on_exit(fn ->
-      case Process.whereis(Lenies.World) do
+      case Lenies.WorldTestHelpers.world_pid() do
         pid when is_pid(pid) ->
           try do
             GenServer.stop(pid)
