@@ -116,6 +116,29 @@ defmodule Lenies.Worlds do
   def paused?(target), do: call(target, :paused?)
   def snapshot_stats(target), do: call(target, :snapshot_stats)
 
+  @doc "Force a single synchronous tick in `target` (deterministic tests)."
+  def tick_now(target), do: call(target, :tick_now)
+
+  @doc """
+  Synchronous reconciliation sweep on `target`: frees cells and deletes
+  :lenies records whose Lenie is no longer alive in the Registry.
+
+  Returns `{freed_cells, deleted_records}`. Useful for tests and diagnostics;
+  the same sweep runs automatically on the `:reconcile_interval_ms` timer.
+  """
+  def reconcile(target), do: call(target, :reconcile)
+
+  @doc """
+  Notify `target` that a Lenie has died (frees the cell, leaves a carcass).
+  Async cast — does not return when the cell mutation is observable.
+  """
+  def lenie_died(target, id, pos, energy_at_death, codeome_hash)
+      when is_binary(codeome_hash) do
+    with {:ok, h} <- handle(target) do
+      GenServer.cast(h.pid, {:lenie_died, id, pos, energy_at_death, codeome_hash})
+    end
+  end
+
   @doc """
   Save a named snapshot of `target`'s 5 ETS tables to disk, under
   `<snapshot_root>/<id_to_path(world_id)>/<name>/`. See `Lenies.Snapshot.save/2`.

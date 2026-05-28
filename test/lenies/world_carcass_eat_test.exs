@@ -15,16 +15,16 @@ defmodule Lenies.WorldCarcassEatTest do
   test "lenie_died accumulates carcass instead of replacing" do
     {:ok, _pid} = Lenies.WorldTestHelpers.start_primary()
 
-    World.lenie_died("dead1", {3, 3}, 20.0, "test-hash")
+    Lenies.Worlds.lenie_died(:primary, "dead1", {3, 3}, 20.0, "test-hash")
     # wait for the async cast to complete
-    World.tick_now()
+    Lenies.Worlds.tick_now(:primary)
 
     [{_, cell1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {3, 3})
     # 20 * 0.5 = 10
     assert cell1.carcass == 10
 
-    World.lenie_died("dead2", {3, 3}, 30.0, "test-hash")
-    World.tick_now()
+    Lenies.Worlds.lenie_died(:primary, "dead2", {3, 3}, 30.0, "test-hash")
+    Lenies.Worlds.tick_now(:primary)
 
     [{_, cell2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {3, 3})
     # Existing 10 + new 15 (30*0.5) = 25, possibly minus 5% decay from one tick
@@ -40,7 +40,7 @@ defmodule Lenies.WorldCarcassEatTest do
 
     # eat_amount = 20 default. Carcass-first: carcass_taken = 10 (1:1 energy),
     # remaining_quota = 10, resource_taken = min(50, 10) = 10. total = 10 + 10 = 20.
-    {:ok, {:ate, amount}} = World.action({:eat, {5, 5}})
+    {:ok, {:ate, amount}} = Lenies.Worlds.action(:primary, {:eat, {5, 5}})
     # 10 carcass (1:1) + 10 resource = 20 total
     assert amount == 20
 
@@ -59,7 +59,7 @@ defmodule Lenies.WorldCarcassEatTest do
 
     # eat_amount = 20; carcass = 8 < 20, so carcass_taken = 8, resource_taken = 0
     # total_energy must equal 8 (1:1 conservation, not 12 from 1.5x)
-    {:ok, {:ate, amount}} = World.action({:eat, {6, 6}})
+    {:ok, {:ate, amount}} = Lenies.Worlds.action(:primary, {:eat, {6, 6}})
     assert amount == 8
 
     [{_, after_cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {6, 6})
@@ -75,7 +75,7 @@ defmodule Lenies.WorldCarcassEatTest do
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 0, carcass: 100}})
 
     # eat_amount = 20; carcass = 100, so carcass_taken = 20, energy = 20
-    {:ok, {:ate, amount}} = World.action({:eat, {7, 7}})
+    {:ok, {:ate, amount}} = Lenies.Worlds.action(:primary, {:eat, {7, 7}})
     assert amount == 20
 
     [{_, after_cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {7, 7})
@@ -94,7 +94,7 @@ defmodule Lenies.WorldCarcassEatTest do
     # carcass=5 < eat_amount=15, so carcass_taken=5, remaining=10, resource_taken=min(20,10)=10
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 20, carcass: 5}})
 
-    {:ok, {:ate, amount}} = World.action({:eat, {8, 8}})
+    {:ok, {:ate, amount}} = Lenies.Worlds.action(:primary, {:eat, {8, 8}})
     # energy must equal carcass_taken + resource_taken = 5 + 10 = 15
     assert amount == 15
 
@@ -109,7 +109,7 @@ defmodule Lenies.WorldCarcassEatTest do
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 30}})
 
-    {:ok, {:ate, amount}} = World.action({:eat, {5, 5}})
+    {:ok, {:ate, amount}} = Lenies.Worlds.action(:primary, {:eat, {5, 5}})
     # eat_amount
     assert amount == 20
 
@@ -126,7 +126,7 @@ defmodule Lenies.WorldCarcassEatTest do
     # default eat_amount = 20; takes 5 carcass (5 energy, 1:1)
     # then 15 remaining quota from resource → result energy = 5 + 15 = 20
     # exactly 20 now (no bonus), but carcass IS depleted and resource IS consumed
-    {:ok, {:ate, amount}} = World.action({:eat, {5, 5}})
+    {:ok, {:ate, amount}} = Lenies.Worlds.action(:primary, {:eat, {5, 5}})
     assert amount == 20
     [{_, after_cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
     assert after_cell.carcass == 0
@@ -151,7 +151,7 @@ defmodule Lenies.WorldCarcassEatTest do
     # Drain the carcass with repeated eats; sum every unit of energy handed out.
     total =
       Enum.reduce_while(1..1000, 0, fn _, acc ->
-        {:ok, {:ate, amount}} = World.action({:eat, {9, 9}})
+        {:ok, {:ate, amount}} = Lenies.Worlds.action(:primary, {:eat, {9, 9}})
 
         if amount == 0 do
           {:halt, acc}

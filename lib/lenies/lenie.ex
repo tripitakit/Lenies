@@ -512,8 +512,8 @@ defmodule Lenies.Lenie do
   end
 
   # Direct GenServer call to the per-world pid (multi-world refactor T6).
-  # Replaces module-level `Lenies.World.action/1`, which still uses the
-  # singleton compat name (removed in Task 10).
+  # Replaces the long-gone module-level `Lenies.World.action/1` singleton
+  # delegator (removed in Task 11).
   defp world_call(state, action_spec) do
     GenServer.call(state.world.pid, {:action, action_spec})
   end

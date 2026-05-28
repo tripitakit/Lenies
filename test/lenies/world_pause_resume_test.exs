@@ -25,27 +25,27 @@ defmodule Lenies.WorldPauseResumeTest do
   end
 
   test "pause/0 stops tick_count from advancing" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
 
-    World.tick_now()
-    World.tick_now()
-    stats_before = World.snapshot_stats()
+    Lenies.Worlds.tick_now(:primary)
+    Lenies.Worlds.tick_now(:primary)
+    stats_before = Lenies.Worlds.snapshot_stats(:primary)
     assert stats_before.tick_count == 2
 
-    :ok = World.pause()
-    assert World.paused?() == true
+    :ok = Lenies.Worlds.pause(:primary)
+    assert Lenies.Worlds.paused?(:primary) == true
 
-    :ok = World.resume()
-    assert World.paused?() == false
+    :ok = Lenies.Worlds.resume(:primary)
+    assert Lenies.Worlds.paused?(:primary) == false
   end
 
   test "resume/0 restarts auto-tick" do
     Phoenix.PubSub.subscribe(Lenies.PubSub, "world:primary:tick")
-    {:ok, _world} = World.start_link(tick_interval_ms: 50)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 50)
 
     assert_receive {:tick, 1}, 500
 
-    :ok = World.pause()
+    :ok = Lenies.Worlds.pause(:primary)
 
     receive do
       {:tick, _} -> :ok
@@ -55,7 +55,7 @@ defmodule Lenies.WorldPauseResumeTest do
 
     refute_receive {:tick, _}, 200
 
-    :ok = World.resume()
+    :ok = Lenies.Worlds.resume(:primary)
     assert_receive {:tick, _}, 500
   end
 end

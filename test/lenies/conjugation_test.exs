@@ -55,7 +55,7 @@ defmodule Lenies.ConjugationTest do
   end
 
   test "receive_plasmid appends to codeome and adds to the plasmid list" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
 
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "RX"}})
@@ -85,7 +85,7 @@ defmodule Lenies.ConjugationTest do
   end
 
   test "receive_plasmid rejects oversize append" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
     Application.put_env(:lenies, :codeome_length_bounds, {3, 10})
 
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
@@ -113,7 +113,7 @@ defmodule Lenies.ConjugationTest do
   end
 
   test ":conjugate with no plasmid pushes 0 and pays base cost" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
 
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "SOLO"}})
@@ -143,7 +143,7 @@ defmodule Lenies.ConjugationTest do
     # succeeds (2 + 3 = 5 ≤ 5); subsequent attempts return {:error, :too_large}.
     Application.put_env(:lenies, :codeome_length_bounds, {3, 5})
 
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
 
     [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key1, %{c1 | lenie_id: "TX"}})
@@ -200,7 +200,7 @@ defmodule Lenies.ConjugationTest do
   end
 
   test ":conjugate broadcasts world:fx event on success" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
     Phoenix.PubSub.subscribe(Lenies.PubSub, "world:primary:fx")
 
     [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
@@ -238,7 +238,7 @@ defmodule Lenies.ConjugationTest do
   end
 
   test "background_mutate also touches the plasmid buffer (after multiple cycles)" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
 
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "BG"}})
@@ -279,7 +279,7 @@ defmodule Lenies.ConjugationTest do
   end
 
   test "receive_plasmid accumulates distinct plasmids (multi-plasmid carry)" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
 
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "RX"}})
@@ -311,7 +311,7 @@ defmodule Lenies.ConjugationTest do
   end
 
   test "receive_plasmid is a no-op for an already-carried plasmid (:already_present)" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
 
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "RX"}})
@@ -340,7 +340,7 @@ defmodule Lenies.ConjugationTest do
   end
 
   test ":conjugate transfers one of the donor's carried plasmids (random pick within the set)" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
 
     [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key1, %{c1 | lenie_id: "TX"}})
@@ -393,7 +393,7 @@ defmodule Lenies.ConjugationTest do
   # Success total = Costs.cost(:conjugate, plasmid_size). Verifies the
   # base+surcharge split does not change the net cost to the donor.
   test ":conjugate success costs exactly Costs.cost(:conjugate, plasmid_size)" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
 
     # Subscribe BEFORE starting any Lenie so we cannot miss the broadcast
     # when lenie_metabolize_delay_ms is 0 and the conjugation fires immediately.

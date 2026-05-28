@@ -26,7 +26,7 @@ defmodule Lenies.WorldSpawnTest do
 
   test "spawn_lenie/2 places a new Lenie on a random free cell" do
     codeome = Codeome.from_list([:nop_0, :nop_0, :nop_0])
-    result = World.spawn_lenie(codeome, energy: 500.0)
+    result = Lenies.Worlds.spawn_lenie(:primary, codeome, energy: 500.0)
 
     assert {:ok, {lenie_id, {x, y}}} = result
     assert is_binary(lenie_id)
@@ -49,6 +49,6 @@ defmodule Lenies.WorldSpawnTest do
     end
 
     codeome = Codeome.from_list([:nop_0])
-    assert {:error, :no_free_cell} = World.spawn_lenie(codeome, energy: 100.0)
+    assert {:error, :no_free_cell} = Lenies.Worlds.spawn_lenie(:primary, codeome, energy: 100.0)
   end
 end

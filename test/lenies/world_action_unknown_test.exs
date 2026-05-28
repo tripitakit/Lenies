@@ -25,8 +25,8 @@ defmodule Lenies.WorldActionUnknownTest do
   end
 
   test "unknown action descriptor returns {:error, :unknown_action} without crashing World" do
-    {:ok, pid} = World.start_link(tick_interval_ms: 0)
-    result = World.action({:made_up_action, "foo", 42})
+    {:ok, pid} = World.start_link(world_id: :primary, tick_interval_ms: 0)
+    result = Lenies.Worlds.action(:primary, {:made_up_action, "foo", 42})
     assert result == {:ok, {:error, :unknown_action}}
     assert Process.alive?(pid)
   end

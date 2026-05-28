@@ -30,12 +30,12 @@ defmodule Lenies.TelemetryTest do
   end
 
   test "records a history entry on each world tick" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
     {:ok, _tel} = Lenies.Telemetry.start_link(world_id: :primary)
 
-    World.tick_now()
-    World.tick_now()
-    World.tick_now()
+    Lenies.Worlds.tick_now(:primary)
+    Lenies.Worlds.tick_now(:primary)
+    Lenies.Worlds.tick_now(:primary)
 
     # tempo di propagazione del PubSub; :sys.get_state/1 drena la mailbox prima
     # di leggere la storia
@@ -54,10 +54,10 @@ defmodule Lenies.TelemetryTest do
   end
 
   test "ring buffer keeps at most max_entries" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
     {:ok, _tel} = Lenies.Telemetry.start_link(world_id: :primary, max_entries: 5)
 
-    for _ <- 1..20, do: World.tick_now()
+    for _ <- 1..20, do: Lenies.Worlds.tick_now(:primary)
     Process.sleep(100)
 
     entries = Lenies.Telemetry.history(:primary, :all)
@@ -72,7 +72,7 @@ defmodule Lenies.TelemetryTest do
 
   describe "ring buffer O(1) eviction — correct oldest-entry removal" do
     setup do
-      {:ok, _world} = World.start_link(tick_interval_ms: 0)
+      {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
       {:ok, _tel} = Lenies.Telemetry.start_link(world_id: :primary, max_entries: 3)
       :ok
     end
@@ -80,13 +80,13 @@ defmodule Lenies.TelemetryTest do
     # Drive ticks by sending {:tick, n} directly to Telemetry so there is no
     # PubSub timing uncertainty. We bypass World.tick_now to avoid PubSub races.
     defp send_tick(_n) do
-      # World.snapshot_stats() is called inside handle_info({:tick, n},...),
+      # Lenies.Worlds.snapshot_stats(:primary) is called inside handle_info({:tick, n},...),
       # so World must be running. We drive via World.tick_now to keep stats real,
       # then drain the PubSub message that world.ex broadcasts (telemetry would
       # receive it too — but since we want synchronous control, we drive ticks
-      # purely via World.tick_now() which broadcasts {:tick, n} on "world:tick".
+      # purely via Lenies.Worlds.tick_now(:primary) which broadcasts {:tick, n} on "world:tick".
       # :sys.get_state/1 after each group forces the mailbox to drain.
-      World.tick_now()
+      Lenies.Worlds.tick_now(:primary)
     end
 
     test "buffer size is capped at max_entries after overflow" do
@@ -114,7 +114,7 @@ defmodule Lenies.TelemetryTest do
       for _ <- 1..4, do: send_tick(nil)
       drain_telemetry()
 
-      World.sterilize()
+      Lenies.Worlds.sterilize(:primary)
       # sterilize broadcasts {:sterilized, ts} which resets Telemetry counter
       drain_telemetry()
 

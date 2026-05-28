@@ -32,7 +32,7 @@ defmodule Lenies.WorldPredationTest do
       Tables.delete_all()
     end)
 
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
     # Mark cell, insert minimal lenies snapshot for "P1"
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {10, 10})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "P1"}})
@@ -47,7 +47,7 @@ defmodule Lenies.WorldPredationTest do
 
   describe "defend" do
     test "sets defending_until on the parent record" do
-      result = World.action({:defend, "P1"})
+      result = Lenies.Worlds.action(:primary, {:defend, "P1"})
       assert result == {:ok, :defending}
 
       [{"P1", record}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(), "P1")
@@ -57,9 +57,9 @@ defmodule Lenies.WorldPredationTest do
     end
 
     test "defend after multiple ticks updates relative to current tick" do
-      for _ <- 1..3, do: World.tick_now()
+      for _ <- 1..3, do: Lenies.Worlds.tick_now(:primary)
 
-      result = World.action({:defend, "P1"})
+      result = Lenies.Worlds.action(:primary, {:defend, "P1"})
       assert result == {:ok, :defending}
 
       [{"P1", record}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(), "P1")
@@ -69,7 +69,7 @@ defmodule Lenies.WorldPredationTest do
 
     test "defend on a Lenie without :lenies record returns :no_lenie" do
       :ets.delete(Lenies.WorldTestHelpers.lenies(), "P1")
-      result = World.action({:defend, "P1"})
+      result = Lenies.Worlds.action(:primary, {:defend, "P1"})
       assert result == {:ok, :no_lenie}
     end
   end
@@ -112,13 +112,13 @@ defmodule Lenies.WorldPredationTest do
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {11, 10})
       :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: nil}})
 
-      result = World.action({:attack, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(:primary, {:attack, {10, 10}, :e, "P1"})
       assert result == {:ok, :no_target}
     end
 
     test "attack on undefended target deals full damage", %{target_pid: target_pid} do
       # ensure no defending_until
-      result = World.action({:attack, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(:primary, {:attack, {10, 10}, :e, "P1"})
       assert {:ok, {:attacked, 10}} = result
 
       # Wait for target to process :take_damage message asynchronously
@@ -139,7 +139,7 @@ defmodule Lenies.WorldPredationTest do
         {"T1", Map.put(record, :defending_until, 100)}
       )
 
-      result = World.action({:attack, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(:primary, {:attack, {10, 10}, :e, "P1"})
       assert {:ok, {:defended, 5}} = result
     end
   end

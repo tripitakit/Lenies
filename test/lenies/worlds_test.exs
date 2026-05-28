@@ -65,12 +65,14 @@ defmodule Lenies.WorldsTest do
       refute Lenies.Worlds.alive?(:not_running)
     end
 
-    test "snapshot_stats/1 by id matches the direct singleton call" do
-      via_facade = Lenies.Worlds.snapshot_stats(:primary)
-      via_singleton = Lenies.World.snapshot_stats()
-      # both should return the same shape (map with the same keys)
-      assert is_map(via_facade) and is_map(via_singleton)
-      assert Map.keys(via_facade) == Map.keys(via_singleton)
+    test "snapshot_stats/1 returns a map with the expected keys" do
+      stats = Lenies.Worlds.snapshot_stats(:primary)
+      assert is_map(stats)
+      assert Map.has_key?(stats, :cells)
+      assert Map.has_key?(stats, :population)
+      assert Map.has_key?(stats, :total_resource)
+      assert Map.has_key?(stats, :total_carcass)
+      assert Map.has_key?(stats, :tick_count)
     end
 
     test "tune/3 updates the world config; broadcast {:config_changed, …} reaches subscribers" do

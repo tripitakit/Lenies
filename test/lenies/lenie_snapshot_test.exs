@@ -25,7 +25,7 @@ defmodule Lenies.LenieSnapshotTest do
   end
 
   test "Lenie writes a snapshot to :lenies ETS within a few batches" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L1"}})
 
@@ -65,7 +65,7 @@ defmodule Lenies.LenieSnapshotTest do
   end
 
   test "snapshot is removed on death (via World.lenie_died)" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L2"}})
 
@@ -94,7 +94,7 @@ defmodule Lenies.LenieSnapshotTest do
   end
 
   test "snapshot preserves World-added fields like child_slot_id" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
     :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L4"}})
 

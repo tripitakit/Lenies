@@ -22,7 +22,7 @@ defmodule Lenies.IntegrationWalkerTest do
   end
 
   test "walker moves on the grid and eats biomass" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
 
     # seed cells {10..200, 10} with biomass (wide enough to feed the walker for 500ms)
     for x <- 10..200 do

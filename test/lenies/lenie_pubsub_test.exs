@@ -21,7 +21,7 @@ defmodule Lenies.LeniePubsubTest do
       Tables.delete_all()
     end)
 
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
     :ok
   end
 

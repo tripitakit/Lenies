@@ -63,7 +63,7 @@ defmodule Lenies.WorldReconcileTest do
 
     test "brutally-killed Lenie's cell and :lenies record are cleaned up" do
       codeome = Codeome.from_list([:nop_0, :nop_0, :nop_0])
-      {:ok, {lenie_id, pos}} = World.spawn_lenie(codeome, energy: 500.0)
+      {:ok, {lenie_id, pos}} = Lenies.Worlds.spawn_lenie(:primary, codeome, energy: 500.0)
 
       pid = whereis(lenie_id)
       assert is_pid(pid), "Lenie should be alive after spawn"
@@ -93,7 +93,7 @@ defmodule Lenies.WorldReconcileTest do
              ":lenies record should still exist before reconcile"
 
       # Run the reconcile sweep
-      {freed, deleted} = World.reconcile()
+      {freed, deleted} = Lenies.Worlds.reconcile(:primary)
       assert freed >= 1, "at least one cell should have been freed"
       assert deleted >= 1, "at least one :lenies record should have been deleted"
 
@@ -109,7 +109,7 @@ defmodule Lenies.WorldReconcileTest do
 
     test "live Lenie's cell and :lenies record are left untouched by reconcile" do
       codeome = Codeome.from_list([:nop_0, :nop_0, :nop_0])
-      {:ok, {lenie_id, pos}} = World.spawn_lenie(codeome, energy: 500.0)
+      {:ok, {lenie_id, pos}} = Lenies.Worlds.spawn_lenie(:primary, codeome, energy: 500.0)
 
       pid = whereis(lenie_id)
       assert is_pid(pid)
@@ -118,7 +118,7 @@ defmodule Lenies.WorldReconcileTest do
       :ok = wait_until(fn -> :ets.lookup(Lenies.WorldTestHelpers.lenies(), lenie_id) != [] end)
 
       # Reconcile should leave the live Lenie completely alone
-      World.reconcile()
+      Lenies.Worlds.reconcile(:primary)
 
       [{_, cell_after}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), pos)
 
@@ -144,7 +144,7 @@ defmodule Lenies.WorldReconcileTest do
 
       assert :ets.lookup(Lenies.WorldTestHelpers.lenies(), dead_id) != []
 
-      {_freed, deleted} = World.reconcile()
+      {_freed, deleted} = Lenies.Worlds.reconcile(:primary)
       assert deleted >= 1
 
       assert :ets.lookup(Lenies.WorldTestHelpers.lenies(), dead_id) == [],
@@ -152,7 +152,7 @@ defmodule Lenies.WorldReconcileTest do
     end
 
     test "reconcile/0 returns {0, 0} on a clean world with no Lenies" do
-      assert {0, 0} = World.reconcile()
+      assert {0, 0} = Lenies.Worlds.reconcile(:primary)
     end
   end
 end

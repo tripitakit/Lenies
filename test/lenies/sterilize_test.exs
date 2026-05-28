@@ -25,28 +25,28 @@ defmodule Lenies.SterilizeTest do
   end
 
   test "sterilize/0 clears all ETS data, resets tick_count, broadcasts event" do
-    {:ok, _pid} = World.start_link(tick_interval_ms: 0)
+    {:ok, _pid} = World.start_link(world_id: :primary, tick_interval_ms: 0)
 
-    for _ <- 1..10, do: World.tick_now()
-    before_stats = World.snapshot_stats()
+    for _ <- 1..10, do: Lenies.Worlds.tick_now(:primary)
+    before_stats = Lenies.Worlds.snapshot_stats(:primary)
     assert before_stats.tick_count == 10
     assert before_stats.total_resource > 0
 
     Phoenix.PubSub.subscribe(Lenies.PubSub, "world:primary:control")
-    :ok = World.sterilize()
+    :ok = Lenies.Worlds.sterilize(:primary)
 
     assert_receive {:sterilized, _ts}, 500
 
-    after_stats = World.snapshot_stats()
+    after_stats = Lenies.Worlds.snapshot_stats(:primary)
     assert after_stats.tick_count == 0
     assert after_stats.total_resource == 0
     assert after_stats.cells == 65_536
   end
 
   test "sterilize/0 is idempotent" do
-    {:ok, _pid} = World.start_link(tick_interval_ms: 0)
-    assert :ok = World.sterilize()
-    assert :ok = World.sterilize()
-    assert World.snapshot_stats().tick_count == 0
+    {:ok, _pid} = World.start_link(world_id: :primary, tick_interval_ms: 0)
+    assert :ok = Lenies.Worlds.sterilize(:primary)
+    assert :ok = Lenies.Worlds.sterilize(:primary)
+    assert Lenies.Worlds.snapshot_stats(:primary).tick_count == 0
   end
 end

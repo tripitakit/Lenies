@@ -31,7 +31,7 @@ defmodule Lenies.SnapshotTest do
       Application.delete_env(:lenies, :snapshot_root)
     end)
 
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
     {:ok, root: root}
   end
 
@@ -189,7 +189,7 @@ defmodule Lenies.SnapshotTest do
       end
 
       # World must still be alive and able to serve requests.
-      assert %{cells: cells_count} = World.snapshot_stats()
+      assert %{cells: cells_count} = Lenies.Worlds.snapshot_stats(:primary)
       assert cells_count > 0, "World should have cells after recovery"
     end
   end

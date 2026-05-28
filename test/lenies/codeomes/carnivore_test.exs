@@ -53,7 +53,7 @@ defmodule Lenies.Codeomes.CarnivoreTest do
       Tables.delete_all()
     end)
 
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
 
     # Seed food so Lenies can survive during the duel.
     # Use 2000 resource: the Sprint plasmid fires an extra move+eat every forage

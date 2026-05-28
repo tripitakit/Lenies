@@ -20,7 +20,7 @@ defmodule Lenies.WorldReplicationTest do
 
   describe "allocate" do
     test "succeeds when front cell is free; creates child slot", %{handle: h} do
-      result = World.action({:allocate, 20, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(:primary, {:allocate, 20, {10, 10}, :e, "P1"})
       assert {:ok, {:allocated, slot_id, target_cell}} = result
       assert target_cell == {11, 10}
       assert is_binary(slot_id)
@@ -40,22 +40,22 @@ defmodule Lenies.WorldReplicationTest do
       [{key, cell}] = :ets.lookup(h.tables.cells, {11, 10})
       :ets.insert(h.tables.cells, {key, %{cell | lenie_id: "OTHER"}})
 
-      result = World.action({:allocate, 20, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(:primary, {:allocate, 20, {10, 10}, :e, "P1"})
       assert result == {:ok, :blocked}
     end
 
     test "fails when parent already has a slot allocated" do
-      {:ok, _} = World.action({:allocate, 20, {10, 10}, :e, "P1"})
-      result = World.action({:allocate, 30, {10, 10}, :e, "P1"})
+      {:ok, _} = Lenies.Worlds.action(:primary, {:allocate, 20, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(:primary, {:allocate, 30, {10, 10}, :e, "P1"})
       assert result == {:ok, :already_allocated}
     end
 
     test "fails when requested size out of bounds" do
       # codeome_length_bounds default {5, 1000}
-      result = World.action({:allocate, 2, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(:primary, {:allocate, 2, {10, 10}, :e, "P1"})
       assert result == {:ok, :invalid_size}
 
-      result = World.action({:allocate, 1001, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(:primary, {:allocate, 1001, {10, 10}, :e, "P1"})
       assert result == {:ok, :invalid_size}
     end
   end
@@ -63,7 +63,7 @@ defmodule Lenies.WorldReplicationTest do
   describe "write_child" do
     setup %{handle: h} do
       # Ensure parent has an allocated slot at this point
-      {:ok, {:allocated, slot_id, _}} = World.action({:allocate, 20, {10, 10}, :e, "P1"})
+      {:ok, {:allocated, slot_id, _}} = Lenies.Worlds.action(:primary, {:allocate, 20, {10, 10}, :e, "P1"})
       %{slot_id: slot_id, handle: h}
     end
 
@@ -80,7 +80,7 @@ defmodule Lenies.WorldReplicationTest do
 
       try do
         move_int = Lenies.Codeome.Opcodes.encode(:move)
-        result = World.action({:write_child, move_int, 3, "P1"})
+        result = Lenies.Worlds.action(:primary, {:write_child, move_int, 3, "P1"})
         assert result == {:ok, :written}
 
         {:ok, slot} = ChildSlots.get(h.tables.child_slots, slot_id)
@@ -97,7 +97,7 @@ defmodule Lenies.WorldReplicationTest do
       :ets.delete(h.tables.lenies, "P1")
       :ets.insert(h.tables.lenies, {"P1", %{id: "P1", pos: {10, 10}, dir: :e}})
 
-      result = World.action({:write_child, 0, 0, "P1"})
+      result = Lenies.Worlds.action(:primary, {:write_child, 0, 0, "P1"})
       assert result == {:ok, :no_slot}
     end
   end
@@ -121,7 +121,7 @@ defmodule Lenies.WorldReplicationTest do
       end)
 
       # Parent already has an allocated slot — populate it with a real Codeome
-      {:ok, {:allocated, slot_id, _}} = World.action({:allocate, 5, {10, 10}, :e, "P1"})
+      {:ok, {:allocated, slot_id, _}} = Lenies.Worlds.action(:primary, {:allocate, 5, {10, 10}, :e, "P1"})
 
       cs = h.tables.child_slots
       :ok = ChildSlots.set_opcode(cs, slot_id, 0, :nop_1)
@@ -137,7 +137,7 @@ defmodule Lenies.WorldReplicationTest do
       slot_id: slot_id,
       handle: h
     } do
-      result = World.action({:divide, 100.0, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(:primary, {:divide, 100.0, {10, 10}, :e, "P1"})
       assert {:ok, {:divided, child_id, energy_given}} = result
       assert is_binary(child_id)
       # floor(100 / 2)
@@ -167,7 +167,7 @@ defmodule Lenies.WorldReplicationTest do
       [{key, cell}] = :ets.lookup(h.tables.cells, {11, 10})
       :ets.insert(h.tables.cells, {key, %{cell | lenie_id: "BLOCKER"}})
 
-      result = World.action({:divide, 100.0, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(:primary, {:divide, 100.0, {10, 10}, :e, "P1"})
       assert result == {:ok, :target_blocked}
     end
 
@@ -175,7 +175,7 @@ defmodule Lenies.WorldReplicationTest do
       :ets.delete(h.tables.lenies, "P1")
       :ets.insert(h.tables.lenies, {"P1", %{id: "P1", pos: {10, 10}, dir: :e}})
 
-      result = World.action({:divide, 100.0, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(:primary, {:divide, 100.0, {10, 10}, :e, "P1"})
       assert result == {:ok, :no_slot}
     end
   end

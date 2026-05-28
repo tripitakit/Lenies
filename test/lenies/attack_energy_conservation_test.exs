@@ -39,7 +39,7 @@ defmodule Lenies.AttackEnergyConservationTest do
       Tables.delete_all()
     end)
 
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = World.start_link(world_id: :primary, tick_interval_ms: 0)
     :ok
   end
 
@@ -108,7 +108,7 @@ defmodule Lenies.AttackEnergyConservationTest do
 
       # Trigger attack (World.action is a synchronous call).
       {:ok, {:attacked, ^attack_damage}} =
-        World.action({:attack, {20, 20}, :e, "ATK_OVK"})
+        Lenies.Worlds.action(:primary, {:attack, {20, 20}, :e, "ATK_OVK"})
 
       # Victim must die — overkill
       assert_receive {:DOWN, ^ref, :process, ^victim_pid, :killed}, 1_000
@@ -143,7 +143,7 @@ defmodule Lenies.AttackEnergyConservationTest do
       victim_before = Lenie.inspect_state(victim_pid).energy
 
       {:ok, {:attacked, ^attack_damage}} =
-        World.action({:attack, {20, 21}, :e, "ATK_NRM"})
+        Lenies.Worlds.action(:primary, {:attack, {20, 21}, :e, "ATK_NRM"})
 
       # Wait deterministically for the async :attack_reward to land on the attacker.
       attacker_after = await_energy_change(attacker_pid, attacker_before)
@@ -195,7 +195,7 @@ defmodule Lenies.AttackEnergyConservationTest do
       )
 
       {:ok, {:defended, ^half_damage}} =
-        World.action({:attack, {20, 22}, :e, "ATK_DEF"})
+        Lenies.Worlds.action(:primary, {:attack, {20, 22}, :e, "ATK_DEF"})
 
       # Wait deterministically for the async :attack_reward to land on the attacker.
       attacker_after = await_energy_change(attacker_pid, attacker_before)
