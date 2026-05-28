@@ -150,5 +150,81 @@ defmodule Lenies.SandboxesTest do
     end
   end
 
+  describe "auto-restore" do
+    setup do
+      start_supervised!({Lenies.Sandboxes, []})
+      Application.put_env(:lenies, :sandbox_grace_ms, 50)
+      on_exit(fn -> Application.delete_env(:lenies, :sandbox_grace_ms) end)
+      :ok
+    end
+
+    @tag :tmp_dir
+    test "first attach restores from an existing auto snapshot", %{tmp_dir: tmp} do
+      Application.put_env(:lenies, :snapshot_root, tmp)
+      on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
+
+      user_id = unique_user_id()
+      world_id = {:sandbox, user_id}
+
+      # 1) Attach, plant a marker, detach explicitly, wait past grace.
+      :ok = Lenies.Sandboxes.attach(user_id)
+      {:ok, handle1} = Lenies.Worlds.handle(world_id)
+      Lenies.SpeciesColor.set_override(handle1, "auto-marker", "#abcdef")
+
+      :ok = Lenies.Sandboxes.detach(user_id)
+      # Grace is 50ms, but the :maybe_stop handler runs auto_save synchronously
+      # (writing 5 ETS tables to disk) before stop_world. Allow generous time.
+      Process.sleep(1_000)
+      refute Lenies.Worlds.alive?(world_id)
+
+      # 2) Re-attach in a separate context; the marker should be restored.
+      :ok = Lenies.Sandboxes.attach(user_id)
+      {:ok, handle2} = Lenies.Worlds.handle(world_id)
+      assert Lenies.SpeciesColor.override(handle2, "auto-marker") == "#abcdef"
+
+      :ok = Lenies.Worlds.stop_world(world_id)
+    end
+
+    @tag :tmp_dir
+    test "first attach with NO auto snapshot starts an empty world", %{tmp_dir: tmp} do
+      Application.put_env(:lenies, :snapshot_root, tmp)
+      on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
+
+      user_id = unique_user_id()
+      world_id = {:sandbox, user_id}
+
+      :ok = Lenies.Sandboxes.attach(user_id)
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
+      assert :ets.tab2list(handle.tables.lenies) == []
+      :ok = Lenies.Worlds.stop_world(world_id)
+    end
+
+    @tag :tmp_dir
+    test "corrupt auto snapshot is quarantined, world starts empty", %{tmp_dir: tmp} do
+      Application.put_env(:lenies, :snapshot_root, tmp)
+      on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
+
+      user_id = unique_user_id()
+      world_id = {:sandbox, user_id}
+
+      # Create a fake auto/ directory with garbage to make validate/2 fail.
+      auto_dir = Path.join([tmp, Lenies.Worlds.id_to_path(world_id), "auto"])
+      File.mkdir_p!(auto_dir)
+      File.write!(Path.join(auto_dir, "cells.tab"), "not a real ets dump")
+
+      :ok = Lenies.Sandboxes.attach(user_id)
+      # World started (empty), and the auto/ has been renamed away.
+      refute File.dir?(auto_dir)
+      # An auto.broken.<ts>/ should exist alongside.
+      broken_dirs =
+        Path.join([tmp, Lenies.Worlds.id_to_path(world_id)])
+        |> File.ls!()
+        |> Enum.filter(&String.starts_with?(&1, "auto.broken."))
+      assert length(broken_dirs) == 1
+
+      :ok = Lenies.Worlds.stop_world(world_id)
+    end
+  end
+
   defp unique_user_id, do: :erlang.unique_integer([:positive])
 end

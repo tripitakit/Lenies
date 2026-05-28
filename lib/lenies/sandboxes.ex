@@ -32,6 +32,16 @@ defmodule Lenies.Sandboxes do
     GenServer.call(__MODULE__, {:attach, user_id, self()})
   end
 
+  @doc """
+  Explicit detach from the user's sandbox. Useful in tests and for graceful
+  disconnect from a LiveView's terminate/2 (though :DOWN handles the common
+  case automatically).
+  """
+  @spec detach(integer) :: :ok
+  def detach(user_id) when is_integer(user_id) do
+    GenServer.cast(__MODULE__, {:detach, user_id, self()})
+  end
+
   @impl true
   def init(_opts), do: {:ok, %{}}
 
@@ -64,12 +74,85 @@ defmodule Lenies.Sandboxes do
     end
   end
 
-  defp start_sandbox(user_id) do
-    case Lenies.Worlds.start_world(world_id_for(user_id), %{}) do
-      {:ok, sup_pid} -> {:ok, sup_pid}
-      {:error, {:already_started, sup_pid}} -> {:ok, sup_pid}
-      {:error, _} = err -> err
+  @impl true
+  def handle_cast({:detach, user_id, pid}, state) do
+    case Map.get(state, user_id) do
+      nil -> {:noreply, state}
+      %{} -> {:noreply, remove_pid(state, user_id, pid)}
     end
+  end
+
+  defp start_sandbox(user_id) do
+    world_id = world_id_for(user_id)
+
+    case Lenies.Worlds.start_world(world_id, %{}) do
+      {:ok, sup_pid} ->
+        maybe_auto_restore(world_id)
+        {:ok, sup_pid}
+
+      {:error, {:already_started, sup_pid}} ->
+        {:ok, sup_pid}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  defp maybe_auto_restore(world_id) do
+    case Lenies.Snapshot.validate(world_id, "auto") do
+      :ok ->
+        case Lenies.Worlds.restore_snapshot(world_id, "auto") do
+          :ok ->
+            :ok
+
+          {:error, reason} ->
+            quarantine_broken_auto(world_id, reason)
+            :ok
+        end
+
+      {:error, :missing_file} ->
+        # If the auto/ directory exists but is missing required files, it's
+        # corrupt/partial — quarantine it. If the directory doesn't exist at
+        # all, this is the common "no snapshot yet" path: fresh empty world.
+        if auto_dir_exists?(world_id) do
+          quarantine_broken_auto(world_id, :missing_file)
+        end
+
+        :ok
+
+      {:error, reason} ->
+        quarantine_broken_auto(world_id, reason)
+        :ok
+    end
+  end
+
+  defp auto_dir_exists?(world_id) do
+    root = Application.get_env(:lenies, :snapshot_root, System.tmp_dir!())
+    File.dir?(Path.join([root, Lenies.Worlds.id_to_path(world_id), "auto"]))
+  end
+
+  defp quarantine_broken_auto(world_id, reason) do
+    require Logger
+
+    root = Application.get_env(:lenies, :snapshot_root, System.tmp_dir!())
+    dir = Path.join([root, Lenies.Worlds.id_to_path(world_id), "auto"])
+
+    if File.dir?(dir) do
+      broken =
+        Path.join([
+          root,
+          Lenies.Worlds.id_to_path(world_id),
+          "auto.broken.#{System.system_time(:second)}"
+        ])
+
+      File.rename(dir, broken)
+
+      Logger.warning(
+        "Lenies.Sandboxes: auto snapshot for #{inspect(world_id)} quarantined as #{broken} (#{inspect(reason)})"
+      )
+    end
+
+    :ok
   end
 
   defp add_connection(entry, pid) do
