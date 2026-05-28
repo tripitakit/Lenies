@@ -7,8 +7,8 @@ defmodule LeniesWeb.GridRenderer do
 
     - `lenies`       — 0 if cell is empty; otherwise the species hue byte
                        (1..255) of the Lenie occupying the cell. The mapping is
-                       `Lenies.SpeciesColor.hue_byte(codeome_hash)`. If the
-                       Lenie hasn't written its first snapshot yet so the
+                       `Lenies.SpeciesColor.hue_byte(handle, codeome_hash)`. If
+                       the Lenie hasn't written its first snapshot yet so the
                        hash isn't in `:lenies`, the byte is 0 (rendered as
                        no-species briefly).
     - `resource`     — `cell.resource` clamped to 0..255.
@@ -26,8 +26,9 @@ defmodule LeniesWeb.GridRenderer do
   @spec encode_layers({pos_integer(), pos_integer()}) ::
           {binary(), binary(), binary(), binary()}
   def encode_layers({w, h}) do
-    cells = :ets.tab2list(:cells) |> Map.new()
-    hash_by_id = build_hash_index()
+    handle = fetch_handle()
+    cells = if handle, do: :ets.tab2list(handle.tables.cells) |> Map.new(), else: %{}
+    hash_by_id = build_hash_index(handle)
 
     bytes =
       for y <- 0..(h - 1), x <- 0..(w - 1) do
@@ -36,7 +37,7 @@ defmodule LeniesWeb.GridRenderer do
             {0, 0, 0, 0}
 
           cell ->
-            l = lenies_byte(cell, hash_by_id)
+            l = lenies_byte(cell, hash_by_id, handle)
             r = cell.resource |> clamp_byte()
             c = cell.carcass |> clamp_byte()
             ch = cell.carcass_hue |> clamp_byte()
@@ -71,27 +72,34 @@ defmodule LeniesWeb.GridRenderer do
 
   # One ETS scan to build {lenie_id => codeome_hash}. Avoids a per-cell lookup
   # in the inner row-major loop.
-  defp build_hash_index do
-    case :ets.info(:lenies) do
-      :undefined ->
-        %{}
+  defp build_hash_index(nil), do: %{}
 
-      _ ->
-        :ets.tab2list(:lenies)
-        |> Map.new(fn {id, record} -> {id, Map.get(record, :codeome_hash)} end)
+  defp build_hash_index(handle) do
+    :ets.tab2list(handle.tables.lenies)
+    |> Map.new(fn {id, record} -> {id, Map.get(record, :codeome_hash)} end)
+  end
+
+  # Returns the primary world's handle or nil if the World isn't running.
+  # Empty render output is preferable to crashing when called before the
+  # World has booted.
+  defp fetch_handle do
+    try do
+      Lenies.Worlds.primary_handle()
+    catch
+      :exit, _ -> nil
     end
   end
 
-  defp lenies_byte(%{lenie_id: nil}, _index), do: 0
+  defp lenies_byte(%{lenie_id: nil}, _index, _handle), do: 0
 
-  defp lenies_byte(%{lenie_id: id}, index) when is_binary(id) do
+  defp lenies_byte(%{lenie_id: id}, index, handle) when is_binary(id) do
     case Map.get(index, id) do
-      hash when is_binary(hash) -> SpeciesColor.hue_byte(hash)
+      hash when is_binary(hash) -> SpeciesColor.hue_byte(handle, hash)
       _ -> 0
     end
   end
 
-  defp lenies_byte(_, _), do: 0
+  defp lenies_byte(_, _, _), do: 0
 
   defp clamp_byte(n) when is_integer(n) and n >= 0 and n <= 255, do: n
   defp clamp_byte(n) when is_integer(n) and n < 0, do: 0

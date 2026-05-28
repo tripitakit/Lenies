@@ -23,7 +23,7 @@ defmodule Lenies.PlasmidInheritanceTest do
       Application.delete_env(:lenies, :eat_amount)
       Application.delete_env(:lenies, :interpreter_steps_per_batch)
 
-      case Process.whereis(Lenies.LenieSupervisor) do
+      case Lenies.WorldTestHelpers.lenie_sup_pid() do
         sup when is_pid(sup) ->
           DynamicSupervisor.which_children(sup)
           |> Enum.each(fn {_, child, _, _} ->
@@ -34,34 +34,22 @@ defmodule Lenies.PlasmidInheritanceTest do
           :ok
       end
 
-      case Process.whereis(Lenies.World) do
-        pid when is_pid(pid) ->
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-
-        _ ->
-          :ok
-      end
-
-      Tables.delete_all()
+      Lenies.WorldTestHelpers.stop_primary()
     end)
 
     :ok
   end
 
   test "child inherits parent's plasmid through divide" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = Lenies.WorldTestHelpers.start_primary()
 
     for x <- 0..254, y <- 0..254 do
-      [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 200}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 200}})
     end
 
-    [{key, cell}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "PARENT"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "PARENT"}})
 
     parent_plasmid = Plasmid.new([:eat, :move, :turn_left])
 
@@ -82,7 +70,7 @@ defmodule Lenies.PlasmidInheritanceTest do
 
     child_with_plasmid =
       poll_until(deadline, fn ->
-        :ets.tab2list(:lenies)
+        :ets.tab2list(Lenies.WorldTestHelpers.lenies())
         |> Enum.find_value(fn {id, snap} ->
           if id != "PARENT" and Map.get(snap, :plasmids, []) != [] do
             {:done, snap}

@@ -6,7 +6,7 @@ defmodule Lenies.SterilizeTest do
 
   setup do
     on_exit(fn ->
-      case Process.whereis(Lenies.World) do
+      case Lenies.WorldTestHelpers.world_pid() do
         pid when is_pid(pid) ->
           try do
             GenServer.stop(pid)
@@ -32,7 +32,7 @@ defmodule Lenies.SterilizeTest do
     assert before_stats.tick_count == 10
     assert before_stats.total_resource > 0
 
-    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:control")
+    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:primary:control")
     :ok = World.sterilize()
 
     assert_receive {:sterilized, _ts}, 500

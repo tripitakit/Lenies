@@ -25,7 +25,7 @@ defmodule Lenies.ConjugationTest do
       Application.delete_env(:lenies, :interpreter_steps_per_batch)
       Application.delete_env(:lenies, :codeome_length_bounds)
 
-      case Process.whereis(Lenies.LenieSupervisor) do
+      case Lenies.WorldTestHelpers.lenie_sup_pid() do
         sup when is_pid(sup) ->
           DynamicSupervisor.which_children(sup)
           |> Enum.each(fn {_, child, _, _} ->
@@ -36,7 +36,7 @@ defmodule Lenies.ConjugationTest do
           :ok
       end
 
-      case Process.whereis(Lenies.World) do
+      case Lenies.WorldTestHelpers.world_pid() do
         pid when is_pid(pid) ->
           try do
             GenServer.stop(pid)
@@ -57,8 +57,8 @@ defmodule Lenies.ConjugationTest do
   test "receive_plasmid appends to codeome and adds to the plasmid list" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
-    [{key, cell}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "RX"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "RX"}})
 
     {:ok, recipient_pid} =
       Lenie.start_link(
@@ -88,8 +88,8 @@ defmodule Lenies.ConjugationTest do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
     Application.put_env(:lenies, :codeome_length_bounds, {3, 10})
 
-    [{key, cell}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "RX"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "RX"}})
 
     {:ok, recipient_pid} =
       Lenie.start_link(
@@ -115,8 +115,8 @@ defmodule Lenies.ConjugationTest do
   test ":conjugate with no plasmid pushes 0 and pays base cost" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
-    [{key, cell}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "SOLO"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "SOLO"}})
 
     {:ok, pid} =
       Lenie.start_link(
@@ -145,10 +145,10 @@ defmodule Lenies.ConjugationTest do
 
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
-    [{key1, c1}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key1, %{c1 | lenie_id: "TX"}})
-    [{key2, c2}] = :ets.lookup(:cells, {129, 128})
-    :ets.insert(:cells, {key2, %{c2 | lenie_id: "RX"}})
+    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key1, %{c1 | lenie_id: "TX"}})
+    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {129, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key2, %{c2 | lenie_id: "RX"}})
 
     {:ok, recipient_pid} =
       Lenie.start_link(
@@ -201,12 +201,12 @@ defmodule Lenies.ConjugationTest do
 
   test ":conjugate broadcasts world:fx event on success" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
-    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:fx")
+    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:primary:fx")
 
-    [{key1, c1}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key1, %{c1 | lenie_id: "TX"}})
-    [{key2, c2}] = :ets.lookup(:cells, {129, 128})
-    :ets.insert(:cells, {key2, %{c2 | lenie_id: "RX"}})
+    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key1, %{c1 | lenie_id: "TX"}})
+    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {129, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key2, %{c2 | lenie_id: "RX"}})
 
     {:ok, recipient_pid} =
       Lenie.start_link(
@@ -240,8 +240,8 @@ defmodule Lenies.ConjugationTest do
   test "background_mutate also touches the plasmid buffer (after multiple cycles)" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
-    [{key, cell}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "BG"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "BG"}})
 
     original_ops = List.duplicate(:eat, 30)
     original_plasmid = Plasmid.new(original_ops)
@@ -281,8 +281,8 @@ defmodule Lenies.ConjugationTest do
   test "receive_plasmid accumulates distinct plasmids (multi-plasmid carry)" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
-    [{key, cell}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "RX"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "RX"}})
 
     {:ok, pid} =
       Lenie.start_link(
@@ -313,8 +313,8 @@ defmodule Lenies.ConjugationTest do
   test "receive_plasmid is a no-op for an already-carried plasmid (:already_present)" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
-    [{key, cell}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "RX"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "RX"}})
 
     {:ok, pid} =
       Lenie.start_link(
@@ -342,10 +342,10 @@ defmodule Lenies.ConjugationTest do
   test ":conjugate transfers one of the donor's carried plasmids (random pick within the set)" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
 
-    [{key1, c1}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key1, %{c1 | lenie_id: "TX"}})
-    [{key2, c2}] = :ets.lookup(:cells, {129, 128})
-    :ets.insert(:cells, {key2, %{c2 | lenie_id: "RX"}})
+    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key1, %{c1 | lenie_id: "TX"}})
+    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {129, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key2, %{c2 | lenie_id: "RX"}})
 
     {:ok, recipient_pid} =
       Lenie.start_link(
@@ -397,12 +397,12 @@ defmodule Lenies.ConjugationTest do
 
     # Subscribe BEFORE starting any Lenie so we cannot miss the broadcast
     # when lenie_metabolize_delay_ms is 0 and the conjugation fires immediately.
-    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:fx")
+    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:primary:fx")
 
-    [{key1, c1}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key1, %{c1 | lenie_id: "TX2"}})
-    [{key2, c2}] = :ets.lookup(:cells, {129, 128})
-    :ets.insert(:cells, {key2, %{c2 | lenie_id: "RX2"}})
+    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key1, %{c1 | lenie_id: "TX2"}})
+    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {129, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key2, %{c2 | lenie_id: "RX2"}})
 
     plasmid_ops = [:turn_left, :defend, :eat]
     plasmid_size = length(plasmid_ops)

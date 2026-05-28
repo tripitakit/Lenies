@@ -2,20 +2,30 @@ defmodule LeniesWeb.GridRendererTest do
   use ExUnit.Case, async: false
 
   alias LeniesWeb.GridRenderer
-  alias Lenies.World.Tables
 
   setup do
-    Tables.create_all()
-    on_exit(fn -> Tables.delete_all() end)
-    :ok
+    {:ok, _world} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
+    handle = Lenies.Worlds.primary_handle()
+
+    on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
+
+    {:ok, handle: handle}
   end
 
-  test "encode_layers/1 returns 4 binaries of grid_w * grid_h bytes" do
-    grid = {4, 4}
+  # Replace World's default 256×256 cells with a fresh grid_w × grid_h grid
+  # — the tests inspect specific cells and need the canvas at exactly that
+  # size for byte-index arithmetic.
+  defp reset_cells(handle, {w, h}) do
+    :ets.delete_all_objects(handle.tables.cells)
 
-    for x <- 0..3, y <- 0..3 do
-      :ets.insert(:cells, {{x, y}, %Lenies.World.Cell{}})
+    for x <- 0..(w - 1), y <- 0..(h - 1) do
+      :ets.insert(handle.tables.cells, {{x, y}, %Lenies.World.Cell{}})
     end
+  end
+
+  test "encode_layers/1 returns 4 binaries of grid_w * grid_h bytes", %{handle: handle} do
+    grid = {4, 4}
+    reset_cells(handle, grid)
 
     {lenies_bin, resource_bin, carcass_bin, carcass_hue_bin} =
       GridRenderer.encode_layers(grid)
@@ -31,17 +41,15 @@ defmodule LeniesWeb.GridRendererTest do
     assert carcass_hue_bin == <<0::128>>
   end
 
-  test "encode_layers/1 writes the species hue byte into the lenies layer at occupied cells" do
+  test "encode_layers/1 writes the species hue byte into the lenies layer at occupied cells",
+       %{handle: handle} do
     grid = {4, 4}
+    reset_cells(handle, grid)
 
-    for x <- 0..3, y <- 0..3 do
-      :ets.insert(:cells, {{x, y}, %Lenies.World.Cell{}})
-    end
+    :ets.insert(handle.tables.cells, {{1, 2}, %Lenies.World.Cell{lenie_id: "L1"}})
+    :ets.insert(handle.tables.lenies, {"L1", %{id: "L1", codeome_hash: "hash-A"}})
 
-    :ets.insert(:cells, {{1, 2}, %Lenies.World.Cell{lenie_id: "L1"}})
-    :ets.insert(:lenies, {"L1", %{id: "L1", codeome_hash: "hash-A"}})
-
-    expected_byte = Lenies.SpeciesColor.hue_byte("hash-A")
+    expected_byte = Lenies.SpeciesColor.hue_byte(handle, "hash-A")
 
     {lenies_bin, _, _, _} = GridRenderer.encode_layers(grid)
 
@@ -53,29 +61,24 @@ defmodule LeniesWeb.GridRendererTest do
     end
   end
 
-  test "encode_layers/1 emits 0 for an occupied cell whose lenie has no snapshot yet" do
+  test "encode_layers/1 emits 0 for an occupied cell whose lenie has no snapshot yet",
+       %{handle: handle} do
     grid = {4, 4}
-
-    for x <- 0..3, y <- 0..3 do
-      :ets.insert(:cells, {{x, y}, %Lenies.World.Cell{}})
-    end
+    reset_cells(handle, grid)
 
     # Lenie occupies the cell but the `:lenies` snapshot row hasn't been written
-    :ets.insert(:cells, {{0, 0}, %Lenies.World.Cell{lenie_id: "ORPHAN"}})
+    :ets.insert(handle.tables.cells, {{0, 0}, %Lenies.World.Cell{lenie_id: "ORPHAN"}})
 
     {lenies_bin, _, _, _} = GridRenderer.encode_layers(grid)
 
     assert :binary.at(lenies_bin, 0) == 0
   end
 
-  test "encode_layers/1 includes resource, carcass, and carcass_hue values" do
+  test "encode_layers/1 includes resource, carcass, and carcass_hue values", %{handle: handle} do
     grid = {4, 4}
+    reset_cells(handle, grid)
 
-    for x <- 0..3, y <- 0..3 do
-      :ets.insert(:cells, {{x, y}, %Lenies.World.Cell{}})
-    end
-
-    :ets.insert(:cells, {
+    :ets.insert(handle.tables.cells, {
       {0, 0},
       %Lenies.World.Cell{resource: 75, carcass: 30, carcass_hue: 137}
     })
@@ -86,12 +89,9 @@ defmodule LeniesWeb.GridRendererTest do
     assert :binary.at(carcass_hue_bin, 0) == 137
   end
 
-  test "encode_payload/1 returns 4 base64-encoded layers in a map" do
+  test "encode_payload/1 returns 4 base64-encoded layers in a map", %{handle: handle} do
     grid = {4, 4}
-
-    for x <- 0..3, y <- 0..3 do
-      :ets.insert(:cells, {{x, y}, %Lenies.World.Cell{}})
-    end
+    reset_cells(handle, grid)
 
     payload = GridRenderer.encode_payload(grid)
 

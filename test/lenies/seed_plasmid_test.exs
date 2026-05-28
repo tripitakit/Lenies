@@ -23,7 +23,7 @@ defmodule Lenies.SeedPlasmidTest do
       Application.delete_env(:lenies, :eat_amount)
       Application.delete_env(:lenies, :interpreter_steps_per_batch)
 
-      case Process.whereis(Lenies.LenieSupervisor) do
+      case Lenies.WorldTestHelpers.lenie_sup_pid() do
         sup when is_pid(sup) ->
           DynamicSupervisor.which_children(sup)
           |> Enum.each(fn {_, child, _, _} ->
@@ -34,36 +34,24 @@ defmodule Lenies.SeedPlasmidTest do
           :ok
       end
 
-      case Process.whereis(Lenies.World) do
-        pid when is_pid(pid) ->
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-
-        _ ->
-          :ok
-      end
-
-      Tables.delete_all()
+      Lenies.WorldTestHelpers.stop_primary()
     end)
 
     :ok
   end
 
   test "MR-Twitch moves on both x and y axes (twitch signature)" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = Lenies.WorldTestHelpers.start_primary()
 
     # Use 2000 resource so the Lenie (which random-walks due to Twitch) does not
     # deplete local food before it has a chance to move off-axis.
     for x <- 0..254, y <- 0..254 do
-      [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 2000}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 2000}})
     end
 
-    [{key, cell}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "TWITCH"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "TWITCH"}})
 
     plasmid = Plasmid.new(MinimalReplicator.plasmid())
 
@@ -86,7 +74,7 @@ defmodule Lenies.SeedPlasmidTest do
 
     moved_off_axis =
       poll_until(deadline, fn ->
-        case :ets.lookup(:lenies, "TWITCH") do
+        case :ets.lookup(Lenies.WorldTestHelpers.lenies(), "TWITCH") do
           [{_, %{pos: {_, y}}}] when y != 128 -> {:done, true}
           _ -> :continue
         end
@@ -97,19 +85,19 @@ defmodule Lenies.SeedPlasmidTest do
   end
 
   test "MR-Twitch infects an adjacent vanilla MR" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = Lenies.WorldTestHelpers.start_primary()
 
     # Use 2000 resource so the Twitch Lenie (random-walk) and vanilla MR both
     # survive long enough to meet and perform conjugation.
     for x <- 0..254, y <- 0..254 do
-      [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 2000}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 2000}})
     end
 
-    [{key1, c1}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key1, %{c1 | lenie_id: "TWITCH"}})
-    [{key2, c2}] = :ets.lookup(:cells, {129, 128})
-    :ets.insert(:cells, {key2, %{c2 | lenie_id: "VANILLA"}})
+    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key1, %{c1 | lenie_id: "TWITCH"}})
+    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {129, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key2, %{c2 | lenie_id: "VANILLA"}})
 
     plasmid = Plasmid.new(MinimalReplicator.plasmid())
 
@@ -144,7 +132,7 @@ defmodule Lenies.SeedPlasmidTest do
 
     infected =
       poll_until(deadline, fn ->
-        case :ets.lookup(:lenies, "VANILLA") do
+        case :ets.lookup(Lenies.WorldTestHelpers.lenies(), "VANILLA") do
           [{_, snap}] ->
             if Map.get(snap, :plasmids, []) != [] do
               {:done, true}
@@ -162,19 +150,19 @@ defmodule Lenies.SeedPlasmidTest do
   end
 
   test "two MR-Twitch Lenies facing each other both survive (no deadlock crash)" do
-    {:ok, _world} = World.start_link(tick_interval_ms: 0)
+    {:ok, _world} = Lenies.WorldTestHelpers.start_primary()
 
     # Use 2000 resource: both Lenies random-walk (Twitch) and need enough food
     # to survive the 2.5s observation window without starving.
     for x <- 0..254, y <- 0..254 do
-      [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 2000}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 2000}})
     end
 
-    [{key1, c1}] = :ets.lookup(:cells, {128, 128})
-    :ets.insert(:cells, {key1, %{c1 | lenie_id: "A"}})
-    [{key2, c2}] = :ets.lookup(:cells, {129, 128})
-    :ets.insert(:cells, {key2, %{c2 | lenie_id: "B"}})
+    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {128, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key1, %{c1 | lenie_id: "A"}})
+    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {129, 128})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key2, %{c2 | lenie_id: "B"}})
 
     plasmid = Plasmid.new(MinimalReplicator.plasmid())
 

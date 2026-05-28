@@ -6,7 +6,7 @@ defmodule Lenies.LenieSnapshotTest do
 
   setup do
     on_exit(fn ->
-      case Process.whereis(Lenies.World) do
+      case Lenies.WorldTestHelpers.world_pid() do
         pid when is_pid(pid) ->
           try do
             GenServer.stop(pid)
@@ -26,8 +26,8 @@ defmodule Lenies.LenieSnapshotTest do
 
   test "Lenie writes a snapshot to :lenies ETS within a few batches" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
-    [{key, cell}] = :ets.lookup(:cells, {5, 5})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "L1"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L1"}})
 
     codeome = Codeome.from_list([:nop_0, :nop_1])
 
@@ -48,7 +48,7 @@ defmodule Lenies.LenieSnapshotTest do
     # snapshot_every_batches default 10, batch is fast — wait a bit
     Process.sleep(200)
 
-    case :ets.lookup(:lenies, "L1") do
+    case :ets.lookup(Lenies.WorldTestHelpers.lenies(), "L1") do
       [{"L1", snap}] ->
         assert snap.id == "L1"
         assert is_float(snap.energy) or is_integer(snap.energy)
@@ -66,8 +66,8 @@ defmodule Lenies.LenieSnapshotTest do
 
   test "snapshot is removed on death (via World.lenie_died)" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
-    [{key, cell}] = :ets.lookup(:cells, {5, 5})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "L2"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L2"}})
 
     codeome = Codeome.from_list([:nop_0])
 
@@ -90,13 +90,13 @@ defmodule Lenies.LenieSnapshotTest do
     # death is async (cast) — wait for World to process
     Process.sleep(100)
 
-    assert :ets.lookup(:lenies, "L2") == []
+    assert :ets.lookup(Lenies.WorldTestHelpers.lenies(), "L2") == []
   end
 
   test "snapshot preserves World-added fields like child_slot_id" do
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
-    [{key, cell}] = :ets.lookup(:cells, {5, 5})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "L4"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "L4"}})
 
     codeome = Codeome.from_list([:nop_0, :nop_1])
 
@@ -114,14 +114,14 @@ defmodule Lenies.LenieSnapshotTest do
 
     # World adds child_slot_id
     Process.sleep(50)
-    [{"L4", record}] = :ets.lookup(:lenies, "L4")
+    [{"L4", record}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(), "L4")
     merged = Map.put(record, :child_slot_id, "fake-slot-123")
-    :ets.insert(:lenies, {"L4", merged})
+    :ets.insert(Lenies.WorldTestHelpers.lenies(), {"L4", merged})
 
     # Let the Lenie write another snapshot (cadence = 10, batches happen fast)
     Process.sleep(500)
 
-    [{"L4", record_after}] = :ets.lookup(:lenies, "L4")
+    [{"L4", record_after}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(), "L4")
 
     assert record_after.child_slot_id == "fake-slot-123",
            "Lenie snapshot should NOT clobber World-added child_slot_id field"

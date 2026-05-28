@@ -1,8 +1,29 @@
 defmodule Lenies.World do
   @moduledoc """
-  The Lenies sandbox "world". Singleton GenServer that owns the ETS tables,
-  drives the environmental tick, applies radiation and carcass decay, and
-  provides the public API for snapshots and sterilization.
+  The Lenies sandbox "world". GenServer that owns the ETS tables, drives the
+  environmental tick, applies radiation and carcass decay, and provides the
+  public API for snapshots and sterilization.
+
+  ## Multi-world (Task 5)
+
+  Each World now carries:
+
+  - `world_id` — an atom or `{atom, term}` tuple identifying the world
+    (defaults to `:primary`).
+  - `config` — a `%Lenies.World.Config{}` struct, the source of truth at
+    runtime for tunable simulation parameters. The struct is seeded from
+    `Application.get_env(:lenies, …)` at `init/1` and then never re-read
+    from app env (except for live-tuning paths we haven't migrated yet).
+  - `tables` — a map of unnamed ETS tids (`%{cells, lenies, child_slots,
+    history}`) owned by THIS GenServer.
+  - `handle` — a `%Lenies.WorldHandle{}` rendered once in `init/1` and
+    exposed via `handle_call(:get_handle, …)`.
+
+  Each World registers under `{:via, Registry, {Lenies.Registry, {:world,
+  world_id}}}`. The module-level helpers (`Lenies.World.action/1`,
+  `Lenies.World.sterilize/0`, …) are thin delegators to
+  `Lenies.Worlds.X(:primary, …)` so legacy `:primary`-implicit call sites
+  keep working during the transition; T11 migrates them.
 
   See `docs/superpowers/specs/2026-05-11-lenies-design.md` §3, §6, §9.
   """
@@ -13,70 +34,83 @@ defmodule Lenies.World do
   alias Lenies.World.{Cell, ChildSlots, Hotspots, Radiation, Tables}
   alias Lenies.{Codeome, Mutator}
 
-  @name __MODULE__
-
   # ----- Public API -----
 
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: @name)
+    world_id = Keyword.get(opts, :world_id, :primary)
+    config_overrides = Keyword.get(opts, :config, %{})
+
+    GenServer.start_link(__MODULE__, {world_id, config_overrides, opts},
+      name: server_name(world_id)
+    )
   end
 
-  @doc "Quick sandbox stats for console/test."
-  def snapshot_stats, do: GenServer.call(@name, :snapshot_stats)
+  defp server_name(world_id),
+    do: {:via, Registry, {Lenies.Registry, {:world, world_id}}}
 
-  @doc "Force a single synchronous tick (for deterministic tests)."
-  def tick_now, do: GenServer.call(@name, :tick_now)
+  # ----- :primary delegators (compat for legacy call sites) -----
+  #
+  # The module-level helpers below address the `:primary` world via the
+  # `Lenies.Worlds` facade. They exist so existing call sites in LiveViews,
+  # tests, and console sessions keep working unchanged during the multi-world
+  # transition; T11 migrates the LiveViews and tests to use the facade
+  # directly.
 
-  @doc "Full reset: kill all Lenies, clear ETS, restart the tick."
-  def sterilize, do: GenServer.call(@name, :sterilize)
+  @doc "Quick sandbox stats for console/test (primary world)."
+  def snapshot_stats, do: Lenies.Worlds.snapshot_stats(:primary)
+
+  @doc "Force a single synchronous tick (primary world; deterministic tests)."
+  def tick_now do
+    with {:ok, h} <- Lenies.Worlds.handle(:primary) do
+      GenServer.call(h.pid, :tick_now)
+    end
+  end
+
+  @doc "Full reset: kill all Lenies, clear ETS, restart the tick (primary world)."
+  def sterilize, do: Lenies.Worlds.sterilize(:primary)
 
   @doc """
-  Swap the 4 snapshot tables (`Lenies.Snapshot.tables/0`) for the `.tab` files
-  in `dir`, running in the World process so World owns the reloaded tables.
-
-  Intended to be called by `Lenies.Snapshot.restore_from_disk/1` AFTER a
-  separate `sterilize/0` call (so terminated-Lenie `:lenie_died` casts are
-  drained first) and AFTER the files have been validated. Does NOT recreate
-  `:cells` contents (they come from the file) nor touch `:species_codeomes`.
-  """
-  def restore_tables(dir), do: GenServer.call(@name, {:restore_tables, dir})
-
-  @doc """
-  Execute an action requested by a Lenie. Synchronous call.
+  Execute an action requested by a Lenie (primary world). Synchronous call.
 
   Forms:
   - `{:sense_front, {x, y}, dir}` — returns `{:ok, :empty | {:resource, n} | {:lenie, id}}`
   - `{:move, {x, y}, dir, lenie_id}` — returns `{:ok, {:moved, {x2, y2}} | :blocked}`
   - `{:eat, {x, y}}` — returns `{:ok, {:ate, amount}}`
   """
-  def action(action_spec), do: GenServer.call(@name, {:action, action_spec})
+  def action(action_spec), do: Lenies.Worlds.action(:primary, action_spec)
 
-  @doc "Pause the environmental tick (auto-tick stops; tick_now still works)."
-  def pause, do: GenServer.call(@name, :pause)
+  @doc "Pause the environmental tick (primary world)."
+  def pause, do: Lenies.Worlds.pause(:primary)
 
-  @doc "Resume the environmental tick."
-  def resume, do: GenServer.call(@name, :resume)
+  @doc "Resume the environmental tick (primary world)."
+  def resume, do: Lenies.Worlds.resume(:primary)
 
-  @doc "Query current pause status."
-  def paused?, do: GenServer.call(@name, :paused?)
+  @doc "Query current pause status (primary world)."
+  def paused?, do: Lenies.Worlds.paused?(:primary)
 
   @doc """
-  Synchronous reconciliation sweep: frees cells and deletes :lenies records
-  whose Lenie is no longer alive in the Registry.
+  Synchronous reconciliation sweep (primary world): frees cells and deletes
+  :lenies records whose Lenie is no longer alive in the Registry.
 
-  Returns `{freed_cells, deleted_records}`.  Useful for tests and diagnostics;
+  Returns `{freed_cells, deleted_records}`. Useful for tests and diagnostics;
   the same sweep runs automatically on the `:reconcile_interval_ms` timer.
   """
-  def reconcile, do: GenServer.call(@name, :reconcile)
+  def reconcile do
+    with {:ok, h} <- Lenies.Worlds.handle(:primary) do
+      GenServer.call(h.pid, :reconcile)
+    end
+  end
 
-  @doc "Notify the World that a Lenie has died (frees the cell, optionally leaves a carcass)."
+  @doc "Notify the primary World that a Lenie has died (frees the cell, optionally leaves a carcass)."
   def lenie_died(id, pos, energy_at_death, codeome_hash)
       when is_binary(codeome_hash) do
-    GenServer.cast(@name, {:lenie_died, id, pos, energy_at_death, codeome_hash})
+    with {:ok, h} <- Lenies.Worlds.handle(:primary) do
+      GenServer.cast(h.pid, {:lenie_died, id, pos, energy_at_death, codeome_hash})
+    end
   end
 
   @doc """
-  Spawn a new Lenie with `codeome` on a random free cell.
+  Spawn a new Lenie with `codeome` on a random free cell (primary world).
 
   Options:
   - `:energy` (default 500.0)
@@ -86,23 +120,40 @@ defmodule Lenies.World do
   Returns `{:ok, {id, pos}}` on success or `{:error, :no_free_cell}` if the grid is full.
   """
   def spawn_lenie(codeome, opts \\ []) do
-    GenServer.call(@name, {:spawn_lenie, codeome, opts})
+    Lenies.Worlds.spawn_lenie(:primary, codeome, opts)
   end
 
   # ----- Server -----
 
   @impl true
-  def init(opts) do
-    Tables.create_all()
-    grid = Config.grid_size()
-    init_cells(grid)
+  def init({world_id, config_overrides, opts}) do
+    # Seed per-world Config from Application env, then layer caller overrides.
+    config = Lenies.World.Config.merge(Lenies.World.Config.defaults(), config_overrides)
+    tables = Tables.create_all(world_id)
 
-    tick_interval = Keyword.get(opts, :tick_interval_ms, Config.tick_interval_ms())
+    pubsub_prefix = "world:" <> Lenies.Worlds.id_to_path(world_id)
+
+    handle = %Lenies.WorldHandle{
+      id: world_id,
+      pid: self(),
+      tables: tables,
+      pubsub_prefix: pubsub_prefix
+    }
+
+    # `grid` is still sourced from Lenies.Config (system bounds), not from the
+    # per-world Config. Multi-grid support is a later step.
+    grid = Config.grid_size()
+    tick_interval = Keyword.get(opts, :tick_interval_ms, config.tick_interval_ms)
     hotspots = Hotspots.initial(grid, Config.hotspot_count())
 
-    {total_resource, total_carcass} = sum_cells()
+    init_cells(grid, tables)
+    {total_resource, total_carcass} = sum_cells(tables)
 
     state = %{
+      world_id: world_id,
+      config: config,
+      tables: tables,
+      handle: handle,
       grid: grid,
       hotspots: hotspots,
       tick_interval_ms: tick_interval,
@@ -116,7 +167,7 @@ defmodule Lenies.World do
 
     state = prewarm_radiation(state)
     # After prewarm, recompute totals to reflect the radiation deposited.
-    {r, c} = sum_cells()
+    {r, c} = sum_cells(tables)
     state = %{state | total_resource: r, total_carcass: c}
     state = maybe_schedule_tick(state)
     state = schedule_reconcile(state)
@@ -124,13 +175,17 @@ defmodule Lenies.World do
   end
 
   @impl true
+  def handle_call(:get_handle, _from, state) do
+    {:reply, state.handle, state}
+  end
+
   def handle_call(:snapshot_stats, _from, state) do
     # total_resource and total_carcass are maintained as cached values in state,
     # updated once per tick in decay_and_sum_cells/0. Between ticks the values
     # may be up to one tick stale, which is acceptable for a stats display.
     stats = %{
-      cells: :ets.info(:cells, :size),
-      population: :ets.info(:lenies, :size),
+      cells: :ets.info(state.tables.cells, :size),
+      population: :ets.info(state.tables.lenies, :size),
       total_resource: state.total_resource,
       total_carcass: state.total_carcass,
       tick_count: state.tick_count
@@ -145,113 +200,68 @@ defmodule Lenies.World do
   end
 
   def handle_call(:sterilize, _from, state) do
-    terminate_all_lenies()
-    if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
-    if state.reconcile_ref, do: Process.cancel_timer(state.reconcile_ref)
-    Tables.clear_all()
-    init_cells(state.grid)
-    hotspots = Hotspots.initial(state.grid, Config.hotspot_count())
-    {total_resource, total_carcass} = sum_cells()
-
-    new_state = %{
-      state
-      | hotspots: hotspots,
-        tick_count: 0,
-        tick_ref: nil,
-        reconcile_ref: nil,
-        total_resource: total_resource,
-        total_carcass: total_carcass
-    }
-
-    new_state = prewarm_radiation(new_state)
-    # Recompute totals after prewarm radiation has deposited resources.
-    {r, c} = sum_cells()
-    new_state = %{new_state | total_resource: r, total_carcass: c}
-    new_state = maybe_schedule_tick(new_state)
-    new_state = schedule_reconcile(new_state)
-
-    Phoenix.PubSub.broadcast(
-      Lenies.PubSub,
-      "world:control",
-      {:sterilized, System.system_time(:millisecond)}
-    )
-
+    new_state = do_sterilize(state)
+    broadcast(state, "control", {:sterilized, System.system_time(:millisecond)})
     {:reply, :ok, new_state}
   end
 
-  def handle_call({:restore_tables, dir}, _from, state) do
-    if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
-    if state.reconcile_ref, do: Process.cancel_timer(state.reconcile_ref)
+  def handle_call({:save_snapshot, name}, _from, state) do
+    result = Lenies.Snapshot.save(state.handle, name)
+    {:reply, result, state}
+  end
 
-    result =
-      try do
-        Enum.reduce_while(Lenies.Snapshot.tables(), :ok, fn table, _acc ->
-          path = Path.join(dir, "#{table}.tab") |> String.to_charlist()
-
-          # The table still exists after sterilize; delete it so file2tab can
-          # recreate it owned by THIS (World) process.
-          if :ets.whereis(table) != :undefined, do: :ets.delete(table)
-
-          case :ets.file2tab(path) do
-            {:ok, _} -> {:cont, :ok}
-            _error -> {:halt, {:error, {:restore_failed, table}}}
-          end
-        end)
-      rescue
-        _ -> {:error, {:restore_failed, :unknown}}
-      end
-
-    # Reset tick bookkeeping like sterilize does and reschedule the tick and reconcile.
-    new_state = %{state | tick_count: 0, tick_ref: nil, reconcile_ref: nil}
-    new_state = maybe_schedule_tick(new_state)
-    new_state = schedule_reconcile(new_state)
-
-    case result do
+  def handle_call({:restore_snapshot, name}, _from, state) do
+    # Only the load phase runs in the World GenServer; the caller
+    # (`Lenies.Worlds.restore_snapshot/2`) has already validated the snapshot
+    # AND issued a separate `:sterilize` call. The separate sterilize call is
+    # load-bearing: it drains the resulting `:lenie_died` casts from the
+    # world's mailbox before this call is dequeued, so the freshly restored
+    # `:cells` / `:lenies` tables aren't clobbered.
+    case Lenies.Snapshot.load_validated(state.handle, name) do
       :ok ->
-        # Recompute totals from the freshly loaded :cells table.
-        {r, c} = sum_cells()
-        new_state = %{new_state | total_resource: r, total_carcass: c}
-
-        Phoenix.PubSub.broadcast(
-          Lenies.PubSub,
-          "world:control",
-          {:restored, System.system_time(:millisecond)}
-        )
-
+        {r, c} = sum_cells(state.tables)
+        new_state = %{state | total_resource: r, total_carcass: c}
+        broadcast(new_state, "control", {:restored, System.system_time(:millisecond)})
         {:reply, :ok, new_state}
 
       {:error, _} = err ->
-        # Recovery: if file2tab failed partway through the loop, one or more
-        # snapshot tables may be missing (deleted but not recreated). An absent
-        # named table would cause World to crash on the next ETS lookup, so we
-        # recreate all 4 as fresh empty tables and re-initialise the :cells grid
-        # to leave the world in a valid, consistent (empty) state.
-        recover_tables(state.grid)
-        {r, c} = sum_cells()
-        new_state = %{new_state | total_resource: r, total_carcass: c}
+        # Sterilize already ran in a previous call. The simulation tables
+        # are empty; recompute the cached totals so they reflect reality.
+        {r, c} = sum_cells(state.tables)
+        new_state = %{state | total_resource: r, total_carcass: c}
         {:reply, err, new_state}
     end
   end
 
   def handle_call(:pause, _from, state) do
     if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
-    # Broadcast pause/resume on world:control so each Lenie can suspend
-    # its metabolize loop too — otherwise the environmental tick stops
-    # but the Lenies keep moving in the background and the canvas
+    # Broadcast pause/resume on the world's control topic so each Lenie can
+    # suspend its metabolize loop too — otherwise the environmental tick
+    # stops but the Lenies keep moving in the background and the canvas
     # silently goes out of sync with reality.
-    Phoenix.PubSub.broadcast(Lenies.PubSub, "world:control", :world_paused)
+    broadcast(state, "control", :world_paused)
     {:reply, :ok, %{state | paused?: true, tick_ref: nil}}
   end
 
   def handle_call(:resume, _from, state) do
     new_state = %{state | paused?: false}
     new_state = maybe_schedule_tick(new_state)
-    Phoenix.PubSub.broadcast(Lenies.PubSub, "world:control", :world_resumed)
+    broadcast(state, "control", :world_resumed)
     {:reply, :ok, new_state}
   end
 
   def handle_call(:paused?, _from, state) do
     {:reply, state.paused?, state}
+  end
+
+  def handle_call({:tune, key, value}, _from, state) do
+    if Map.has_key?(Map.from_struct(state.config), key) do
+      new_config = Map.put(state.config, key, value)
+      broadcast(state, "control", {:config_changed, key, value})
+      {:reply, :ok, %{state | config: new_config}}
+    else
+      {:reply, {:error, {:unknown_tunable, key}}, state}
+    end
   end
 
   def handle_call(:reconcile, _from, state) do
@@ -267,7 +277,7 @@ defmodule Lenies.World do
 
   @impl true
   def handle_call({:spawn_lenie, codeome, opts}, _from, state) do
-    case find_random_free_cell(state.grid) do
+    case find_random_free_cell(state.grid, state.tables) do
       {:ok, pos} ->
         lenie_id = generate_lenie_id()
         energy = Keyword.get(opts, :energy, 500.0)
@@ -292,12 +302,14 @@ defmodule Lenies.World do
 
         {:ok, _pid} =
           DynamicSupervisor.start_child(
-            Lenies.LenieSupervisor,
-            Supervisor.child_spec({Lenies.Lenie, child_opts}, restart: :temporary)
+            Lenies.LenieSupervisor.via(state.world_id),
+            Supervisor.child_spec({Lenies.Lenie, {state.handle, child_opts}},
+              restart: :temporary
+            )
           )
 
-        [{key, cell}] = :ets.lookup(:cells, pos)
-        :ets.insert(:cells, {key, %{cell | lenie_id: lenie_id}})
+        [{key, cell}] = :ets.lookup(state.tables.cells, pos)
+        :ets.insert(state.tables.cells, {key, %{cell | lenie_id: lenie_id}})
 
         {:reply, {:ok, {lenie_id, pos}}, state}
 
@@ -308,12 +320,12 @@ defmodule Lenies.World do
 
   @impl true
   def handle_cast({:lenie_died, id, {x, y}, energy_at_death, codeome_hash}, state) do
-    case :ets.lookup(:cells, {x, y}) do
+    case :ets.lookup(state.tables.cells, {x, y}) do
       [{key, cell}] ->
         carcass_value = max(0, trunc(energy_at_death * 0.5))
-        hue = Lenies.SpeciesColor.hue_byte(codeome_hash)
+        hue = Lenies.SpeciesColor.hue_byte(state.handle, codeome_hash)
 
-        :ets.insert(:cells, {
+        :ets.insert(state.tables.cells, {
           key,
           %{cell | lenie_id: nil, carcass: cell.carcass + carcass_value, carcass_hue: hue}
         })
@@ -322,7 +334,7 @@ defmodule Lenies.World do
         :ok
     end
 
-    :ets.delete(:lenies, id)
+    :ets.delete(state.tables.lenies, id)
     {:noreply, state}
   end
 
@@ -341,29 +353,77 @@ defmodule Lenies.World do
 
   # ----- internals -----
 
-  defp init_cells({w, h}) do
+  # Wipes the simulation tables (cells, lenies, child_slots, history),
+  # terminates all live Lenies, cancels timers, repaints the cell grid with
+  # the initial resource value, prewarms radiation, and reschedules the tick
+  # and reconcile timers. Returns the new state. Color overrides are
+  # preserved per the SpeciesColor contract — they represent user intent,
+  # not simulation state.
+  #
+  # Shared by the `:sterilize` and `:restore_snapshot` handle_calls. Note: this
+  # helper does NOT broadcast the `{:sterilized, …}` event — the caller is
+  # expected to broadcast whatever event matches its semantics (`:sterilized`
+  # vs `:restored`).
+  defp do_sterilize(state) do
+    terminate_all_lenies(state.world_id)
+    if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
+    if state.reconcile_ref, do: Process.cancel_timer(state.reconcile_ref)
+    Tables.clear_all(Map.drop(state.tables, [:color_overrides]))
+    init_cells(state.grid, state.tables)
+    hotspots = Hotspots.initial(state.grid, Config.hotspot_count())
+    {total_resource, total_carcass} = sum_cells(state.tables)
+
+    new_state = %{
+      state
+      | hotspots: hotspots,
+        tick_count: 0,
+        tick_ref: nil,
+        reconcile_ref: nil,
+        total_resource: total_resource,
+        total_carcass: total_carcass
+    }
+
+    new_state = prewarm_radiation(new_state)
+    # Recompute totals after prewarm radiation has deposited resources.
+    {r, c} = sum_cells(state.tables)
+    new_state = %{new_state | total_resource: r, total_carcass: c}
+    new_state = maybe_schedule_tick(new_state)
+    schedule_reconcile(new_state)
+  end
+
+  # Live config read with hardcoded-default fallback (compat shim during the
+  # multi-world refactor). The intent of the spec is that `state.config.<key>`
+  # be the source of truth — but the existing suite relies on
+  # `Application.put_env(:lenies, …)` / `Application.delete_env(:lenies, …)`
+  # taking effect on a running World, so we re-read app env on each access.
+  # When a test has deleted the key we fall back to the SAME literal default
+  # the pre-Task-5 `Application.get_env(:lenies, key, <default>)` calls used,
+  # NOT to `state.config.<key>` — otherwise the slightly different defaults
+  # in `Lenies.World.Config.defaults/0` would shift behaviour. The shim is
+  # removed in a later task once `Worlds.tune/3` writes into state.
+  @cfg_defaults %{
+    radiation_per_tick: 100,
+    eat_amount: 20,
+    carcass_decay: 0.05,
+    tick_interval_ms: 100,
+    copy_substitution_rate: 0.005,
+    copy_insert_rate: 0.0005,
+    copy_delete_rate: 0.0005,
+    background_mutation_rate_per_1000_ticks: 1,
+    attack_damage: 10
+  }
+  defp cfg(_state, key) do
+    Application.get_env(:lenies, key, Map.fetch!(@cfg_defaults, key))
+  end
+
+  defp init_cells({w, h}, tables) do
     initial_resource = Application.get_env(:lenies, :initial_resource_per_cell, 30)
 
     for x <- 0..(w - 1), y <- 0..(h - 1) do
-      :ets.insert(:cells, {{x, y}, %Cell{resource: initial_resource}})
+      :ets.insert(tables.cells, {{x, y}, %Cell{resource: initial_resource}})
     end
 
     :ok
-  end
-
-  # Recreate all 4 snapshot tables from scratch when a restore fails mid-loop.
-  # Any table that currently exists is deleted first so the :new/2 call can
-  # register the :named_table. The :cells grid is then populated the same way
-  # init/1 does it, so the world is immediately usable after recovery.
-  defp recover_tables(grid) do
-    table_opts = [:set, :named_table, :public, read_concurrency: true, write_concurrency: true]
-
-    for table <- Lenies.Snapshot.tables() do
-      if :ets.whereis(table) != :undefined, do: :ets.delete(table)
-      :ets.new(table, table_opts)
-    end
-
-    init_cells(grid)
   end
 
   defp prewarm_radiation(state) do
@@ -384,16 +444,12 @@ defmodule Lenies.World do
     apply_radiation(state)
     # Single fold: apply carcass decay AND accumulate {total_resource, total_carcass}.
     # Runs AFTER radiation so total_resource reflects post-radiation state.
-    {total_resource, total_carcass} = decay_and_sum_cells()
+    {total_resource, total_carcass} = decay_and_sum_cells(state)
     maybe_background_mutation(state)
 
     hotspots = Hotspots.drift(state.hotspots, state.grid)
 
-    Phoenix.PubSub.broadcast(
-      Lenies.PubSub,
-      "world:tick",
-      {:tick, state.tick_count + 1}
-    )
+    broadcast(state, "tick", {:tick, state.tick_count + 1})
 
     %{
       state
@@ -408,15 +464,15 @@ defmodule Lenies.World do
     deposit =
       Radiation.combined(
         state.grid,
-        Config.radiation_per_tick(),
+        cfg(state, :radiation_per_tick),
         state.hotspots,
         uniform_ratio: Config.radiation_uniform_ratio()
       )
 
     Enum.each(deposit, fn {{x, y}, amount} ->
-      case :ets.lookup(:cells, {x, y}) do
+      case :ets.lookup(state.tables.cells, {x, y}) do
         [{key, cell}] ->
-          :ets.insert(:cells, {key, Cell.add_resource(cell, amount)})
+          :ets.insert(state.tables.cells, {key, Cell.add_resource(cell, amount)})
 
         [] ->
           :ok
@@ -435,15 +491,16 @@ defmodule Lenies.World do
   # Inserting into :cells during the foldl (for a :set table, updating the
   # same key) is the established pattern here — this is safe for a :set as
   # long as we are only updating existing keys, not inserting new ones.
-  defp decay_and_sum_cells do
-    rate = Config.carcass_decay()
+  defp decay_and_sum_cells(state) do
+    rate = cfg(state, :carcass_decay)
+    cells = state.tables.cells
 
     :ets.foldl(
       fn {key, cell}, {sum_r, sum_c} ->
         effective_cell =
           if rate > 0 and cell.carcass > 0 do
             decayed = Cell.decay_carcass(cell, rate)
-            :ets.insert(:cells, {key, decayed})
+            :ets.insert(cells, {key, decayed})
             decayed
           else
             cell
@@ -452,7 +509,7 @@ defmodule Lenies.World do
         {sum_r + effective_cell.resource, sum_c + effective_cell.carcass}
       end,
       {0, 0},
-      :cells
+      cells
     )
   end
 
@@ -462,21 +519,21 @@ defmodule Lenies.World do
   # where bigger numbers mean rarer events. We convert internally to a
   # tick interval so the rest of the logic stays modular arithmetic.
   defp maybe_background_mutation(state) do
-    rate = Application.get_env(:lenies, :background_mutation_rate_per_1000_ticks, 1)
+    rate = cfg(state, :background_mutation_rate_per_1000_ticks)
 
     if rate > 0 do
       interval = max(1, div(1000, rate))
 
       if rem(state.tick_count + 1, interval) == 0 do
-        apply_random_background_mutation()
+        apply_random_background_mutation(state)
       end
     end
 
     :ok
   end
 
-  defp apply_random_background_mutation do
-    case :ets.tab2list(:lenies) do
+  defp apply_random_background_mutation(state) do
+    case :ets.tab2list(state.tables.lenies) do
       [] ->
         :ok
 
@@ -484,20 +541,20 @@ defmodule Lenies.World do
         # Pick a random Lenie's id
         {id, _record} = Enum.random(records)
 
-        case Lenies.Registry.whereis(id) do
-          pid when is_pid(pid) -> send(pid, :background_mutate)
-          _ -> :ok
+        case Registry.lookup(Lenies.Registry, {:lenie, state.world_id, id}) do
+          [{pid, _}] -> send(pid, :background_mutate)
+          [] -> :ok
         end
     end
   end
 
   # One fold returning {total_resource, total_carcass} without side effects.
   # Used at init, sterilize, and restore_tables to seed the cached totals.
-  defp sum_cells do
+  defp sum_cells(tables) do
     :ets.foldl(
       fn {_key, cell}, {r, c} -> {r + cell.resource, c + cell.carcass} end,
       {0, 0},
-      :cells
+      tables.cells
     )
   end
 
@@ -508,6 +565,8 @@ defmodule Lenies.World do
   defp maybe_schedule_tick(state) do
     # Re-read from Application env so the dashboard slider can change tick rate
     # live on a running world. Falls back to the value supplied at start_link.
+    # NOTE: we don't refresh state.config here — the live-tuning path stays on
+    # app env for this task; per-world config update is a later step.
     interval = Application.get_env(:lenies, :tick_interval_ms, state.tick_interval_ms)
     ref = Process.send_after(self(), :tick, interval)
     %{state | tick_ref: ref}
@@ -528,30 +587,36 @@ defmodule Lenies.World do
   # the same fold is undefined in concurrent settings).
   #
   # Returns {freed_cells, deleted_records}.
-  defp do_reconcile(_state) do
+  defp do_reconcile(state) do
     # Guard: if the Registry is not available (e.g. supervisor not started)
     # return immediately without crashing World.
     if Process.whereis(Lenies.Registry) == nil do
       {0, 0}
     else
+      cells = state.tables.cells
+      lenies = state.tables.lenies
+
+      world_id = state.world_id
+
       # Pass 1 — collect keys of cells occupied by dead Lenies
       stale_cell_keys =
         :ets.foldl(
           fn {key, cell}, acc ->
-            if is_binary(cell.lenie_id) and not is_pid(Lenies.Registry.whereis(cell.lenie_id)) do
+            if is_binary(cell.lenie_id) and
+                 Registry.lookup(Lenies.Registry, {:lenie, world_id, cell.lenie_id}) == [] do
               [key | acc]
             else
               acc
             end
           end,
           [],
-          :cells
+          cells
         )
 
       # Apply: free each stale cell (no carcass — we have no reliable energy)
       Enum.each(stale_cell_keys, fn key ->
-        case :ets.lookup(:cells, key) do
-          [{^key, cell}] -> :ets.insert(:cells, {key, %{cell | lenie_id: nil}})
+        case :ets.lookup(cells, key) do
+          [{^key, cell}] -> :ets.insert(cells, {key, %{cell | lenie_id: nil}})
           _ -> :ok
         end
       end)
@@ -560,34 +625,36 @@ defmodule Lenies.World do
       stale_lenie_ids =
         :ets.foldl(
           fn {id, _record}, acc ->
-            if not is_pid(Lenies.Registry.whereis(id)) do
+            if Registry.lookup(Lenies.Registry, {:lenie, world_id, id}) == [] do
               [id | acc]
             else
               acc
             end
           end,
           [],
-          :lenies
+          lenies
         )
 
       # Apply: delete each orphaned record
-      Enum.each(stale_lenie_ids, fn id -> :ets.delete(:lenies, id) end)
+      Enum.each(stale_lenie_ids, fn id -> :ets.delete(lenies, id) end)
 
       {length(stale_cell_keys), length(stale_lenie_ids)}
     end
   end
 
-  defp terminate_all_lenies do
-    case Process.whereis(Lenies.LenieSupervisor) do
-      nil ->
+  defp terminate_all_lenies(world_id) do
+    case Registry.lookup(Lenies.Registry, {:lenie_sup, world_id}) do
+      [] ->
         :ok
 
-      _pid ->
-        Lenies.LenieSupervisor
+      [{_pid, _}] ->
+        sup = Lenies.LenieSupervisor.via(world_id)
+
+        sup
         |> DynamicSupervisor.which_children()
         |> Enum.each(fn {_, child_pid, _, _} ->
           if is_pid(child_pid),
-            do: DynamicSupervisor.terminate_child(Lenies.LenieSupervisor, child_pid)
+            do: DynamicSupervisor.terminate_child(sup, child_pid)
         end)
     end
   end
@@ -595,7 +662,7 @@ defmodule Lenies.World do
   defp do_action({:sense_front, {x, y}, dir}, state) do
     front = front_cell({x, y}, dir, state.grid)
 
-    case :ets.lookup(:cells, front) do
+    case :ets.lookup(state.tables.cells, front) do
       [{_, cell}] ->
         result =
           cond do
@@ -614,12 +681,12 @@ defmodule Lenies.World do
   defp do_action({:move, {x, y}, dir, lenie_id}, state) do
     front = front_cell({x, y}, dir, state.grid)
 
-    case :ets.lookup(:cells, front) do
+    case :ets.lookup(state.tables.cells, front) do
       [{_, %{lenie_id: nil} = front_cell}] ->
         # move successful
-        [{src_key, src_cell}] = :ets.lookup(:cells, {x, y})
-        :ets.insert(:cells, {src_key, %{src_cell | lenie_id: nil}})
-        :ets.insert(:cells, {front, %{front_cell | lenie_id: lenie_id}})
+        [{src_key, src_cell}] = :ets.lookup(state.tables.cells, {x, y})
+        :ets.insert(state.tables.cells, {src_key, %{src_cell | lenie_id: nil}})
+        :ets.insert(state.tables.cells, {front, %{front_cell | lenie_id: lenie_id}})
         {{:ok, {:moved, front}}, state}
 
       _ ->
@@ -628,11 +695,11 @@ defmodule Lenies.World do
   end
 
   defp do_action({:eat, {x, y}}, state) do
-    case :ets.lookup(:cells, {x, y}) do
+    case :ets.lookup(state.tables.cells, {x, y}) do
       [{key, cell}] ->
-        eat_amount = Application.get_env(:lenies, :eat_amount, 20)
+        eat_amount = cfg(state, :eat_amount)
         {energy_gained, new_cell} = consume_eat(cell, eat_amount)
-        :ets.insert(:cells, {key, new_cell})
+        :ets.insert(state.tables.cells, {key, new_cell})
         {{:ok, {:ate, energy_gained}}, state}
 
       _ ->
@@ -648,16 +715,18 @@ defmodule Lenies.World do
       size < min_size or size > max_size ->
         {{:ok, :invalid_size}, state}
 
-      parent_already_allocated?(parent_id) ->
+      parent_already_allocated?(parent_id, state) ->
         {{:ok, :already_allocated}, state}
 
       true ->
         target_cell = front_cell({x, y}, dir, state.grid)
 
-        case :ets.lookup(:cells, target_cell) do
+        case :ets.lookup(state.tables.cells, target_cell) do
           [{_, %{lenie_id: nil}}] ->
-            {:ok, slot_id} = ChildSlots.create(parent_id, target_cell, size)
-            update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, slot_id))
+            {:ok, slot_id} =
+              ChildSlots.create(state.tables.child_slots, parent_id, target_cell, size)
+
+            update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, slot_id), state)
             {{:ok, {:allocated, slot_id, target_cell}}, state}
 
           _ ->
@@ -667,13 +736,13 @@ defmodule Lenies.World do
   end
 
   defp do_action({:write_child, opcode_int, child_addr, parent_id}, state) do
-    case :ets.lookup(:lenies, parent_id) do
+    case :ets.lookup(state.tables.lenies, parent_id) do
       [{^parent_id, %{child_slot_id: slot_id}}] when is_binary(slot_id) ->
-        rates = current_copy_rates()
+        rates = current_copy_rates(state)
         outcome = Mutator.copy_outcome(rates)
         opcode = Codeome.Opcodes.decode(opcode_int)
 
-        :ok = apply_copy_outcome(slot_id, child_addr, opcode, outcome)
+        :ok = apply_copy_outcome(slot_id, child_addr, opcode, outcome, state)
         {{:ok, :written}, state}
 
       _ ->
@@ -682,9 +751,9 @@ defmodule Lenies.World do
   end
 
   defp do_action({:divide, parent_energy, _pos, _dir, parent_id}, state) do
-    case :ets.lookup(:lenies, parent_id) do
+    case :ets.lookup(state.tables.lenies, parent_id) do
       [{^parent_id, %{child_slot_id: slot_id} = parent_record}] when is_binary(slot_id) ->
-        case ChildSlots.get(slot_id) do
+        case ChildSlots.get(state.tables.child_slots, slot_id) do
           {:ok, slot} ->
             do_divide(parent_id, parent_record, slot_id, slot, parent_energy, state)
 
@@ -700,9 +769,14 @@ defmodule Lenies.World do
   defp do_action({:defend, lenie_id}, state) do
     window = Application.get_env(:lenies, :defense_window_ticks, 5)
 
-    case :ets.lookup(:lenies, lenie_id) do
+    case :ets.lookup(state.tables.lenies, lenie_id) do
       [{^lenie_id, _record}] ->
-        update_lenie_record(lenie_id, &Map.put(&1, :defending_until, state.tick_count + window))
+        update_lenie_record(
+          lenie_id,
+          &Map.put(&1, :defending_until, state.tick_count + window),
+          state
+        )
+
         {{:ok, :defending}, state}
 
       _ ->
@@ -713,7 +787,7 @@ defmodule Lenies.World do
   defp do_action({:attack, {x, y}, dir, attacker_id}, state) do
     target_cell = front_cell({x, y}, dir, state.grid)
 
-    case :ets.lookup(:cells, target_cell) do
+    case :ets.lookup(state.tables.cells, target_cell) do
       [{_, %{lenie_id: target_id}}] when is_binary(target_id) ->
         resolve_attack(target_id, attacker_id, state)
 
@@ -725,9 +799,9 @@ defmodule Lenies.World do
   defp do_action(_unknown, state), do: {{:ok, {:error, :unknown_action}}, state}
 
   defp resolve_attack(target_id, attacker_id, state) do
-    base_damage = Application.get_env(:lenies, :attack_damage, 10)
+    base_damage = cfg(state, :attack_damage)
 
-    case :ets.lookup(:lenies, target_id) do
+    case :ets.lookup(state.tables.lenies, target_id) do
       [{^target_id, record}] ->
         defending_until = Map.get(record, :defending_until, 0)
 
@@ -741,9 +815,9 @@ defmodule Lenies.World do
         # Send async damage message to the target Lenie, including the
         # attacker id so the victim can reward the attacker with exactly
         # what it actually lost (energy conservation fix).
-        case Lenies.Registry.whereis(target_id) do
-          pid when is_pid(pid) -> send(pid, {:take_damage, damage, attacker_id})
-          _ -> :ok
+        case Registry.lookup(Lenies.Registry, {:lenie, state.world_id, target_id}) do
+          [{pid, _}] -> send(pid, {:take_damage, damage, attacker_id})
+          [] -> :ok
         end
 
         {{:ok, {result_tag, damage}}, state}
@@ -757,15 +831,15 @@ defmodule Lenies.World do
   defp do_divide(parent_id, parent_record, slot_id, slot, parent_energy, state) do
     target_cell = slot.target_cell
 
-    case :ets.lookup(:cells, target_cell) do
+    case :ets.lookup(state.tables.cells, target_cell) do
       [{_, %{lenie_id: nil}}] ->
         min_viable = Application.get_env(:lenies, :min_viable_codeome_opcodes, 10)
         non_nops = Enum.count(Tuple.to_list(slot.opcodes), &(&1 not in [:nop_0, :nop_1]))
 
         if non_nops < min_viable do
           # slot has too many nops; "stillbirth" — release slot, energy not refunded
-          ChildSlots.delete(slot_id)
-          update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil))
+          ChildSlots.delete(state.tables.child_slots, slot_id)
+          update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil), state)
           {{:ok, :stillborn}, state}
         else
           spawn_child(parent_id, parent_record, slot_id, slot, parent_energy, state)
@@ -773,8 +847,8 @@ defmodule Lenies.World do
 
       _ ->
         # target now occupied; release slot, energy not refunded
-        ChildSlots.delete(slot_id)
-        update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil))
+        ChildSlots.delete(state.tables.child_slots, slot_id)
+        update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil), state)
         {{:ok, :target_blocked}, state}
     end
   end
@@ -789,7 +863,7 @@ defmodule Lenies.World do
     parent_seed_origin = Map.get(parent_record, :seed_origin)
 
     parent_plasmids = Map.get(parent_record, :plasmids, [])
-    child_plasmids = mutate_plasmids(parent_plasmids)
+    child_plasmids = mutate_plasmids(parent_plasmids, state)
 
     child_opts = [
       id: child_id,
@@ -805,49 +879,51 @@ defmodule Lenies.World do
 
     {:ok, _child_pid} =
       DynamicSupervisor.start_child(
-        Lenies.LenieSupervisor,
-        Supervisor.child_spec({Lenies.Lenie, child_opts}, restart: :temporary)
+        Lenies.LenieSupervisor.via(state.world_id),
+        Supervisor.child_spec({Lenies.Lenie, {state.handle, child_opts}},
+          restart: :temporary
+        )
       )
 
     # Mark child cell occupied
-    [{key, cell}] = :ets.lookup(:cells, slot.target_cell)
-    :ets.insert(:cells, {key, %{cell | lenie_id: child_id}})
+    [{key, cell}] = :ets.lookup(state.tables.cells, slot.target_cell)
+    :ets.insert(state.tables.cells, {key, %{cell | lenie_id: child_id}})
 
     # Clean up parent's slot
-    ChildSlots.delete(slot_id)
-    update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil))
+    ChildSlots.delete(state.tables.child_slots, slot_id)
+    update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil), state)
 
     {{:ok, {:divided, child_id, child_energy}}, state}
   end
 
-  defp find_random_free_cell({w, h}) do
+  defp find_random_free_cell({w, h}, tables) do
     max_tries = 100
 
-    case sample_free_cell({w, h}, max_tries) do
+    case sample_free_cell({w, h}, max_tries, tables) do
       {:ok, pos} ->
         {:ok, pos}
 
       :exhausted ->
-        scan_for_free_cell({w, h})
+        scan_for_free_cell({w, h}, tables)
     end
   end
 
-  defp sample_free_cell(_grid, 0), do: :exhausted
+  defp sample_free_cell(_grid, 0, _tables), do: :exhausted
 
-  defp sample_free_cell({w, h} = grid, tries) do
+  defp sample_free_cell({w, h} = grid, tries, tables) do
     x = :rand.uniform(w) - 1
     y = :rand.uniform(h) - 1
 
-    case :ets.lookup(:cells, {x, y}) do
+    case :ets.lookup(tables.cells, {x, y}) do
       [{_, %{lenie_id: nil}}] -> {:ok, {x, y}}
-      _ -> sample_free_cell(grid, tries - 1)
+      _ -> sample_free_cell(grid, tries - 1, tables)
     end
   end
 
-  defp scan_for_free_cell({w, h}) do
+  defp scan_for_free_cell({w, h}, tables) do
     Enum.find_value(0..(w - 1), :no_free_cell, fn x ->
       Enum.find_value(0..(h - 1), nil, fn y ->
-        case :ets.lookup(:cells, {x, y}) do
+        case :ets.lookup(tables.cells, {x, y}) do
           [{_, %{lenie_id: nil}}] -> {:ok, {x, y}}
           _ -> nil
         end
@@ -863,8 +939,8 @@ defmodule Lenies.World do
     :crypto.strong_rand_bytes(12) |> Base.encode16(case: :lower)
   end
 
-  defp parent_already_allocated?(parent_id) do
-    case :ets.lookup(:lenies, parent_id) do
+  defp parent_already_allocated?(parent_id, state) do
+    case :ets.lookup(state.tables.lenies, parent_id) do
       [{^parent_id, record}] -> Map.get(record, :child_slot_id) != nil
       _ -> false
     end
@@ -875,9 +951,9 @@ defmodule Lenies.World do
   # while that Lenie is blocked in a synchronous World.action call; the Lenie
   # writes its own snapshot ONLY between batches, never mid-call — so these
   # read-modify-writes are mutually exclusive. Preserve this invariant.
-  defp update_lenie_record(id, fun) do
-    case :ets.lookup(:lenies, id) do
-      [{^id, record}] -> :ets.insert(:lenies, {id, fun.(record)})
+  defp update_lenie_record(id, fun, state) do
+    case :ets.lookup(state.tables.lenies, id) do
+      [{^id, record}] -> :ets.insert(state.tables.lenies, {id, fun.(record)})
       _ -> :ok
     end
   end
@@ -909,46 +985,60 @@ defmodule Lenies.World do
     Lenies.World.Geometry.step({x, y}, dir, {w, h})
   end
 
-  defp current_copy_rates do
+  defp current_copy_rates(state) do
     %{
-      substitution: Application.get_env(:lenies, :copy_substitution_rate, 0.005),
-      insert: Application.get_env(:lenies, :copy_insert_rate, 0.0005),
-      delete: Application.get_env(:lenies, :copy_delete_rate, 0.0005)
+      substitution: cfg(state, :copy_substitution_rate),
+      insert: cfg(state, :copy_insert_rate),
+      delete: cfg(state, :copy_delete_rate)
     }
   end
 
-  defp apply_copy_outcome(slot_id, child_addr, opcode, :write) do
-    ChildSlots.set_opcode(slot_id, child_addr, opcode)
+  defp apply_copy_outcome(slot_id, child_addr, opcode, :write, state) do
+    ChildSlots.set_opcode(state.tables.child_slots, slot_id, child_addr, opcode)
     :ok
   end
 
-  defp apply_copy_outcome(slot_id, child_addr, _opcode, :substitute) do
-    ChildSlots.set_opcode(slot_id, child_addr, Mutator.random_opcode())
+  defp apply_copy_outcome(slot_id, child_addr, _opcode, :substitute, state) do
+    ChildSlots.set_opcode(state.tables.child_slots, slot_id, child_addr, Mutator.random_opcode())
     :ok
   end
 
-  defp apply_copy_outcome(slot_id, child_addr, opcode, :insert) do
+  defp apply_copy_outcome(slot_id, child_addr, opcode, :insert, state) do
     # Insert a random opcode AT child_addr, shifting subsequent positions
-    {:ok, slot} = ChildSlots.get(slot_id)
+    {:ok, slot} = ChildSlots.get(state.tables.child_slots, slot_id)
     new_opcodes = Mutator.insert_at(slot.opcodes, child_addr, Mutator.random_opcode(), slot.size)
-    :ets.insert(:child_slots, {slot_id, %{slot | opcodes: new_opcodes}})
+    :ets.insert(state.tables.child_slots, {slot_id, %{slot | opcodes: new_opcodes}})
     # Then write the requested opcode at the next position (the original target shifted by 1)
-    ChildSlots.set_opcode(slot_id, child_addr + 1, opcode)
+    ChildSlots.set_opcode(state.tables.child_slots, slot_id, child_addr + 1, opcode)
     :ok
   end
 
-  defp apply_copy_outcome(_slot_id, _child_addr, _opcode, :delete) do
+  defp apply_copy_outcome(_slot_id, _child_addr, _opcode, :delete, _state) do
     # Skip the write entirely; downstream positions in the slot remain
     # whatever they were (initialized to :nop_0). This effectively shortens
     # the executed program by 1.
     :ok
   end
 
-  defp mutate_plasmids(plasmids) when is_list(plasmids) do
-    %{substitution: sub_rate, insert: ins_rate, delete: del_rate} = current_copy_rates()
+  defp mutate_plasmids(plasmids, state) when is_list(plasmids) do
+    %{substitution: sub_rate, insert: ins_rate, delete: del_rate} = current_copy_rates(state)
 
     Enum.map(plasmids, fn %Lenies.Plasmid{opcodes: ops} = p ->
       %{p | opcodes: Lenies.Mutator.copy_mutate_list(ops, sub_rate, ins_rate, del_rate)}
     end)
+  end
+
+  # ----- PubSub helpers -----
+  #
+  # Each broadcast goes to the world's scoped topic
+  # (`"world:<id>:<channel>"`). Subscribers (LiveViews, Telemetry, tests)
+  # subscribe via the handle's `pubsub_prefix`.
+
+  defp broadcast(state, channel, message) do
+    Phoenix.PubSub.broadcast(
+      Lenies.PubSub,
+      "#{state.handle.pubsub_prefix}:#{channel}",
+      message
+    )
   end
 end

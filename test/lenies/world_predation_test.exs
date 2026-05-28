@@ -6,7 +6,7 @@ defmodule Lenies.WorldPredationTest do
 
   setup do
     on_exit(fn ->
-      case Process.whereis(Lenies.LenieSupervisor) do
+      case Lenies.WorldTestHelpers.lenie_sup_pid() do
         sup_pid when is_pid(sup_pid) ->
           DynamicSupervisor.which_children(sup_pid)
           |> Enum.each(fn {_, child_pid, _, _} ->
@@ -17,7 +17,7 @@ defmodule Lenies.WorldPredationTest do
           :ok
       end
 
-      case Process.whereis(Lenies.World) do
+      case Lenies.WorldTestHelpers.world_pid() do
         pid when is_pid(pid) ->
           try do
             GenServer.stop(pid)
@@ -34,9 +34,14 @@ defmodule Lenies.WorldPredationTest do
 
     {:ok, _world} = World.start_link(tick_interval_ms: 0)
     # Mark cell, insert minimal lenies snapshot for "P1"
-    [{key, cell}] = :ets.lookup(:cells, {10, 10})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "P1"}})
-    :ets.insert(:lenies, {"P1", %{id: "P1", pid: self(), pos: {10, 10}, dir: :e}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {10, 10})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "P1"}})
+
+    :ets.insert(
+      Lenies.WorldTestHelpers.lenies(),
+      {"P1", %{id: "P1", pid: self(), pos: {10, 10}, dir: :e}}
+    )
+
     :ok
   end
 
@@ -45,7 +50,7 @@ defmodule Lenies.WorldPredationTest do
       result = World.action({:defend, "P1"})
       assert result == {:ok, :defending}
 
-      [{"P1", record}] = :ets.lookup(:lenies, "P1")
+      [{"P1", record}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(), "P1")
       assert is_integer(record.defending_until)
       # defense_window_ticks default 5; current tick = 0 → defending_until = 5
       assert record.defending_until == 5
@@ -57,13 +62,13 @@ defmodule Lenies.WorldPredationTest do
       result = World.action({:defend, "P1"})
       assert result == {:ok, :defending}
 
-      [{"P1", record}] = :ets.lookup(:lenies, "P1")
+      [{"P1", record}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(), "P1")
       # current tick = 3 → defending_until = 8
       assert record.defending_until == 8
     end
 
     test "defend on a Lenie without :lenies record returns :no_lenie" do
-      :ets.delete(:lenies, "P1")
+      :ets.delete(Lenies.WorldTestHelpers.lenies(), "P1")
       result = World.action({:defend, "P1"})
       assert result == {:ok, :no_lenie}
     end
@@ -75,8 +80,8 @@ defmodule Lenies.WorldPredationTest do
       codeome = Lenies.Codeome.from_list([:nop_0, :nop_0, :nop_0])
 
       # Mark target cell occupied
-      [{key, cell}] = :ets.lookup(:cells, {11, 10})
-      :ets.insert(:cells, {key, %{cell | lenie_id: "T1"}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {11, 10})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "T1"}})
 
       {:ok, target_pid} =
         Lenies.Lenie.start_link(
@@ -104,8 +109,8 @@ defmodule Lenies.WorldPredationTest do
       GenServer.stop(target_pid)
       Process.sleep(100)
 
-      [{key, cell}] = :ets.lookup(:cells, {11, 10})
-      :ets.insert(:cells, {key, %{cell | lenie_id: nil}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {11, 10})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: nil}})
 
       result = World.action({:attack, {10, 10}, :e, "P1"})
       assert result == {:ok, :no_target}
@@ -127,8 +132,12 @@ defmodule Lenies.WorldPredationTest do
     test "attack on defended target deals halved damage and reports :defended" do
       Process.sleep(50)
       # Manually set defending_until in :lenies record for T1
-      [{"T1", record}] = :ets.lookup(:lenies, "T1")
-      :ets.insert(:lenies, {"T1", Map.put(record, :defending_until, 100)})
+      [{"T1", record}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(), "T1")
+
+      :ets.insert(
+        Lenies.WorldTestHelpers.lenies(),
+        {"T1", Map.put(record, :defending_until, 100)}
+      )
 
       result = World.action({:attack, {10, 10}, :e, "P1"})
       assert {:ok, {:defended, 5}} = result
@@ -137,8 +146,8 @@ defmodule Lenies.WorldPredationTest do
 
   describe "kill leaves carcass" do
     test "Lenie dying from :take_damage leaves cell cleared and registry cleaned" do
-      [{key, cell}] = :ets.lookup(:cells, {30, 30})
-      :ets.insert(:cells, {key, %{cell | lenie_id: "VICTIM"}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {30, 30})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "VICTIM"}})
 
       codeome = Lenies.Codeome.from_list([:nop_0])
 
@@ -161,7 +170,7 @@ defmodule Lenies.WorldPredationTest do
       # Allow time for the lenie_died cast to be processed
       Process.sleep(200)
 
-      [{_, cell}] = :ets.lookup(:cells, {30, 30})
+      [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {30, 30})
       assert cell.lenie_id == nil
       # Carcass field is non-negative (zero is fine if energy_at_death was negative)
       assert cell.carcass >= 0

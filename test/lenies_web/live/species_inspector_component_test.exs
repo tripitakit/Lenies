@@ -11,27 +11,8 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       _ -> :ok
     end
 
-    case Process.whereis(Lenies.World) do
-      nil -> {:ok, _} = Lenies.World.start_link(tick_interval_ms: 0)
-      _ -> :ok
-    end
-
-    on_exit(fn ->
-      case Process.whereis(Lenies.World) do
-        pid when is_pid(pid) ->
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-
-        _ ->
-          :ok
-      end
-
-      Lenies.World.Tables.delete_all()
-    end)
-
+    {:ok, _} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
+    on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
     :ok
   end
 
@@ -40,7 +21,8 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       %{
         id: "test-inspector",
         selected_hash: "abc12345abc12345",
-        species_record: %{hash: "abc12345abc12345", population: 7, avg_generation: 3.5}
+        species_record: %{hash: "abc12345abc12345", population: 7, avg_generation: 3.5},
+        world_handle: Lenies.Worlds.primary_handle()
       },
       overrides
     )
@@ -106,7 +88,10 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
           lineage: {nil, 0}
         )
 
-      :ets.insert(:lenies, {"TEST-INSP-L1", %{id: "TEST-INSP-L1", codeome_hash: hash}})
+      :ets.insert(
+        Lenies.WorldTestHelpers.lenies(),
+        {"TEST-INSP-L1", %{id: "TEST-INSP-L1", codeome_hash: hash}}
+      )
 
       record = %{hash: hash, population: 1, avg_generation: 0.0}
 
@@ -114,7 +99,8 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
         render_component(SpeciesInspectorComponent, %{
           id: "live-inspector",
           selected_hash: hash,
-          species_record: record
+          species_record: record,
+          world_handle: Lenies.Worlds.primary_handle()
         })
 
       # MinimalReplicator starts with the LOOP_HEAD anchor (four :nop_1)
@@ -140,13 +126,17 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
           lineage: {nil, 0}
         )
 
-      :ets.insert(:lenies, {"TEST-BLOCK-L1", %{id: "TEST-BLOCK-L1", codeome_hash: hash}})
+      :ets.insert(
+        Lenies.WorldTestHelpers.lenies(),
+        {"TEST-BLOCK-L1", %{id: "TEST-BLOCK-L1", codeome_hash: hash}}
+      )
 
       html =
         render_component(SpeciesInspectorComponent, %{
           id: "block-inspector",
           selected_hash: hash,
-          species_record: %{hash: hash, population: 1, avg_generation: 0.0}
+          species_record: %{hash: hash, population: 1, avg_generation: 0.0},
+          world_handle: Lenies.Worlds.primary_handle()
         })
 
       assert html =~ ~s(class="codeome-blocks")

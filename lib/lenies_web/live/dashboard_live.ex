@@ -33,20 +33,29 @@ defmodule LeniesWeb.DashboardLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    world_id = :primary
+    world_handle = fetch_primary_handle()
+
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(Lenies.PubSub, "world:tick")
-      Phoenix.PubSub.subscribe(Lenies.PubSub, "world:control")
-      Phoenix.PubSub.subscribe(Lenies.PubSub, "world:fx")
+      # Subscribe to scoped per-world topics. When `world_handle` is nil
+      # (World not running, e.g. some tests) fall back to the primary
+      # prefix so tests that later start the World still receive events.
+      prefix = (world_handle && world_handle.pubsub_prefix) || "world:primary"
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:tick")
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:control")
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:fx")
     end
 
     grid = Lenies.Config.grid_size()
-    {species, all_species, species_total} = aggregate_with_top(10)
+    {species, all_species, species_total} = aggregate_with_top(world_handle, 10)
 
     sort_by = :population
     sort_dir = :desc
 
     socket =
       socket
+      |> assign(:world_id, world_id)
+      |> assign(:world_handle, world_handle)
       |> assign(:grid, grid)
       |> assign(:tick_count, 0)
       |> assign(:layers_visible, %{lenies: true, resource: true, carcass: true})
@@ -77,23 +86,23 @@ defmodule LeniesWeb.DashboardLive do
     {:ok, socket}
   end
 
-  # Returns {top_n, all_species, total_count} from a single Species.aggregate()
+  # Returns {top_n, all_species, total_count} from a single Species.aggregate/1
   # pass. The dashboard table uses `top_n`; the World Detail modal needs the
   # full `all_species` list (sorted by population descending, already).
-  defp aggregate_with_top(n) do
-    all = Lenies.Species.aggregate()
+  defp aggregate_with_top(handle, n) do
+    all = Lenies.Species.aggregate(handle)
     {Enum.take(all, n), all, length(all)}
   end
 
-  defp find_selected_record(nil, _species), do: nil
+  defp find_selected_record(_handle, nil, _species), do: nil
 
-  defp find_selected_record(hash, species) do
+  defp find_selected_record(handle, hash, species) do
     case Enum.find(species, &(&1.hash == hash)) do
       %{} = found ->
         found
 
       nil ->
-        case Lenies.Species.for_hash(hash) do
+        case Lenies.Species.for_hash(handle, hash) do
           [] ->
             %{hash: hash, population: 0, avg_generation: 0.0}
 
@@ -171,7 +180,7 @@ defmodule LeniesWeb.DashboardLive do
               data-show-lenies={@layers_visible.lenies}
               data-show-resource={@layers_visible.resource}
               data-show-carcass={@layers_visible.carcass}
-              data-highlight-hue={highlight_hue(@selected_hash)}
+              data-highlight-hue={highlight_hue(handle_from_assigns(assigns), @selected_hash)}
               width={elem(@grid, 0) * 2}
               height={elem(@grid, 1) * 2}
               class="dashboard-map-canvas"
@@ -321,7 +330,7 @@ defmodule LeniesWeb.DashboardLive do
                           <div class="flex items-center gap-1.5">
                             <span
                               class="inline-block w-2 h-2 shrink-0"
-                              style={"background:#{Lenies.SpeciesColor.hex(sp.hash)}"}
+                              style={"background:#{species_hex(handle_from_assigns(assigns), sp.hash)}"}
                             >
                             </span>
                             <span class="text-cyan-400">
@@ -359,6 +368,7 @@ defmodule LeniesWeb.DashboardLive do
                 id="species-inspector"
                 selected_hash={@selected_hash}
                 species_record={@selected_species_record}
+                world_handle={handle_from_assigns(assigns)}
               />
             <% end %>
           </div>
@@ -367,6 +377,8 @@ defmodule LeniesWeb.DashboardLive do
             module={LeniesWeb.ControlsPanelComponent}
             id="controls"
             current_scope={@current_scope}
+            world_id={@world_id}
+            world_handle={handle_from_assigns(assigns)}
           />
         </div>
       </div>
@@ -377,8 +389,21 @@ defmodule LeniesWeb.DashboardLive do
   # Maps the selected species hash to the 0..255 hue byte that the canvas
   # reads from `data-highlight-hue`. 0 means "no highlight" so the hook
   # renders every cell at full intensity.
-  defp highlight_hue(nil), do: 0
-  defp highlight_hue(hash) when is_binary(hash), do: SpeciesColor.hue_byte(hash)
+  defp highlight_hue(_handle, nil), do: 0
+  defp highlight_hue(nil, _hash), do: 0
+
+  defp highlight_hue(%Lenies.WorldHandle{} = handle, hash) when is_binary(hash),
+    do: SpeciesColor.hue_byte(handle, hash)
+
+  # Lookup the world handle from socket assigns and, if the World wasn't running
+  # at mount time, retry now (e.g. tests that start the World after mount).
+  defp handle_from_assigns(%{world_handle: %Lenies.WorldHandle{} = h}), do: h
+  defp handle_from_assigns(_), do: fetch_primary_handle()
+
+  # Compute the per-species hex color. Returns "#000000" if no World is
+  # running (caller renders an empty/black swatch, not a crash).
+  defp species_hex(nil, _hash), do: "#000000"
+  defp species_hex(%Lenies.WorldHandle{} = handle, hash), do: SpeciesColor.hex(handle, hash)
 
   @impl true
   def handle_event("select_species", %{"hash" => hash}, socket) do
@@ -396,7 +421,7 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:selected_hash, new_hash)
       |> assign(
         :selected_species_record,
-        find_selected_record(new_hash, all_species)
+        find_selected_record(socket.assigns.world_handle, new_hash, all_species)
       )
       |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
 
@@ -470,8 +495,12 @@ defmodule LeniesWeb.DashboardLive do
   def handle_event(_event, _params, socket), do: {:noreply, socket}
 
   defp lookup_lenie_at_cell(x, y) do
-    with [{_, %{lenie_id: id}}] when is_binary(id) <- :ets.lookup(:cells, {x, y}),
-         [{^id, lenie_meta}] <- :ets.lookup(:lenies, id),
+    handle = fetch_primary_handle()
+
+    with handle when not is_nil(handle) <- handle,
+         [{_, %{lenie_id: id}}] when is_binary(id) <-
+           :ets.lookup(handle.tables.cells, {x, y}),
+         [{^id, lenie_meta}] <- :ets.lookup(handle.tables.lenies, id),
          hash when is_binary(hash) <- Map.get(lenie_meta, :codeome_hash) do
       {:ok, hash}
     else
@@ -480,8 +509,12 @@ defmodule LeniesWeb.DashboardLive do
   end
 
   defp lenie_hover_payload(x, y) do
-    with [{_, %{lenie_id: id}}] when is_binary(id) <- :ets.lookup(:cells, {x, y}),
-         [{^id, snap}] <- :ets.lookup(:lenies, id) do
+    handle = fetch_primary_handle()
+
+    with handle when not is_nil(handle) <- handle,
+         [{_, %{lenie_id: id}}] when is_binary(id) <-
+           :ets.lookup(handle.tables.cells, {x, y}),
+         [{^id, snap}] <- :ets.lookup(handle.tables.lenies, id) do
       %{
         x: x,
         y: y,
@@ -496,6 +529,14 @@ defmodule LeniesWeb.DashboardLive do
     end
   end
 
+  defp fetch_primary_handle do
+    try do
+      Lenies.Worlds.primary_handle()
+    catch
+      :exit, _ -> nil
+    end
+  end
+
   @impl true
   def handle_info({:tick, n}, socket) do
     throttle = Application.get_env(:lenies, :dashboard_throttle_ticks, 5)
@@ -507,7 +548,7 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:throttle_counter, new_counter)
 
     if rem(new_counter, throttle) == 0 do
-      {species, all_species, species_total} = aggregate_with_top(10)
+      {species, all_species, species_total} = aggregate_with_top(socket.assigns.world_handle, 10)
       %{sort_by: sort_by, sort_dir: sort_dir} = socket.assigns
 
       socket =
@@ -518,7 +559,11 @@ defmodule LeniesWeb.DashboardLive do
         |> assign(:all_species, all_species)
         |> assign(
           :selected_species_record,
-          find_selected_record(socket.assigns.selected_hash, all_species)
+          find_selected_record(
+            socket.assigns.world_handle,
+            socket.assigns.selected_hash,
+            all_species
+          )
         )
         |> maybe_clear_selected_species(all_species)
         |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
@@ -531,7 +576,7 @@ defmodule LeniesWeb.DashboardLive do
   end
 
   def handle_info({:sterilized, _ts}, socket) do
-    {species, all_species, species_total} = aggregate_with_top(10)
+    {species, all_species, species_total} = aggregate_with_top(socket.assigns.world_handle, 10)
     %{sort_by: sort_by, sort_dir: sort_dir} = socket.assigns
 
     socket =

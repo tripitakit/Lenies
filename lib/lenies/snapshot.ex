@@ -1,97 +1,152 @@
 defmodule Lenies.Snapshot do
   @moduledoc """
-  Save and restore the World's ETS state to/from disk.
+  Save and restore a World's ETS state to/from disk.
 
   Uses Erlang's built-in `:ets.tab2file/2` and `:ets.file2tab/1` for compact
-  binary serialization. The 4 tables saved: `:cells`, `:lenies`, `:child_slots`,
-  `:history`.
+  binary serialization. As of T12 the 5 tables saved are: `:cells`, `:lenies`,
+  `:child_slots`, `:history`, `:color_overrides`. Legacy 4-table snapshots
+  (created before T12) are still loadable — the missing `color_overrides.tab`
+  is treated as an empty table.
+
+  ## Per-world directory layout (T12)
+
+  Snapshots live under `<snapshot_root>/<id_to_path(world_id)>/<name>/`,
+  where `snapshot_root` comes from `Application.get_env(:lenies,
+  :snapshot_root, <tmp>/lenies-snapshots)` and `id_to_path/1` renders a
+  `world_id` as a filesystem-safe string (`:primary → "primary"`,
+  `{:sandbox, 42} → "sandbox-42"`).
 
   ## Identifying a snapshot by NAME (not a path)
 
-  Snapshots are identified by a `name` matching `~r/\A[A-Za-z0-9_-]+\z/`. The
-  on-disk directory is `Path.join(root, name)` where `root` comes from
-  `Application.get_env(:lenies, :snapshot_root, <tmp>/lenies-snapshots)`.
-  Because the name is restricted to `[A-Za-z0-9_-]`, the resolved directory can
-  never escape `root` (no `/`, `.`, `..`, or spaces are allowed), which closes
-  the previous arbitrary-filesystem-write/read hole.
+  Snapshots are identified by a `name` matching `~r/\A[A-Za-z0-9_-]+\z/`.
+  Because the name is restricted to `[A-Za-z0-9_-]`, the resolved directory
+  can never escape `snapshot_root` (no `/`, `.`, `..`, or spaces are
+  allowed), which closes the previous arbitrary-filesystem-write/read hole.
 
   ## Safety guarantees
 
   - **Atomic save**: each table is written to `<table>.tab.tmp` first, and only
     after ALL writes succeed are the temp files renamed onto `<table>.tab`. A
     crash mid-save therefore never leaves a half-written `.tab` set.
-  - **Validate-before-destroy restore**: every `.tab` file is validated with
-    `:ets.tabfile_info/1` (read-only) BEFORE the live world is touched. A
-    corrupt/partial file aborts the restore with the world left intact.
-  - **Ownership**: the actual table swap happens inside the `Lenies.World`
-    process (via `World.restore_tables/1`), so World — not the calling LiveView
-    — owns the reloaded tables.
+  - **Validate-before-destroy restore**: every required `.tab` file is
+    validated with `:ets.tabfile_info/1` (read-only) BEFORE the live world is
+    touched. A corrupt/partial file aborts the restore with the world left
+    intact.
+  - **Same-tid restore**: the live world's tids are reused; we
+    `:ets.delete_all_objects/1` then re-insert from the snapshot. This means
+    a handle cached by another process stays valid across a restore.
 
   **Limitazione**: restore reloads the ETS records but does NOT respawn Lenie
   processes. The Lenies in `:lenies` after restore are "ghost" snapshots —
   visible in the Inspector but not running.
   """
 
-  @tables [:cells, :lenies, :child_slots, :history]
+  @required_tables [:cells, :lenies, :child_slots, :history]
+  @optional_tables [:color_overrides]
+  @all_tables @required_tables ++ @optional_tables
 
   # \A and \z anchor to the very start/end of the string (unlike ^ and $
   # which PCRE allows to match before a trailing newline), preventing names
   # like "foo\n" from slipping through the validation.
   @name_regex ~r/\A[A-Za-z0-9_-]+\z/
 
-  @doc "The 4 ETS tables managed by snapshots (single source of truth)."
-  def tables, do: @tables
-
   @doc """
-  Resolve the on-disk directory for a snapshot `name`, under the configured
-  root. Does NOT validate the name or touch the filesystem.
+  The full list of snapshot-tracked tables (required ++ optional).
+
+  Kept for legacy callers; for the on-disk layout decision use
+  `required_tables/0` and `optional_tables/0` separately.
   """
-  def dir_for(name) do
-    Path.join(snapshot_root(), name)
-  end
+  def tables, do: @all_tables
+
+  @doc "Tables that MUST exist in a snapshot directory (else restore aborts)."
+  def required_tables, do: @required_tables
+
+  @doc "Tables that MAY be missing (legacy 4-table snapshots have no color_overrides)."
+  def optional_tables, do: @optional_tables
 
   @doc """
-  Save all 4 ETS tables to files under `root/name`. `name` must match
-  `~r/\\A[A-Za-z0-9_-]+\\z/`.
+  Save all 5 ETS tables of `handle` to `<snapshot_root>/<id_to_path(id)>/<name>/`.
+
+  `name` must match `~r/\\A[A-Za-z0-9_-]+\\z/`.
 
   Atomic: writes each table to `<table>.tab.tmp` then renames to `<table>.tab`
   only after all temp writes succeed. Returns `:ok`, `{:error, :invalid_name}`,
-  or `{:error, :io_error}` / `{:error, {table, reason}}` on failure.
+  or `{:error, {table, reason}}` / `{:error, :io_error}` on failure.
   """
-  def save_to_disk(name) do
+  @spec save(Lenies.WorldHandle.t(), String.t()) ::
+          :ok | {:error, :invalid_name | :io_error | {atom(), term()}}
+  def save(%Lenies.WorldHandle{} = handle, name) do
     with :ok <- validate_name(name) do
-      dir = dir_for(name)
-      do_save(dir)
+      dir = snapshot_dir(handle.id, name)
+      do_save(handle, dir)
     end
   end
 
   @doc """
-  Restore all 4 ETS tables from files under `root/name`. `name` must match
-  `~r/\\A[A-Za-z0-9_-]+\\z/`.
+  Restore the snapshot named `name` for `handle` from
+  `<snapshot_root>/<id_to_path(id)>/<name>/`.
 
   Order of operations (validate-before-destroy):
-  1. validate name
-  2. all 4 `.tab` files must exist (else `{:error, :missing_file}`)
-  3. validate each file with `:ets.tabfile_info/1` — read-only, does NOT create
-     a table; a bad file returns `{:error, {:corrupt, table}}` and the live
-     world is left UNTOUCHED
-  4. only then `World.sterilize/0` followed by `World.restore_tables/1`
+  1. validate `name`
+  2. all REQUIRED `.tab` files (cells, lenies, child_slots, history) must
+     exist (else `{:error, :missing_file}`)
+  3. validate each REQUIRED file with `:ets.tabfile_info/1` — read-only,
+     does NOT create a table; a bad file returns `{:error, {:corrupt, table}}`
+     and the live world is left UNTOUCHED
+  4. only then `:ets.delete_all_objects/1` + reload each required table into
+     the EXISTING tid via `:ets.file2tab/1` + foldl/insert
+  5. OPTIONAL tables (currently `:color_overrides`) — if the `.tab` file
+     exists, load it; otherwise wipe the live table empty (legacy snapshot
+     tolerance)
+
+  Returns `:ok`, `{:error, :invalid_name}`, `{:error, :missing_file}`,
+  `{:error, {:corrupt, table}}`, or `{:error, {:restore_failed, table}}`.
+  """
+  @spec restore(Lenies.WorldHandle.t(), String.t()) :: :ok | {:error, term()}
+  def restore(%Lenies.WorldHandle{} = handle, name) do
+    with :ok <- validate(handle.id, name) do
+      load_validated(handle, name)
+    end
+  end
+
+  @doc """
+  Read-only pre-check: confirms the snapshot named `name` is loadable for the
+  given `world_id` WITHOUT touching any live ETS table.
 
   Returns `:ok`, `{:error, :invalid_name}`, `{:error, :missing_file}`, or
   `{:error, {:corrupt, table}}`.
+
+  Used by `Lenies.World` so it can sterilize the world ONLY after the
+  snapshot has been validated — preserving the C2 (validate-before-destroy)
+  invariant even though the actual load runs after a sterilize.
   """
-  def restore_from_disk(name) do
-    with :ok <- validate_name(name),
-         dir = dir_for(name),
-         :ok <- ensure_all_files_exist(dir),
-         :ok <- validate_all_files(dir) do
-      # Sterilize FIRST as a separate GenServer.call: it terminates the old
-      # Lenies, and the `:lenie_died` casts they enqueue are drained by World
-      # BEFORE the subsequent `restore_tables` call is processed (FIFO mailbox).
-      # This prevents stale `:lenie_died` casts from clobbering the freshly
-      # restored :cells / :lenies tables.
-      Lenies.World.sterilize()
-      Lenies.World.restore_tables(dir)
+  @spec validate(term(), String.t()) ::
+          :ok | {:error, :invalid_name | :missing_file | {:corrupt, atom()}}
+  def validate(world_id, name) do
+    with :ok <- validate_name(name) do
+      dir = snapshot_dir(world_id, name)
+
+      with :ok <- ensure_required_files_exist(dir) do
+        validate_required_files(dir)
+      end
+    end
+  end
+
+  @doc """
+  Load a pre-validated snapshot named `name` into `handle`'s live tables.
+
+  Skips the read-only validation that `restore/2` does — intended for callers
+  that already ran `validate/2`. Returns `:ok` or
+  `{:error, {:restore_failed, table}}` if a file2tab call fails despite the
+  header passing validation.
+  """
+  @spec load_validated(Lenies.WorldHandle.t(), String.t()) ::
+          :ok | {:error, {:restore_failed, atom()}}
+  def load_validated(%Lenies.WorldHandle{} = handle, name) do
+    dir = snapshot_dir(handle.id, name)
+
+    with :ok <- restore_required(handle, dir) do
+      restore_optional(handle, dir)
     end
   end
 
@@ -111,17 +166,22 @@ defmodule Lenies.Snapshot do
     )
   end
 
+  defp snapshot_dir(world_id, name) do
+    Path.join([snapshot_root(), Lenies.Worlds.id_to_path(world_id), name])
+  end
+
   defp tab_path(dir, table), do: Path.join(dir, "#{table}.tab")
   defp tmp_path(dir, table), do: tab_path(dir, table) <> ".tmp"
 
-  defp do_save(dir) do
+  defp do_save(handle, dir) do
     File.mkdir_p!(dir)
 
     write_result =
-      Enum.reduce_while(@tables, :ok, fn table, _acc ->
+      Enum.reduce_while(@all_tables, :ok, fn table, _acc ->
         tmp = tmp_path(dir, table) |> String.to_charlist()
+        tid = Map.fetch!(handle.tables, table)
 
-        case :ets.tab2file(table, tmp) do
+        case :ets.tab2file(tid, tmp) do
           :ok -> {:cont, :ok}
           error -> {:halt, {:error, {table, error}}}
         end
@@ -129,7 +189,7 @@ defmodule Lenies.Snapshot do
 
     case write_result do
       :ok ->
-        Enum.each(@tables, fn table ->
+        Enum.each(@all_tables, fn table ->
           File.rename!(tmp_path(dir, table), tab_path(dir, table))
         end)
 
@@ -138,7 +198,7 @@ defmodule Lenies.Snapshot do
       {:error, _} = err ->
         # Clean up any temp files we did write so a later restore can't be
         # confused by stragglers.
-        Enum.each(@tables, fn table -> File.rm(tmp_path(dir, table)) end)
+        Enum.each(@all_tables, fn table -> File.rm(tmp_path(dir, table)) end)
         err
     end
   rescue
@@ -147,8 +207,8 @@ defmodule Lenies.Snapshot do
       {:error, :io_error}
   end
 
-  defp ensure_all_files_exist(dir) do
-    if Enum.all?(@tables, fn table -> File.exists?(tab_path(dir, table)) end) do
+  defp ensure_required_files_exist(dir) do
+    if Enum.all?(@required_tables, fn table -> File.exists?(tab_path(dir, table)) end) do
       :ok
     else
       {:error, :missing_file}
@@ -157,8 +217,8 @@ defmodule Lenies.Snapshot do
 
   # Read-only validation: :ets.tabfile_info/1 inspects the dump header WITHOUT
   # creating a table, so it is safe to run before touching the live world.
-  defp validate_all_files(dir) do
-    Enum.reduce_while(@tables, :ok, fn table, _acc ->
+  defp validate_required_files(dir) do
+    Enum.reduce_while(@required_tables, :ok, fn table, _acc ->
       path = tab_path(dir, table) |> String.to_charlist()
 
       case :ets.tabfile_info(path) do
@@ -166,5 +226,63 @@ defmodule Lenies.Snapshot do
         {:error, _reason} -> {:halt, {:error, {:corrupt, table}}}
       end
     end)
+  end
+
+  defp restore_required(handle, dir) do
+    Enum.reduce_while(@required_tables, :ok, fn table, _acc ->
+      case load_one(handle, dir, table) do
+        :ok -> {:cont, :ok}
+        {:error, _reason} -> {:halt, {:error, {:restore_failed, table}}}
+      end
+    end)
+  end
+
+  defp restore_optional(handle, dir) do
+    Enum.each(@optional_tables, fn table ->
+      path = tab_path(dir, table)
+
+      if File.exists?(path) do
+        _ = load_one(handle, dir, table)
+      else
+        # Legacy snapshot without this table → wipe the live table empty so
+        # restoring an old snapshot is deterministic (no overrides from a
+        # previous session leak through).
+        target = Map.fetch!(handle.tables, table)
+
+        try do
+          :ets.delete_all_objects(target)
+        rescue
+          ArgumentError -> :ok
+        end
+      end
+    end)
+
+    :ok
+  end
+
+  # Load `<table>.tab` into the EXISTING tid for `table`. Uses an interim tid
+  # from :ets.file2tab/1, copies its rows over, then deletes the interim tid.
+  # Preserves the original tid so a handle cached by another process stays
+  # valid across a restore.
+  defp load_one(handle, dir, table) do
+    path = tab_path(dir, table) |> String.to_charlist()
+
+    case :ets.file2tab(path) do
+      {:ok, loaded_tid} ->
+        target_tid = Map.fetch!(handle.tables, table)
+        :ets.delete_all_objects(target_tid)
+
+        :ets.foldl(
+          fn obj, _ -> :ets.insert(target_tid, obj) end,
+          :ok,
+          loaded_tid
+        )
+
+        :ets.delete(loaded_tid)
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 end

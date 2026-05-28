@@ -27,7 +27,7 @@ defmodule Lenies.Codeomes.CarnivoreTest do
       Application.delete_env(:lenies, :eat_amount)
       Application.delete_env(:lenies, :interpreter_steps_per_batch)
 
-      case Process.whereis(Lenies.LenieSupervisor) do
+      case Lenies.WorldTestHelpers.lenie_sup_pid() do
         sup_pid when is_pid(sup_pid) ->
           DynamicSupervisor.which_children(sup_pid)
           |> Enum.each(fn {_, child_pid, _, _} ->
@@ -38,7 +38,7 @@ defmodule Lenies.Codeomes.CarnivoreTest do
           :ok
       end
 
-      case Process.whereis(Lenies.World) do
+      case Lenies.WorldTestHelpers.world_pid() do
         pid when is_pid(pid) ->
           try do
             GenServer.stop(pid)
@@ -60,8 +60,8 @@ defmodule Lenies.Codeomes.CarnivoreTest do
     # iter, which depletes local food faster than vanilla MR — 2000 prevents
     # starvation before the duel outcome is observed.
     for x <- 0..254, y <- 0..254 do
-      [{key, cell}] = :ets.lookup(:cells, {x, y})
-      :ets.insert(:cells, {key, %{cell | resource: 2000}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {x, y})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | resource: 2000}})
     end
 
     :ok
@@ -78,8 +78,8 @@ defmodule Lenies.Codeomes.CarnivoreTest do
 
   test "duel: carnivore facing herbivore steals energy via :attack" do
     # Herbivore at {50, 50} facing west (away from carnivore)
-    [{key, cell}] = :ets.lookup(:cells, {50, 50})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "HERB"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {50, 50})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "HERB"}})
 
     {:ok, herb_pid} =
       Lenie.start_link(
@@ -96,8 +96,8 @@ defmodule Lenies.Codeomes.CarnivoreTest do
     Process.unlink(herb_pid)
 
     # Carnivore at {49, 50} facing east → towards herbivore
-    [{key, cell}] = :ets.lookup(:cells, {49, 50})
-    :ets.insert(:cells, {key, %{cell | lenie_id: "CARN"}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {49, 50})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "CARN"}})
 
     {:ok, carn_pid} =
       Lenie.start_link(

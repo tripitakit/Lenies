@@ -6,7 +6,7 @@ defmodule Lenies.WorldTest do
 
   setup do
     on_exit(fn ->
-      case Process.whereis(Lenies.World) do
+      case Lenies.WorldTestHelpers.world_pid() do
         nil -> :ok
         pid -> if Process.alive?(pid), do: GenServer.stop(pid)
       end
@@ -19,8 +19,8 @@ defmodule Lenies.WorldTest do
 
   test "starts and initializes ETS tables with 65_536 empty cells" do
     {:ok, _pid} = World.start_link(tick_interval_ms: 0)
-    assert :ets.info(:cells, :size) == 65_536
-    [{{0, 0}, cell}] = :ets.lookup(:cells, {0, 0})
+    assert :ets.info(Lenies.WorldTestHelpers.cells(), :size) == 65_536
+    [{{0, 0}, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {0, 0})
     assert cell.resource == 0
     assert cell.lenie_id == nil
     assert cell.carcass == 0
@@ -60,7 +60,7 @@ defmodule Lenies.WorldTest do
   end
 
   test "auto-tick fires at the configured interval" do
-    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:tick")
+    Phoenix.PubSub.subscribe(Lenies.PubSub, "world:primary:tick")
     {:ok, _pid} = World.start_link(tick_interval_ms: 50)
 
     assert_receive {:tick, 1}, 500
@@ -75,12 +75,12 @@ defmodule Lenies.WorldTest do
     {:ok, _pid} = World.start_link(tick_interval_ms: 0)
 
     # manually inject a carcass into a cell
-    [{key, cell}] = :ets.lookup(:cells, {10, 10})
-    :ets.insert(:cells, {key, %{cell | carcass: 100}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {10, 10})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | carcass: 100}})
 
     World.tick_now()
 
-    [{_, after_cell}] = :ets.lookup(:cells, {10, 10})
+    [{_, after_cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {10, 10})
     # 5% decay → 100 → 95
     assert after_cell.carcass == 95
   end
@@ -92,55 +92,36 @@ defmodule Lenies.WorldTest do
 
     {:ok, _pid} = World.start_link(tick_interval_ms: 0)
 
-    [{key, cell}] = :ets.lookup(:cells, {5, 5})
-    :ets.insert(:cells, {key, %{cell | carcass: 10}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | carcass: 10}})
 
     for _ <- 1..200, do: World.tick_now()
 
-    [{_, after_cell}] = :ets.lookup(:cells, {5, 5})
+    [{_, after_cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 5})
     assert after_cell.carcass == 0
   end
 
   describe "lenie_died/4 — carcass_hue" do
     setup do
-      case Process.whereis(Lenies.World) do
-        nil -> {:ok, _} = Lenies.World.start_link(tick_interval_ms: 0)
-        _ -> :ok
-      end
-
-      on_exit(fn ->
-        case Process.whereis(Lenies.World) do
-          pid when is_pid(pid) ->
-            try do
-              GenServer.stop(pid)
-            catch
-              :exit, _ -> :ok
-            end
-
-          _ ->
-            :ok
-        end
-
-        Lenies.World.Tables.delete_all()
-      end)
-
+      {:ok, _} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
+      on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
       :ok
     end
 
     test "death stores SpeciesColor.hue_byte(hash) into the cell's carcass_hue" do
       hash = "test-hash-abc"
-      expected_hue = Lenies.SpeciesColor.hue_byte(hash)
+      expected_hue = Lenies.SpeciesColor.hue_byte(Lenies.Worlds.primary_handle(), hash)
 
       # Plant a Lenie at (3, 4)
-      :ets.insert(:cells, {{3, 4}, %Lenies.World.Cell{lenie_id: "L1"}})
-      :ets.insert(:lenies, {"L1", %{id: "L1"}})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {{3, 4}, %Lenies.World.Cell{lenie_id: "L1"}})
+      :ets.insert(Lenies.WorldTestHelpers.lenies(), {"L1", %{id: "L1"}})
 
       Lenies.World.lenie_died("L1", {3, 4}, 200.0, hash)
 
       # Cast is async; sync via a synchronous call to the same GenServer
       _ = Lenies.World.snapshot_stats()
 
-      [{_, cell}] = :ets.lookup(:cells, {3, 4})
+      [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {3, 4})
       assert cell.lenie_id == nil
       assert cell.carcass > 0
       assert cell.carcass_hue == expected_hue
@@ -160,7 +141,7 @@ defmodule Lenies.WorldTest do
       :ets.foldl(
         fn {_key, cell}, {r, c} -> {r + cell.resource, c + cell.carcass} end,
         {0, 0},
-        :cells
+        Lenies.WorldTestHelpers.cells()
       )
     end
 
@@ -175,8 +156,8 @@ defmodule Lenies.WorldTest do
       Application.put_env(:lenies, :carcass_decay, 0.1)
       on_exit(fn -> Application.put_env(:lenies, :carcass_decay, 0) end)
 
-      [{key, cell}] = :ets.lookup(:cells, {7, 7})
-      :ets.insert(:cells, {key, %{cell | carcass: 200}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {7, 7})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | carcass: 200}})
 
       for _ <- 1..3, do: World.tick_now()
 
@@ -191,8 +172,8 @@ defmodule Lenies.WorldTest do
       Application.put_env(:lenies, :carcass_decay, 0.2)
       on_exit(fn -> Application.put_env(:lenies, :carcass_decay, 0) end)
 
-      [{key, cell}] = :ets.lookup(:cells, {3, 3})
-      :ets.insert(:cells, {key, %{cell | carcass: 1000}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {3, 3})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | carcass: 1000}})
 
       # One tick to seed the cached total with the injected carcass.
       World.tick_now()
@@ -212,8 +193,8 @@ defmodule Lenies.WorldTest do
       Application.put_env(:lenies, :carcass_decay, 0.5)
       on_exit(fn -> Application.put_env(:lenies, :carcass_decay, 0) end)
 
-      [{key, cell}] = :ets.lookup(:cells, {15, 15})
-      :ets.insert(:cells, {key, %{cell | carcass: 500}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {15, 15})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | carcass: 500}})
 
       World.tick_now()
 
@@ -252,11 +233,14 @@ defmodule Lenies.WorldTest do
       end)
 
       # Plant a cell with carcass = 5 (less than eat_amount) and a hue marker
-      :ets.insert(:cells, {{1, 1}, %Lenies.World.Cell{carcass: 5, carcass_hue: 137}})
+      :ets.insert(
+        Lenies.WorldTestHelpers.cells(),
+        {{1, 1}, %Lenies.World.Cell{carcass: 5, carcass_hue: 137}}
+      )
 
       {:ok, {:ate, _}} = World.action({:eat, {1, 1}})
 
-      [{_, cell}] = :ets.lookup(:cells, {1, 1})
+      [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {1, 1})
       assert cell.carcass == 0
       assert cell.carcass_hue == 0
     end
@@ -271,11 +255,14 @@ defmodule Lenies.WorldTest do
           else: Application.delete_env(:lenies, :eat_amount)
       end)
 
-      :ets.insert(:cells, {{2, 2}, %Lenies.World.Cell{carcass: 20, carcass_hue: 99}})
+      :ets.insert(
+        Lenies.WorldTestHelpers.cells(),
+        {{2, 2}, %Lenies.World.Cell{carcass: 20, carcass_hue: 99}}
+      )
 
       {:ok, {:ate, _}} = World.action({:eat, {2, 2}})
 
-      [{_, cell}] = :ets.lookup(:cells, {2, 2})
+      [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {2, 2})
       assert cell.carcass > 0
       assert cell.carcass_hue == 99
     end

@@ -15,17 +15,30 @@ defmodule LeniesWeb.SpeciesLive do
 
   @impl true
   def mount(%{"hash" => hash}, _session, socket) do
+    world_id = :primary
+    world_handle = fetch_primary_handle()
+
     socket =
       socket
+      |> assign(:world_id, world_id)
+      |> assign(:world_handle, world_handle)
       |> assign(:hash, hash)
       |> load_species()
 
     {:ok, socket}
   end
 
+  defp fetch_primary_handle do
+    try do
+      Lenies.Worlds.primary_handle()
+    catch
+      :exit, _ -> nil
+    end
+  end
+
   defp load_species(socket) do
     hash = socket.assigns.hash
-    records = Species.for_hash(hash)
+    records = Species.for_hash(socket.assigns.world_handle, hash)
 
     if Enum.empty?(records) do
       socket
@@ -54,8 +67,8 @@ defmodule LeniesWeb.SpeciesLive do
   end
 
   defp fetch_sample_codeome(sample_id) do
-    case Lenies.Registry.whereis(sample_id) do
-      pid when is_pid(pid) ->
+    case Registry.lookup(Lenies.Registry, {:lenie, :primary, sample_id}) do
+      [{pid, _}] ->
         try do
           case GenServer.call(pid, :get_codeome) do
             {:ok, codeome} -> Disassembler.disassemble(codeome, nil)
@@ -65,7 +78,7 @@ defmodule LeniesWeb.SpeciesLive do
           :exit, _ -> []
         end
 
-      _ ->
+      [] ->
         []
     end
   end

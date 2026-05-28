@@ -2,19 +2,27 @@ defmodule Lenies.World.ChildSlotsTest do
   use ExUnit.Case, async: false
 
   alias Lenies.World.ChildSlots
-  alias Lenies.World.Tables
 
   setup do
-    Tables.create_all()
-    on_exit(fn -> Tables.delete_all() end)
-    :ok
+    tid =
+      :ets.new(:child_slots, [:set, :public, read_concurrency: true, write_concurrency: true])
+
+    on_exit(fn ->
+      try do
+        :ets.delete(tid)
+      rescue
+        ArgumentError -> :ok
+      end
+    end)
+
+    {:ok, tid: tid}
   end
 
-  test "create/3 returns slot_id and stores record in :child_slots" do
-    {:ok, slot_id} = ChildSlots.create("parent1", {10, 10}, 50)
+  test "create/4 returns slot_id and stores record in :child_slots", %{tid: tid} do
+    {:ok, slot_id} = ChildSlots.create(tid, "parent1", {10, 10}, 50)
     assert is_binary(slot_id)
 
-    {:ok, slot} = ChildSlots.get(slot_id)
+    {:ok, slot} = ChildSlots.get(tid, slot_id)
     assert slot.parent_id == "parent1"
     assert slot.target_cell == {10, 10}
     assert slot.size == 50
@@ -24,38 +32,38 @@ defmodule Lenies.World.ChildSlotsTest do
     assert elem(slot.opcodes, 49) == :nop_0
   end
 
-  test "get/1 returns :not_found for unknown slot" do
-    assert ChildSlots.get("never-created") == :not_found
+  test "get/2 returns :not_found for unknown slot", %{tid: tid} do
+    assert ChildSlots.get(tid, "never-created") == :not_found
   end
 
-  test "set_opcode/3 updates a single position" do
-    {:ok, slot_id} = ChildSlots.create("parent1", {10, 10}, 5)
-    :ok = ChildSlots.set_opcode(slot_id, 2, :move)
+  test "set_opcode/4 updates a single position", %{tid: tid} do
+    {:ok, slot_id} = ChildSlots.create(tid, "parent1", {10, 10}, 5)
+    :ok = ChildSlots.set_opcode(tid, slot_id, 2, :move)
 
-    {:ok, slot} = ChildSlots.get(slot_id)
+    {:ok, slot} = ChildSlots.get(tid, slot_id)
     assert elem(slot.opcodes, 2) == :move
     assert elem(slot.opcodes, 0) == :nop_0
   end
 
-  test "set_opcode/3 wraps slot_addr modulo size (tolerance)" do
-    {:ok, slot_id} = ChildSlots.create("parent1", {10, 10}, 5)
-    :ok = ChildSlots.set_opcode(slot_id, 7, :eat)
+  test "set_opcode/4 wraps slot_addr modulo size (tolerance)", %{tid: tid} do
+    {:ok, slot_id} = ChildSlots.create(tid, "parent1", {10, 10}, 5)
+    :ok = ChildSlots.set_opcode(tid, slot_id, 7, :eat)
 
-    {:ok, slot} = ChildSlots.get(slot_id)
+    {:ok, slot} = ChildSlots.get(tid, slot_id)
     # 7 mod 5 = 2
     assert elem(slot.opcodes, 2) == :eat
   end
 
-  test "delete/1 removes the record" do
-    {:ok, slot_id} = ChildSlots.create("parent1", {10, 10}, 5)
-    :ok = ChildSlots.delete(slot_id)
-    assert ChildSlots.get(slot_id) == :not_found
+  test "delete/2 removes the record", %{tid: tid} do
+    {:ok, slot_id} = ChildSlots.create(tid, "parent1", {10, 10}, 5)
+    :ok = ChildSlots.delete(tid, slot_id)
+    assert ChildSlots.get(tid, slot_id) == :not_found
   end
 
-  test "opcodes_to_list/1 returns the opcode list" do
-    {:ok, slot_id} = ChildSlots.create("parent1", {10, 10}, 3)
-    :ok = ChildSlots.set_opcode(slot_id, 1, :move)
-    {:ok, slot} = ChildSlots.get(slot_id)
+  test "opcodes_to_list/1 returns the opcode list", %{tid: tid} do
+    {:ok, slot_id} = ChildSlots.create(tid, "parent1", {10, 10}, 3)
+    :ok = ChildSlots.set_opcode(tid, slot_id, 1, :move)
+    {:ok, slot} = ChildSlots.get(tid, slot_id)
     assert ChildSlots.opcodes_to_list(slot) == [:nop_0, :move, :nop_0]
   end
 end

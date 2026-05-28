@@ -7,13 +7,17 @@ defmodule Lenies.Application do
 
   @impl true
   def start(_type, _args) do
-    # Session-scoped color overrides; survives sterilize but not restart.
-    if :ets.info(:species_color_overrides) == :undefined do
-      :ets.new(:species_color_overrides, [
+    # Deterministic, global codeome cache: hash → [opcode]. Owned by the
+    # Application (not any individual World) so its lifetime spans the whole
+    # node and is independent of World restarts. Content is invariant given
+    # the hash, so sharing it across all worlds (now and future) is correct.
+    if :ets.info(:species_codeomes) == :undefined do
+      :ets.new(:species_codeomes, [
         :set,
         :named_table,
         :public,
-        read_concurrency: true
+        read_concurrency: true,
+        write_concurrency: true
       ])
     end
 
@@ -22,24 +26,27 @@ defmodule Lenies.Application do
       LeniesWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:lenies, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Lenies.PubSub},
-      Lenies.Registry,
+      {Registry, keys: :unique, name: Lenies.Registry, partitions: System.schedulers_online()},
+      Lenies.Worlds.Supervisor,
       Lenies.Snippets.Store,
       Lenies.Manual,
-      Lenies.LenieSupervisor,
       LeniesWeb.Endpoint
     ]
-
-    children =
-      if Application.get_env(:lenies, :auto_start_simulation, true) do
-        children ++ [Lenies.World, Lenies.Telemetry]
-      else
-        children
-      end
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Lenies.Supervisor]
-    Supervisor.start_link(children, opts)
+
+    with {:ok, sup_pid} <- Supervisor.start_link(children, opts) do
+      # Start the :primary world via the Worlds facade — this brings up
+      # Lenies.World, its per-world LenieSupervisor and Telemetry under a
+      # per-world rest_for_one Supervisor (Lenies.World.Supervisor).
+      if Application.get_env(:lenies, :auto_start_simulation, true) do
+        {:ok, _} = Lenies.Worlds.start_world(:primary, %{})
+      end
+
+      {:ok, sup_pid}
+    end
   end
 
   # Tell Phoenix to update the endpoint configuration

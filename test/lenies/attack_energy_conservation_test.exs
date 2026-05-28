@@ -13,7 +13,7 @@ defmodule Lenies.AttackEnergyConservationTest do
 
   setup do
     on_exit(fn ->
-      case Process.whereis(Lenies.LenieSupervisor) do
+      case Lenies.WorldTestHelpers.lenie_sup_pid() do
         sup_pid when is_pid(sup_pid) ->
           DynamicSupervisor.which_children(sup_pid)
           |> Enum.each(fn {_, child_pid, _, _} ->
@@ -24,7 +24,7 @@ defmodule Lenies.AttackEnergyConservationTest do
           :ok
       end
 
-      case Process.whereis(Lenies.World) do
+      case Lenies.WorldTestHelpers.world_pid() do
         pid when is_pid(pid) ->
           try do
             GenServer.stop(pid)
@@ -47,8 +47,8 @@ defmodule Lenies.AttackEnergyConservationTest do
   # so metabolism doesn't drain energy between spawn and the test action.
   # The initial snapshot is still written in init/1 regardless of paused?.
   defp spawn_lenie(id, pos, energy, opts) do
-    [{key, cell}] = :ets.lookup(:cells, pos)
-    :ets.insert(:cells, {key, %{cell | lenie_id: id}})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), pos)
+    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: id}})
 
     opcodes = Keyword.get(opts, :codeome, [:nop_0, :nop_0, :nop_0])
     codeome = Codeome.from_list(opcodes)
@@ -187,8 +187,12 @@ defmodule Lenies.AttackEnergyConservationTest do
       victim_before = Lenie.inspect_state(victim_pid).energy
 
       # Make the victim defending
-      [{"VIC_DEF", record}] = :ets.lookup(:lenies, "VIC_DEF")
-      :ets.insert(:lenies, {"VIC_DEF", Map.put(record, :defending_until, 999_999)})
+      [{"VIC_DEF", record}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(), "VIC_DEF")
+
+      :ets.insert(
+        Lenies.WorldTestHelpers.lenies(),
+        {"VIC_DEF", Map.put(record, :defending_until, 999_999)}
+      )
 
       {:ok, {:defended, ^half_damage}} =
         World.action({:attack, {20, 22}, :e, "ATK_DEF"})
@@ -259,8 +263,12 @@ defmodule Lenies.AttackEnergyConservationTest do
       victim_before = Lenie.inspect_state(victim_pid).energy
 
       # Set victim as permanently defending (must happen before attacker spawns).
-      [{"VIC_SYNC", record}] = :ets.lookup(:lenies, "VIC_SYNC")
-      :ets.insert(:lenies, {"VIC_SYNC", Map.put(record, :defending_until, 999_999)})
+      [{"VIC_SYNC", record}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(), "VIC_SYNC")
+
+      :ets.insert(
+        Lenies.WorldTestHelpers.lenies(),
+        {"VIC_SYNC", Map.put(record, :defending_until, 999_999)}
+      )
 
       attacker_pid =
         spawn_lenie("ATK_SYNC", {20, 24}, 500.0, dir: :e, paused?: false, codeome: [:attack])
@@ -307,8 +315,8 @@ defmodule Lenies.AttackEnergyConservationTest do
 
   describe "unit: take_damage clamp via direct message" do
     test "victim with energy less than damage reports actual=energy as reward" do
-      [{key, cell}] = :ets.lookup(:cells, {5, 30})
-      :ets.insert(:cells, {key, %{cell | lenie_id: "CLAMP_V"}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 30})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "CLAMP_V"}})
 
       codeome = Codeome.from_list([:nop_0])
       small_energy = 3.0
@@ -334,7 +342,7 @@ defmodule Lenies.AttackEnergyConservationTest do
 
       _fake_attacker =
         spawn(fn ->
-          {:ok, _} = Lenies.Registry.register(attacker_id)
+          {:ok, _} = Registry.register(Lenies.Registry, {:lenie, :primary, attacker_id}, nil)
           # Signal the test that registration is complete so there is no race.
           send(test_pid, {:registered, attacker_id})
 
@@ -366,8 +374,8 @@ defmodule Lenies.AttackEnergyConservationTest do
     end
 
     test "victim with energy greater than damage: reward equals damage exactly" do
-      [{key, cell}] = :ets.lookup(:cells, {5, 31})
-      :ets.insert(:cells, {key, %{cell | lenie_id: "CLAMP_V2"}})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {5, 31})
+      :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "CLAMP_V2"}})
 
       codeome = Codeome.from_list([:nop_0])
       big_energy = 200.0
@@ -391,7 +399,7 @@ defmodule Lenies.AttackEnergyConservationTest do
 
       _fake_attacker =
         spawn(fn ->
-          {:ok, _} = Lenies.Registry.register(attacker_id)
+          {:ok, _} = Registry.register(Lenies.Registry, {:lenie, :primary, attacker_id}, nil)
           # Signal the test that registration is complete so there is no race.
           send(test_pid, {:registered, attacker_id})
 

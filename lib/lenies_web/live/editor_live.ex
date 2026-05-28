@@ -21,10 +21,14 @@ defmodule LeniesWeb.EditorLive do
 
   @impl true
   def mount(params, _session, socket) do
-    {mode, selected_hash, buffer} = init_for_route(socket.assigns.live_action, params)
+    world_id = :primary
+    world_handle = fetch_primary_handle()
+    {mode, selected_hash, buffer} = init_for_route(socket.assigns.live_action, params, world_handle)
 
     socket =
       socket
+      |> assign(:world_id, world_id)
+      |> assign(:world_handle, world_handle)
       |> assign(:mode, mode)
       |> assign(:selected_hash, selected_hash)
       |> assign(:buffer, buffer)
@@ -51,13 +55,13 @@ defmodule LeniesWeb.EditorLive do
     {:ok, socket}
   end
 
-  defp init_for_route(:new, _params) do
+  defp init_for_route(:new, _params, _handle) do
     {:new_seed, nil, []}
   end
 
-  defp init_for_route(:edit, %{"hash" => hash}) do
+  defp init_for_route(:edit, %{"hash" => hash}, handle) do
     buffer =
-      case Lenies.Species.for_hash(hash) do
+      case Lenies.Species.for_hash(handle, hash) do
         [{sample_id, _} | _] ->
           case safe_get_codeome(sample_id) do
             {:ok, codeome} -> Lenies.Codeome.to_list(codeome)
@@ -72,15 +76,15 @@ defmodule LeniesWeb.EditorLive do
   end
 
   defp safe_get_codeome(id) do
-    case Lenies.Registry.whereis(id) do
-      pid when is_pid(pid) ->
+    case Registry.lookup(Lenies.Registry, {:lenie, :primary, id}) do
+      [{pid, _}] ->
         try do
           GenServer.call(pid, :get_codeome, 1_000)
         catch
           :exit, _ -> {:error, :dead}
         end
 
-      _ ->
+      [] ->
         {:error, :not_alive}
     end
   end
@@ -167,7 +171,7 @@ defmodule LeniesWeb.EditorLive do
         seed_origin = spawn_seed_origin(socket.assigns)
 
         Enum.each(1..count, fn _ ->
-          Lenies.World.spawn_lenie(codeome,
+          Lenies.Worlds.spawn_lenie(socket.assigns.world_id, codeome,
             energy: energy * 1.0,
             dir: Enum.random(dirs),
             seed_origin: seed_origin
@@ -1023,8 +1027,9 @@ defmodule LeniesWeb.EditorLive do
   # → spawns Y" keeps Y labelled as descending from Minimal Replicator.
   defp spawn_seed_origin(%{mode: :new_seed}), do: nil
 
-  defp spawn_seed_origin(%{mode: :edit, selected_hash: hash}) when is_binary(hash) do
-    case Lenies.Species.for_hash(hash) do
+  defp spawn_seed_origin(%{mode: :edit, selected_hash: hash, world_handle: handle})
+       when is_binary(hash) do
+    case Lenies.Species.for_hash(handle, hash) do
       [{_id, snap} | _] -> Map.get(snap, :seed_origin)
       _ -> nil
     end
@@ -1121,10 +1126,26 @@ defmodule LeniesWeb.EditorLive do
   defp parse_clamped(_, _, _, default), do: default
 
   defp suggested_color(buffer) do
-    buffer
-    |> Lenies.Codeome.from_list()
-    |> Lenies.Codeome.hash()
-    |> Lenies.SpeciesColor.hex()
+    hash =
+      buffer
+      |> Lenies.Codeome.from_list()
+      |> Lenies.Codeome.hash()
+
+    # Multi-world refactor T7: the editor is still primary-world-scoped (the
+    # full world_id awareness lands in T11). When the World isn't running
+    # (e.g. tests), fall back to the hash-derived color.
+    case fetch_primary_handle() do
+      %Lenies.WorldHandle{} = handle -> Lenies.SpeciesColor.hex(handle, hash)
+      nil -> hash |> :erlang.phash2(255) |> Kernel.+(1) |> Lenies.SpeciesColor.byte_to_hex()
+    end
+  end
+
+  defp fetch_primary_handle do
+    try do
+      Lenies.Worlds.primary_handle()
+    catch
+      :exit, _ -> nil
+    end
   end
 
   # Compact numeric display for the energy panel: integers as-is,

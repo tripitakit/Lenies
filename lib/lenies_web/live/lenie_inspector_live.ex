@@ -15,23 +15,38 @@ defmodule LeniesWeb.LenieInspectorLive do
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
+    world_id = :primary
+    world_handle = fetch_primary_handle()
+
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(Lenies.PubSub, "lenie:#{id}")
+      # Subscribe to the per-Lenie scoped topic, e.g. "world:primary:lenie:<id>".
+      prefix = (world_handle && world_handle.pubsub_prefix) || "world:primary"
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:lenie:#{id}")
     end
 
     socket =
       socket
+      |> assign(:world_id, world_id)
+      |> assign(:world_handle, world_handle)
       |> assign(:id, id)
       |> load_lenie()
 
     {:ok, socket}
   end
 
+  defp fetch_primary_handle do
+    try do
+      Lenies.Worlds.primary_handle()
+    catch
+      :exit, _ -> nil
+    end
+  end
+
   defp load_lenie(socket) do
     id = socket.assigns.id
 
-    case Lenies.Registry.whereis(id) do
-      pid when is_pid(pid) ->
+    case Registry.lookup(Lenies.Registry, {:lenie, :primary, id}) do
+      [{pid, _}] ->
         snap =
           try do
             Lenies.Lenie.inspect_state(pid)
@@ -48,17 +63,30 @@ defmodule LeniesWeb.LenieInspectorLive do
           assign(socket, :found?, false)
         end
 
-      _ ->
-        case :ets.lookup(:lenies, id) do
-          [{^id, snap}] ->
+      [] ->
+        case lookup_lenie_snap(id) do
+          {:ok, snap} ->
             socket
             |> assign(:found?, false)
             |> assign(:snap, snap)
             |> assign(:codeome_lines, [])
 
-          _ ->
+          :error ->
             assign(socket, :found?, false)
         end
+    end
+  end
+
+  defp lookup_lenie_snap(id) do
+    try do
+      handle = Lenies.Worlds.primary_handle()
+
+      case :ets.lookup(handle.tables.lenies, id) do
+        [{^id, snap}] -> {:ok, snap}
+        _ -> :error
+      end
+    catch
+      :exit, _ -> :error
     end
   end
 
@@ -86,9 +114,9 @@ defmodule LeniesWeb.LenieInspectorLive do
         |> assign(:found?, true)
 
       socket =
-        case Lenies.Registry.whereis(snap.id) do
-          pid when is_pid(pid) -> assign(socket, :codeome_lines, fetch_codeome_lines(pid, snap))
-          _ -> socket
+        case Registry.lookup(Lenies.Registry, {:lenie, :primary, snap.id}) do
+          [{pid, _}] -> assign(socket, :codeome_lines, fetch_codeome_lines(pid, snap))
+          [] -> socket
         end
 
       {:noreply, socket}
