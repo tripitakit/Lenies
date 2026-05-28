@@ -28,6 +28,7 @@ defmodule Lenies.Application do
       {Phoenix.PubSub, name: Lenies.PubSub},
       {Registry, keys: :unique, name: Lenies.Registry, partitions: System.schedulers_online()},
       Lenies.Worlds.Supervisor,
+      Lenies.Sandboxes,
       Lenies.Snippets.Store,
       Lenies.Manual,
       LeniesWeb.Endpoint

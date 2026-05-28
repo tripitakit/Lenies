@@ -43,7 +43,24 @@ defmodule Lenies.Sandboxes do
   end
 
   @impl true
-  def init(_opts), do: {:ok, %{}}
+  def init(_opts) do
+    state =
+      Lenies.Worlds.list()
+      |> Enum.filter(&match?({:sandbox, _}, &1))
+      |> Enum.reduce(%{}, fn {:sandbox, user_id} = world_id, acc ->
+        ref = Process.send_after(self(), {:maybe_stop, user_id, 1}, grace_ms())
+        Map.put(acc, user_id, %{
+          world_id: world_id,
+          connections: MapSet.new(),
+          monitors: %{},
+          pending_stop: ref,
+          generation: 1
+        })
+      end)
+
+    Phoenix.PubSub.broadcast(Lenies.PubSub, "sandboxes:manager_up", :sandboxes_manager_up)
+    {:ok, state}
+  end
 
   @impl true
   def handle_call({:attach, user_id, pid}, _from, state) do
@@ -208,6 +225,11 @@ defmodule Lenies.Sandboxes do
   defp auto_save(user_id) do
     case Lenies.Worlds.save_snapshot({:sandbox, user_id}, "auto") do
       :ok ->
+        :ok
+
+      :error ->
+        # World already gone (e.g. raced with an external stop_world). Nothing
+        # to snapshot — silently skip.
         :ok
 
       {:error, reason} ->

@@ -9,13 +9,6 @@ defmodule Lenies.SandboxesTest do
   end
 
   describe "attach/1 — first attach" do
-    setup do
-      # Start a fresh Sandboxes manager isolated to this test. Until Task 7
-      # adds it to the Application supervision tree, start_supervised! works.
-      start_supervised!({Lenies.Sandboxes, []})
-      :ok
-    end
-
     test "starts the user's sandbox world and registers the caller" do
       user_id = unique_user_id()
       assert :ok = Lenies.Sandboxes.attach(user_id)
@@ -48,11 +41,6 @@ defmodule Lenies.SandboxesTest do
   end
 
   describe "detach via :DOWN" do
-    setup do
-      start_supervised!({Lenies.Sandboxes, []})
-      :ok
-    end
-
     test "last pid disconnect schedules a grace timer; world still running" do
       user_id = unique_user_id()
       task =
@@ -100,7 +88,6 @@ defmodule Lenies.SandboxesTest do
 
   describe ":maybe_stop" do
     setup do
-      start_supervised!({Lenies.Sandboxes, []})
       # Speed up grace period for tests so we don't wait 30 s.
       Application.put_env(:lenies, :sandbox_grace_ms, 50)
       on_exit(fn -> Application.delete_env(:lenies, :sandbox_grace_ms) end)
@@ -152,7 +139,6 @@ defmodule Lenies.SandboxesTest do
 
   describe "auto-restore" do
     setup do
-      start_supervised!({Lenies.Sandboxes, []})
       Application.put_env(:lenies, :sandbox_grace_ms, 50)
       on_exit(fn -> Application.delete_env(:lenies, :sandbox_grace_ms) end)
       :ok
@@ -223,6 +209,34 @@ defmodule Lenies.SandboxesTest do
       assert length(broken_dirs) == 1
 
       :ok = Lenies.Worlds.stop_world(world_id)
+    end
+  end
+
+  describe "crash recovery / adopt" do
+    test "on init, adopts running {:sandbox, _} worlds and broadcasts sandboxes:manager_up" do
+      # The Application-supervised Sandboxes is already running. Start a sandbox
+      # under it, then kill the manager and verify the new instance adopts the
+      # running world and broadcasts.
+      user_id = unique_user_id()
+      :ok = Lenies.Sandboxes.attach(user_id)
+      assert Lenies.Worlds.alive?({:sandbox, user_id})
+
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "sandboxes:manager_up")
+      pid = Process.whereis(Lenies.Sandboxes)
+      Process.exit(pid, :kill)
+
+      assert_receive :sandboxes_manager_up, 1_000
+
+      # Adopted: the state has an entry for user_id with empty connections and
+      # a pending stop timer.
+      Process.sleep(50)
+      state = :sys.get_state(Lenies.Sandboxes)
+      assert Map.has_key?(state, user_id)
+      assert MapSet.size(state[user_id].connections) == 0
+      refute is_nil(state[user_id].pending_stop)
+
+      # cleanup
+      :ok = Lenies.Worlds.stop_world({:sandbox, user_id})
     end
   end
 
