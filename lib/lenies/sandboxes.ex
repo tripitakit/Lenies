@@ -99,6 +99,45 @@ defmodule Lenies.Sandboxes do
     end
   end
 
+  @impl true
+  def handle_info({:maybe_stop, user_id, gen}, state) do
+    case state[user_id] do
+      nil ->
+        # User entry already gone (e.g. a manual stop_world from elsewhere). No-op.
+        {:noreply, state}
+
+      %{generation: ^gen} = entry ->
+        if MapSet.size(entry.connections) == 0 do
+          auto_save(user_id)
+          _ = Lenies.Worlds.stop_world({:sandbox, user_id})
+          {:noreply, Map.delete(state, user_id)}
+        else
+          # New attaches arrived but the generation didn't change (unlikely, but be defensive).
+          {:noreply, state}
+        end
+
+      _other ->
+        # Generation has changed (a re-attach refreshed lifecycle). Ignore.
+        {:noreply, state}
+    end
+  end
+
+  defp auto_save(user_id) do
+    case Lenies.Worlds.save_snapshot({:sandbox, user_id}, "auto") do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        require Logger
+
+        Logger.error(
+          "Lenies.Sandboxes: auto-snapshot save failed for user #{user_id}: #{inspect(reason)}"
+        )
+
+        :ok
+    end
+  end
+
   defp find_user_for_pid(state, pid) do
     Enum.find_value(state, fn {user_id, entry} ->
       if MapSet.member?(entry.connections, pid), do: user_id
