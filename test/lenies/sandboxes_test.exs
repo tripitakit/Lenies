@@ -213,6 +213,31 @@ defmodule Lenies.SandboxesTest do
       :ok = Lenies.Worlds.stop_world(world_id)
     end
 
+    test "quarantine works WITHOUT explicit :snapshot_root configured" do
+      # Regression: previously Lenies.Sandboxes and Lenies.Snapshot used
+      # divergent defaults for :snapshot_root (Sandboxes: System.tmp_dir!(),
+      # Snapshot: Path.join(System.tmp_dir!(), "lenies-snapshots")). In dev/prod
+      # without explicit config, the snapshot save would land under
+      # /tmp/lenies-snapshots/... but quarantine would look under /tmp/...,
+      # silently no-op'ing and trapping the user in restore-fails-forever loop.
+      #
+      # The fix unifies the source of truth in Lenies.Snapshot.snapshot_root/0;
+      # this regression test ensures the function exists and reports the
+      # spec'd default path, so Sandboxes (which must call it) cannot diverge.
+      assert function_exported?(Lenies.Snapshot, :snapshot_root, 0)
+
+      # Ensure no explicit override is leaking in from a sibling test.
+      original = Application.get_env(:lenies, :snapshot_root)
+      Application.delete_env(:lenies, :snapshot_root)
+
+      try do
+        sandbox_root = apply(Lenies.Snapshot, :snapshot_root, [])
+        assert String.contains?(sandbox_root, "lenies-snapshots")
+      after
+        if original, do: Application.put_env(:lenies, :snapshot_root, original)
+      end
+    end
+
     @tag :tmp_dir
     test "corrupt auto snapshot is quarantined, world starts empty", %{tmp_dir: tmp} do
       Application.put_env(:lenies, :snapshot_root, tmp)

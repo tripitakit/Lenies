@@ -158,7 +158,19 @@ defmodule Lenies.Snapshot do
 
   defp validate_name(_), do: {:error, :invalid_name}
 
-  defp snapshot_root do
+  @doc """
+  The root directory under which all world snapshots are written.
+
+  Sourced from `Application.get_env(:lenies, :snapshot_root, ...)`; defaults to
+  `Path.join(System.tmp_dir!(), "lenies-snapshots")` when no config is set.
+
+  This is the single source of truth for snapshot path resolution. Callers
+  that need to inspect snapshot paths (e.g. `Lenies.Sandboxes` for quarantine
+  logic) MUST go through this function rather than re-deriving the default,
+  so the default stays consistent across the codebase.
+  """
+  @spec snapshot_root() :: Path.t()
+  def snapshot_root do
     Application.get_env(
       :lenies,
       :snapshot_root,

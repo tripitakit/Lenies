@@ -149,14 +149,14 @@ defmodule Lenies.Sandboxes do
   end
 
   defp auto_dir_exists?(world_id) do
-    root = Application.get_env(:lenies, :snapshot_root, System.tmp_dir!())
+    root = Lenies.Snapshot.snapshot_root()
     File.dir?(Path.join([root, Lenies.Worlds.id_to_path(world_id), "auto"]))
   end
 
   defp quarantine_broken_auto(world_id, reason) do
     require Logger
 
-    root = Application.get_env(:lenies, :snapshot_root, System.tmp_dir!())
+    root = Lenies.Snapshot.snapshot_root()
     dir = Path.join([root, Lenies.Worlds.id_to_path(world_id), "auto"])
 
     if File.dir?(dir) do
