@@ -52,9 +52,13 @@ defmodule Lenies.Sandboxes do
             {:reply, err, state}
         end
 
-      %{} = _entry ->
-        # Already attached (Task 3 will handle this properly); reply :ok for now.
-        {:reply, :ok, state}
+      %{} = entry ->
+        new_entry =
+          entry
+          |> add_connection(pid)
+          |> cancel_pending_stop()
+          |> bump_generation()
+        {:reply, :ok, Map.put(state, user_id, new_entry)}
     end
   end
 
@@ -65,4 +69,23 @@ defmodule Lenies.Sandboxes do
       {:error, _} = err -> err
     end
   end
+
+  defp add_connection(entry, pid) do
+    if MapSet.member?(entry.connections, pid) do
+      entry
+    else
+      ref = Process.monitor(pid)
+      %{entry |
+        connections: MapSet.put(entry.connections, pid),
+        monitors: Map.put(entry.monitors, pid, ref)}
+    end
+  end
+
+  defp cancel_pending_stop(%{pending_stop: nil} = entry), do: entry
+  defp cancel_pending_stop(%{pending_stop: ref} = entry) do
+    _ = Process.cancel_timer(ref)
+    %{entry | pending_stop: nil}
+  end
+
+  defp bump_generation(entry), do: %{entry | generation: entry.generation + 1}
 end
