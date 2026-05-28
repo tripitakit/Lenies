@@ -338,7 +338,10 @@ defmodule LeniesWeb.ControlsPanelComponent do
       %Lenies.Collection.Codeome{} = seed ->
         codeome = Lenies.Codeome.from_list(Lenies.Collection.to_opcode_atoms(seed))
         hash = Lenies.Codeome.hash(codeome)
-        Lenies.SpeciesColor.set_override(hash, seed.color_hex)
+        # Multi-world refactor T7: color overrides are per-world. While the
+        # dashboard isn't yet world-aware (lands in T11), assume the primary
+        # world for the spawn endpoint.
+        Lenies.SpeciesColor.set_override(Lenies.Worlds.primary_handle(), hash, seed.color_hex)
 
         count = String.to_integer(count_str) |> max(1) |> min(50)
         dirs = [:n, :s, :e, :w]

@@ -64,7 +64,7 @@ defmodule LeniesWeb.GridRendererTest do
     :ets.insert(handle.tables.cells, {{1, 2}, %Lenies.World.Cell{lenie_id: "L1"}})
     :ets.insert(handle.tables.lenies, {"L1", %{id: "L1", codeome_hash: "hash-A"}})
 
-    expected_byte = Lenies.SpeciesColor.hue_byte("hash-A")
+    expected_byte = Lenies.SpeciesColor.hue_byte(handle, "hash-A")
 
     {lenies_bin, _, _, _} = GridRenderer.encode_layers(grid)
 

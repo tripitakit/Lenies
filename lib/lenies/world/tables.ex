@@ -12,6 +12,8 @@ defmodule Lenies.World.Tables do
   - `:lenies`            — `id    → snapshot` (written mainly by Lenies, with exceptions by World)
   - `:child_slots`       — `slot  → gestation record`
   - `:history`           — ring buffer of aggregated metrics (written by Telemetry)
+  - `:color_overrides`   — `codeome_hash → "#RRGGBB"` (user-picked species colors,
+                           survives sterilize but not World restart)
 
   Note: `:species_codeomes` (hash → [opcode] cache populated by `Lenie.init/1`)
   is NOT created here — it's owned by `Lenies.Application` so its lifetime
@@ -19,12 +21,12 @@ defmodule Lenies.World.Tables do
   deterministic given the hash, so sharing it across worlds is correct.
   """
 
-  @tables [:cells, :lenies, :child_slots, :history]
+  @tables [:cells, :lenies, :child_slots, :history, :color_overrides]
 
   def tables, do: @tables
 
   @doc """
-  Creates the 4 per-world ETS tables (unnamed) and returns a map of tids.
+  Creates the 5 per-world ETS tables (unnamed) and returns a map of tids.
 
   The atom passed as first arg to `:ets.new/2` is just a tag for
   `:ets.info/2` (the table has no global name without `:named_table`).
@@ -37,12 +39,13 @@ defmodule Lenies.World.Tables do
       cells: :ets.new(:cells, opts),
       lenies: :ets.new(:lenies, opts),
       child_slots: :ets.new(:child_slots, opts),
-      history: :ets.new(:history, ordered_opts)
+      history: :ets.new(:history, ordered_opts),
+      color_overrides: :ets.new(:color_overrides, opts)
     }
   end
 
   @doc """
-  Test-only convenience that creates the 4 tables as `:named_table` so a
+  Test-only convenience that creates the 5 tables as `:named_table` so a
   test fixture can read/write them by bare atom without spinning up a
   full `Lenies.World`.
 
@@ -66,11 +69,12 @@ defmodule Lenies.World.Tables do
     :ets.new(:lenies, opts)
     :ets.new(:child_slots, opts)
     :ets.new(:history, ordered_opts)
+    :ets.new(:color_overrides, opts)
     :ok
   end
 
   @doc """
-  Deletes the 4 ETS tables referenced by `tables_map` (a map of tids as
+  Deletes the 5 ETS tables referenced by `tables_map` (a map of tids as
   returned by `create_all/1`). Idempotent.
   """
   def delete_all(tables_map) when is_map(tables_map) do
@@ -86,7 +90,7 @@ defmodule Lenies.World.Tables do
   end
 
   @doc """
-  Test-only `on_exit` companion to `create_all/0`. Deletes the 4 named
+  Test-only `on_exit` companion to `create_all/0`. Deletes the 5 named
   tables (idempotent), then — if a `Lenies.World` GenServer is still
   running — stops it so the next test starts from a clean slate.
 
@@ -105,7 +109,7 @@ defmodule Lenies.World.Tables do
   end
 
   @doc """
-  Empties the 4 ETS tables referenced by `tables_map` without deleting them.
+  Empties the 5 ETS tables referenced by `tables_map` without deleting them.
   """
   def clear_all(tables_map) when is_map(tables_map) do
     for {_key, tid} <- tables_map do
@@ -120,7 +124,7 @@ defmodule Lenies.World.Tables do
   end
 
   @doc """
-  Test-only counterpart to `create_all/0`: empties the 4 named tables.
+  Test-only counterpart to `create_all/0`: empties the 5 named tables.
   """
   def clear_all do
     for t <- @tables do

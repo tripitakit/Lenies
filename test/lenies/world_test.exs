@@ -129,7 +129,7 @@ defmodule Lenies.WorldTest do
 
     test "death stores SpeciesColor.hue_byte(hash) into the cell's carcass_hue" do
       hash = "test-hash-abc"
-      expected_hue = Lenies.SpeciesColor.hue_byte(hash)
+      expected_hue = Lenies.SpeciesColor.hue_byte(Lenies.Worlds.primary_handle(), hash)
 
       # Plant a Lenie at (3, 4)
       :ets.insert(Lenies.WorldTestHelpers.cells(), {{3, 4}, %Lenies.World.Cell{lenie_id: "L1"}})

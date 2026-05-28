@@ -55,7 +55,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
       <header class="flex items-center gap-2">
         <span
           class="inline-block w-3 h-3 shrink-0"
-          style={"background:#{SpeciesColor.hex(@selected_hash)}"}
+          style={"background:#{swatch_hex(@world_handle, @selected_hash)}"}
         >
         </span>
         <h2 class="text-xs flex-1 truncate">
@@ -131,6 +131,13 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
     </aside>
     """
   end
+
+  # Falls back to "#000000" when no World is running so the swatch renders
+  # an empty square instead of crashing on a nil handle.
+  defp swatch_hex(nil, _hash), do: "#000000"
+
+  defp swatch_hex(%Lenies.WorldHandle{} = handle, hash) when is_binary(hash),
+    do: SpeciesColor.hex(handle, hash)
 
   defp population(%{population: n}), do: n
   defp population(_), do: 0

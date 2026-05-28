@@ -1121,10 +1121,26 @@ defmodule LeniesWeb.EditorLive do
   defp parse_clamped(_, _, _, default), do: default
 
   defp suggested_color(buffer) do
-    buffer
-    |> Lenies.Codeome.from_list()
-    |> Lenies.Codeome.hash()
-    |> Lenies.SpeciesColor.hex()
+    hash =
+      buffer
+      |> Lenies.Codeome.from_list()
+      |> Lenies.Codeome.hash()
+
+    # Multi-world refactor T7: the editor is still primary-world-scoped (the
+    # full world_id awareness lands in T11). When the World isn't running
+    # (e.g. tests), fall back to the hash-derived color.
+    case fetch_primary_handle() do
+      %Lenies.WorldHandle{} = handle -> Lenies.SpeciesColor.hex(handle, hash)
+      nil -> hash |> :erlang.phash2(255) |> Kernel.+(1) |> Lenies.SpeciesColor.byte_to_hex()
+    end
+  end
+
+  defp fetch_primary_handle do
+    try do
+      Lenies.Worlds.primary_handle()
+    catch
+      :exit, _ -> nil
+    end
   end
 
   # Compact numeric display for the energy panel: integers as-is,

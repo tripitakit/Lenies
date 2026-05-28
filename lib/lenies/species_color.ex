@@ -10,6 +10,18 @@ defmodule Lenies.SpeciesColor do
   Stability: derived from `:erlang.phash2`, so the same hash always maps to
   the same color across restarts and across the Elixir/JS divide (as long
   as the byte → hue formula stays in sync).
+
+  ## Multi-world API
+
+  Color overrides are per-world: each world owns a `:color_overrides`
+  ETS table inside its `%Lenies.WorldHandle{}`. Functions that read or
+  write overrides take a handle as their first argument:
+
+      Lenies.SpeciesColor.set_override(handle, hash, "#ff00aa")
+      Lenies.SpeciesColor.hex(handle, hash)
+
+  `byte_to_hex/1` derives a color from a hue byte without touching the
+  overrides table and so is handle-free.
   """
 
   @saturation 0.70
@@ -21,64 +33,51 @@ defmodule Lenies.SpeciesColor do
   returns 0.
 
   Honors color overrides: if the user has registered a hex override for
-  this species via `set_override/2`, the returned byte is derived from
+  this species via `set_override/3`, the returned byte is derived from
   the override's hue (so the canvas paints that species in roughly the
   picked colour). The canvas's HSL formula uses fixed S=0.70 / L=0.55,
   so the override's saturation and lightness are normalised — only the
   hue survives the 1-byte wire format. Without an override, the byte is
   a stable hash → byte mapping via `:erlang.phash2/2`.
   """
-  @spec hue_byte(binary()) :: 1..255
-  def hue_byte(hash) when is_binary(hash) do
-    case override(hash) do
+  @spec hue_byte(Lenies.WorldHandle.t(), binary()) :: 1..255
+  def hue_byte(%Lenies.WorldHandle{} = handle, hash) when is_binary(hash) do
+    case override(handle, hash) do
       nil -> :erlang.phash2(hash, 255) + 1
       hex -> hex_to_hue_byte(hex) || :erlang.phash2(hash, 255) + 1
     end
   end
 
   @doc """
-  Register a hex color override for a species hash. Overrides survive sterilize
-  but not app restart. The ETS table is created in `Lenies.Application.start/2`.
+  Register a hex color override for a species hash on the world referenced by
+  `handle`. Overrides survive sterilize but not world restart.
   """
-  @spec set_override(binary(), String.t()) :: :ok
-  def set_override(hash, hex) when is_binary(hash) and is_binary(hex) do
-    if :ets.info(:species_color_overrides) != :undefined do
-      :ets.insert(:species_color_overrides, {hash, hex})
-    end
-
-    :ok
+  @spec set_override(Lenies.WorldHandle.t(), binary(), String.t()) :: true
+  def set_override(%Lenies.WorldHandle{} = handle, hash, hex)
+      when is_binary(hash) and is_binary(hex) do
+    :ets.insert(handle.tables.color_overrides, {hash, hex})
   end
 
-  @doc "Remove a hex color override for a species hash."
-  @spec clear_override(binary()) :: :ok
-  def clear_override(hash) when is_binary(hash) do
-    if :ets.info(:species_color_overrides) != :undefined do
-      :ets.delete(:species_color_overrides, hash)
-    end
-
-    :ok
+  @doc "Remove a hex color override for a species hash on the world referenced by `handle`."
+  @spec clear_override(Lenies.WorldHandle.t(), binary()) :: true
+  def clear_override(%Lenies.WorldHandle{} = handle, hash) when is_binary(hash) do
+    :ets.delete(handle.tables.color_overrides, hash)
   end
 
-  @doc "Read the hex color override for a hash, or `nil` if none is set."
-  @spec override(binary()) :: nil | String.t()
-  def override(hash) when is_binary(hash) do
-    case :ets.info(:species_color_overrides) do
-      :undefined ->
-        nil
-
-      _ ->
-        case :ets.lookup(:species_color_overrides, hash) do
-          [{^hash, hex}] -> hex
-          [] -> nil
-        end
+  @doc "Read the hex color override for a hash on the world referenced by `handle`, or `nil` if none is set."
+  @spec override(Lenies.WorldHandle.t(), binary()) :: nil | String.t()
+  def override(%Lenies.WorldHandle{} = handle, hash) when is_binary(hash) do
+    case :ets.lookup(handle.tables.color_overrides, hash) do
+      [{^hash, hex}] -> hex
+      [] -> nil
     end
   end
 
-  @doc "CSS hex color (#RRGGBB) for a species hash. Honors per-hash overrides."
-  @spec hex(binary()) :: String.t()
-  def hex(hash) when is_binary(hash) do
-    case override(hash) do
-      nil -> hash |> hue_byte() |> byte_to_hex()
+  @doc "CSS hex color (#RRGGBB) for a species hash on the world referenced by `handle`. Honors per-hash overrides."
+  @spec hex(Lenies.WorldHandle.t(), binary()) :: String.t()
+  def hex(%Lenies.WorldHandle{} = handle, hash) when is_binary(hash) do
+    case override(handle, hash) do
+      nil -> handle |> hue_byte(hash) |> byte_to_hex()
       explicit when is_binary(explicit) -> explicit
     end
   end

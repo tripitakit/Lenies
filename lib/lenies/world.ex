@@ -203,7 +203,10 @@ defmodule Lenies.World do
     terminate_all_lenies()
     if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
     if state.reconcile_ref, do: Process.cancel_timer(state.reconcile_ref)
-    Tables.clear_all(state.tables)
+    # Color overrides survive sterilize per the SpeciesColor contract — they
+    # represent user intent, not simulation state. Clear only the simulation
+    # tables (cells, lenies, child_slots, history).
+    Tables.clear_all(Map.drop(state.tables, [:color_overrides]))
     init_cells(state.grid, state.tables)
     hotspots = Hotspots.initial(state.grid, Config.hotspot_count())
     {total_resource, total_carcass} = sum_cells(state.tables)
@@ -234,14 +237,22 @@ defmodule Lenies.World do
     if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
     if state.reconcile_ref, do: Process.cancel_timer(state.reconcile_ref)
 
-    # Delete the existing (sterilized) tables so file2tab can recreate them
+    # The snapshot only covers a subset of the per-world tables (the 4 listed
+    # in `Lenies.Snapshot.tables/0`). Tables outside that set — currently
+    # `:color_overrides` (T7) — are preserved across the restore so user-picked
+    # species colors survive a "load snapshot" cycle. Full per-world snapshot
+    # layout (including color_overrides) lands in T12.
+    snapshot_tables = Lenies.Snapshot.tables()
+    {snapshot_tids, preserved_tids} = Map.split(state.tables, snapshot_tables)
+
+    # Delete only the snapshot-tracked tables so file2tab can recreate them
     # owned by THIS World process. Each file2tab returns {:ok, tid}; we
     # collect the new tids into a map shaped like Tables.create_all/1.
-    delete_tables(state.tables)
+    delete_tables(snapshot_tids)
 
     {result, restored_tables} =
       try do
-        Enum.reduce_while(Lenies.Snapshot.tables(), {:ok, %{}}, fn table, {:ok, acc} ->
+        Enum.reduce_while(snapshot_tables, {:ok, %{}}, fn table, {:ok, acc} ->
           path = Path.join(dir, "#{table}.tab") |> String.to_charlist()
 
           case :ets.file2tab(path) do
@@ -256,11 +267,14 @@ defmodule Lenies.World do
     new_state =
       case result do
         :ok ->
-          # All 4 tables restored — adopt the new tids into state + handle.
+          # All snapshot tables restored — merge with the preserved ones
+          # (e.g. color_overrides) and adopt the resulting map into state.
+          merged_tables = Map.merge(preserved_tids, restored_tables)
+
           new_state = %{
             state
-            | tables: restored_tables,
-              handle: %{state.handle | tables: restored_tables},
+            | tables: merged_tables,
+              handle: %{state.handle | tables: merged_tables},
               tick_count: 0,
               tick_ref: nil,
               reconcile_ref: nil
@@ -275,17 +289,17 @@ defmodule Lenies.World do
           new_state
 
         {:error, _} ->
-          # Recovery: file2tab failed partway through the loop. Some tables may
-          # have been restored; some are missing. Drop whatever we partially
-          # restored and replace ALL 4 with fresh empty tables so the world is
-          # in a valid (empty) state.
+          # Recovery: file2tab failed partway through the loop. Drop whatever
+          # we partially restored and recreate the snapshot tables empty; then
+          # merge with the preserved tables so the world is in a valid state.
           delete_tables(restored_tables)
-          recovered_tables = recover_tables(state.grid)
+          recovered_snapshot = recover_tables(state.grid)
+          merged_tables = Map.merge(preserved_tids, recovered_snapshot)
 
           new_state = %{
             state
-            | tables: recovered_tables,
-              handle: %{state.handle | tables: recovered_tables},
+            | tables: merged_tables,
+              handle: %{state.handle | tables: merged_tables},
               tick_count: 0,
               tick_ref: nil,
               reconcile_ref: nil
@@ -385,7 +399,7 @@ defmodule Lenies.World do
     case :ets.lookup(state.tables.cells, {x, y}) do
       [{key, cell}] ->
         carcass_value = max(0, trunc(energy_at_death * 0.5))
-        hue = Lenies.SpeciesColor.hue_byte(codeome_hash)
+        hue = Lenies.SpeciesColor.hue_byte(state.handle, codeome_hash)
 
         :ets.insert(state.tables.cells, {
           key,

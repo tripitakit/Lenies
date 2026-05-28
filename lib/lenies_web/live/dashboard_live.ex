@@ -60,6 +60,7 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:inspector_dirty, false)
       |> assign(:sort_by, sort_by)
       |> assign(:sort_dir, sort_dir)
+      |> assign(:world_handle, fetch_primary_handle())
       |> stream_configure(:species_table, dom_id: fn sp -> "species-row-#{sp.hash}" end)
       |> stream(:species_table, sort_species(all_species, sort_by, sort_dir))
 
@@ -171,7 +172,7 @@ defmodule LeniesWeb.DashboardLive do
               data-show-lenies={@layers_visible.lenies}
               data-show-resource={@layers_visible.resource}
               data-show-carcass={@layers_visible.carcass}
-              data-highlight-hue={highlight_hue(@selected_hash)}
+              data-highlight-hue={highlight_hue(handle_from_assigns(assigns), @selected_hash)}
               width={elem(@grid, 0) * 2}
               height={elem(@grid, 1) * 2}
               class="dashboard-map-canvas"
@@ -321,7 +322,7 @@ defmodule LeniesWeb.DashboardLive do
                           <div class="flex items-center gap-1.5">
                             <span
                               class="inline-block w-2 h-2 shrink-0"
-                              style={"background:#{Lenies.SpeciesColor.hex(sp.hash)}"}
+                              style={"background:#{species_hex(handle_from_assigns(assigns), sp.hash)}"}
                             >
                             </span>
                             <span class="text-cyan-400">
@@ -359,6 +360,7 @@ defmodule LeniesWeb.DashboardLive do
                 id="species-inspector"
                 selected_hash={@selected_hash}
                 species_record={@selected_species_record}
+                world_handle={handle_from_assigns(assigns)}
               />
             <% end %>
           </div>
@@ -377,8 +379,21 @@ defmodule LeniesWeb.DashboardLive do
   # Maps the selected species hash to the 0..255 hue byte that the canvas
   # reads from `data-highlight-hue`. 0 means "no highlight" so the hook
   # renders every cell at full intensity.
-  defp highlight_hue(nil), do: 0
-  defp highlight_hue(hash) when is_binary(hash), do: SpeciesColor.hue_byte(hash)
+  defp highlight_hue(_handle, nil), do: 0
+  defp highlight_hue(nil, _hash), do: 0
+
+  defp highlight_hue(%Lenies.WorldHandle{} = handle, hash) when is_binary(hash),
+    do: SpeciesColor.hue_byte(handle, hash)
+
+  # Lookup the world handle from socket assigns and, if the World wasn't running
+  # at mount time, retry now (e.g. tests that start the World after mount).
+  defp handle_from_assigns(%{world_handle: %Lenies.WorldHandle{} = h}), do: h
+  defp handle_from_assigns(_), do: fetch_primary_handle()
+
+  # Compute the per-species hex color. Returns "#000000" if no World is
+  # running (caller renders an empty/black swatch, not a crash).
+  defp species_hex(nil, _hash), do: "#000000"
+  defp species_hex(%Lenies.WorldHandle{} = handle, hash), do: SpeciesColor.hex(handle, hash)
 
   @impl true
   def handle_event("select_species", %{"hash" => hash}, socket) do

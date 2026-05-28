@@ -7,8 +7,8 @@ defmodule LeniesWeb.GridRenderer do
 
     - `lenies`       — 0 if cell is empty; otherwise the species hue byte
                        (1..255) of the Lenie occupying the cell. The mapping is
-                       `Lenies.SpeciesColor.hue_byte(codeome_hash)`. If the
-                       Lenie hasn't written its first snapshot yet so the
+                       `Lenies.SpeciesColor.hue_byte(handle, codeome_hash)`. If
+                       the Lenie hasn't written its first snapshot yet so the
                        hash isn't in `:lenies`, the byte is 0 (rendered as
                        no-species briefly).
     - `resource`     — `cell.resource` clamped to 0..255.
@@ -37,7 +37,7 @@ defmodule LeniesWeb.GridRenderer do
             {0, 0, 0, 0}
 
           cell ->
-            l = lenies_byte(cell, hash_by_id)
+            l = lenies_byte(cell, hash_by_id, handle)
             r = cell.resource |> clamp_byte()
             c = cell.carcass |> clamp_byte()
             ch = cell.carcass_hue |> clamp_byte()
@@ -90,16 +90,16 @@ defmodule LeniesWeb.GridRenderer do
     end
   end
 
-  defp lenies_byte(%{lenie_id: nil}, _index), do: 0
+  defp lenies_byte(%{lenie_id: nil}, _index, _handle), do: 0
 
-  defp lenies_byte(%{lenie_id: id}, index) when is_binary(id) do
+  defp lenies_byte(%{lenie_id: id}, index, handle) when is_binary(id) do
     case Map.get(index, id) do
-      hash when is_binary(hash) -> SpeciesColor.hue_byte(hash)
+      hash when is_binary(hash) -> SpeciesColor.hue_byte(handle, hash)
       _ -> 0
     end
   end
 
-  defp lenies_byte(_, _), do: 0
+  defp lenies_byte(_, _, _), do: 0
 
   defp clamp_byte(n) when is_integer(n) and n >= 0 and n <= 255, do: n
   defp clamp_byte(n) when is_integer(n) and n < 0, do: 0

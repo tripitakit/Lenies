@@ -341,7 +341,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         |> element("tr#species-row-HASH-SEL-A")
         |> render_click()
 
-      hue = Lenies.SpeciesColor.hue_byte("HASH-SEL-A")
+      hue = Lenies.SpeciesColor.hue_byte(Lenies.Worlds.primary_handle(), "HASH-SEL-A")
       assert html =~ ~s(data-highlight-hue="#{hue}")
     end
 
@@ -365,7 +365,7 @@ defmodule LeniesWeb.DashboardLiveTest do
       {:ok, view, _} = live(conn, "/")
       view |> element("tr#species-row-HASH-GONE") |> render_click()
 
-      hue = Lenies.SpeciesColor.hue_byte("HASH-GONE")
+      hue = Lenies.SpeciesColor.hue_byte(Lenies.Worlds.primary_handle(), "HASH-GONE")
       assert render(view) =~ ~s(data-highlight-hue="#{hue}")
 
       # The Lenie disappears (extinct) — the next tick recomputes the top-N
@@ -451,7 +451,7 @@ defmodule LeniesWeb.DashboardLiveTest do
 
       # The color override is keyed on the codeome hash
       hash = buffer |> Lenies.Codeome.from_list() |> Lenies.Codeome.hash()
-      assert Lenies.SpeciesColor.override(hash) == "#deadbe"
+      assert Lenies.SpeciesColor.override(Lenies.Worlds.primary_handle(), hash) == "#deadbe"
     end
 
     test "deleting a custom seed removes it from the dropdown", %{conn: conn, user: user} do

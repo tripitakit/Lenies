@@ -40,7 +40,8 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       %{
         id: "test-inspector",
         selected_hash: "abc12345abc12345",
-        species_record: %{hash: "abc12345abc12345", population: 7, avg_generation: 3.5}
+        species_record: %{hash: "abc12345abc12345", population: 7, avg_generation: 3.5},
+        world_handle: Lenies.Worlds.primary_handle()
       },
       overrides
     )
@@ -114,7 +115,8 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
         render_component(SpeciesInspectorComponent, %{
           id: "live-inspector",
           selected_hash: hash,
-          species_record: record
+          species_record: record,
+          world_handle: Lenies.Worlds.primary_handle()
         })
 
       # MinimalReplicator starts with the LOOP_HEAD anchor (four :nop_1)
@@ -146,7 +148,8 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
         render_component(SpeciesInspectorComponent, %{
           id: "block-inspector",
           selected_hash: hash,
-          species_record: %{hash: hash, population: 1, avg_generation: 0.0}
+          species_record: %{hash: hash, population: 1, avg_generation: 0.0},
+          world_handle: Lenies.Worlds.primary_handle()
         })
 
       assert html =~ ~s(class="codeome-blocks")

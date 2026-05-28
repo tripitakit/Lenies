@@ -5,7 +5,7 @@ defmodule Lenies.World.TablesTest do
 
   setup do
     on_exit(fn ->
-      for t <- [:cells, :lenies, :child_slots, :history] do
+      for t <- [:cells, :lenies, :child_slots, :history, :color_overrides] do
         try do
           :ets.delete(t)
         rescue
@@ -17,10 +17,10 @@ defmodule Lenies.World.TablesTest do
     :ok
   end
 
-  test "create_all/0 creates the four named tables as public sets/ordered_sets" do
+  test "create_all/0 creates the five named tables as public sets/ordered_sets" do
     Tables.create_all()
 
-    for t <- [:cells, :lenies, :child_slots] do
+    for t <- [:cells, :lenies, :child_slots, :color_overrides] do
       info = :ets.info(t)
       assert info != :undefined, "table #{t} not created"
       assert Keyword.get(info, :type) == :set
@@ -37,7 +37,7 @@ defmodule Lenies.World.TablesTest do
     Tables.create_all()
     Tables.delete_all()
 
-    for t <- [:cells, :lenies, :child_slots, :history] do
+    for t <- [:cells, :lenies, :child_slots, :history, :color_overrides] do
       assert :ets.whereis(t) == :undefined
     end
 
