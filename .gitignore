@@ -41,3 +41,7 @@ npm-debug.log
 /priv/user_snippets.json
 /priv/user_snippets.json.bak
 
+# Internal design specs + implementation plans — kept locally as a paper trail
+# but not published in the public repo.
+/docs/superpowers/
+
