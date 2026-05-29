@@ -95,4 +95,35 @@ defmodule Lenies.LenieTest do
     [{_, after_cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 5})
     assert after_cell.lenie_id == nil
   end
+
+  describe "seeder_user_id propagation (sub-project #4 lineage)" do
+    setup do
+      {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
+      on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
+      %{world_id: world_id, handle: handle}
+    end
+
+    test "Lenie stores seeder_user_id from opts and writes it to its ETS snapshot",
+         %{world_id: world_id, handle: handle} do
+      codeome = Lenies.Seeds.get(:minimal_replicator).codeome
+      {:ok, {id, _pos}} =
+        Lenies.Worlds.spawn_lenie(world_id, codeome, energy: 500.0, seeder_user_id: 42)
+
+      Process.sleep(50)  # let the Lenie process write its initial snapshot
+
+      assert [{^id, snap}] = :ets.lookup(handle.tables.lenies, id)
+      assert snap.seeder_user_id == 42
+    end
+
+    test "Lenie defaults seeder_user_id to nil when opt is absent",
+         %{world_id: world_id, handle: handle} do
+      codeome = Lenies.Seeds.get(:minimal_replicator).codeome
+      {:ok, {id, _pos}} = Lenies.Worlds.spawn_lenie(world_id, codeome, energy: 500.0)
+      Process.sleep(50)
+
+      assert [{^id, snap}] = :ets.lookup(handle.tables.lenies, id)
+      assert snap.seeder_user_id == nil
+    end
+  end
 end

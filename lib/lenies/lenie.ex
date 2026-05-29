@@ -26,6 +26,8 @@ defmodule Lenies.Lenie do
     :interp,
     :lineage,
     :seed_origin,
+    # nil for Sandbox/test Lenies; integer for Arena lineages (sub-project #4).
+    :seeder_user_id,
     # The handle of the world this Lenie belongs to. Carries the world
     # GenServer pid (for `:action`/`:lenie_died` calls), the ETS tids
     # (for fast-path reads/writes on `:cells`/`:lenies`), and the
@@ -88,6 +90,10 @@ defmodule Lenies.Lenie do
     # known seed. `nil` for Lenies whose origin isn't tracked (e.g. tests
     # spawning directly via `Lenie.start_link`).
     seed_origin = Keyword.get(opts, :seed_origin)
+    # Arena lineage tag (sub-project #4). `nil` for Sandbox/test Lenies; the
+    # Arena uses this via :ets.select on handle.tables.lenies to enforce
+    # "one alive lineage per user".
+    seeder_user_id = Keyword.get(opts, :seeder_user_id, nil)
 
     :erlang.process_flag(:max_heap_size, %{
       size: Application.get_env(:lenies, :lenie_max_heap_size, 1_000_000),
@@ -124,6 +130,7 @@ defmodule Lenies.Lenie do
       interp: interp,
       lineage: lineage,
       seed_origin: seed_origin,
+      seeder_user_id: seeder_user_id,
       world: handle,
       batch_count: 0,
       paused?: paused?,
@@ -364,6 +371,7 @@ defmodule Lenies.Lenie do
         codeome_hash: Lenies.Codeome.hash(state.codeome),
         lineage: state.lineage,
         seed_origin: state.seed_origin,
+        seeder_user_id: state.seeder_user_id,
         plasmids: state.plasmids
       }
 

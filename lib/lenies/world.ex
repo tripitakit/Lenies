@@ -216,6 +216,10 @@ defmodule Lenies.World do
         dir = Keyword.get(opts, :dir, :n)
         lineage = Keyword.get(opts, :lineage, {nil, 0})
         seed_origin = Keyword.get(opts, :seed_origin)
+        # Arena lineage tag (sub-project #4). `nil` for Sandbox spawns; the
+        # Arena passes the user's id so the "one alive lineage per user" rule
+        # can be enforced via :ets.select on handle.tables.lenies.
+        seeder_user_id = Keyword.get(opts, :seeder_user_id)
         plasmids = Keyword.get(opts, :plasmids, [])
 
         child_opts = [
@@ -226,6 +230,7 @@ defmodule Lenies.World do
           dir: dir,
           lineage: lineage,
           seed_origin: seed_origin,
+          seeder_user_id: seeder_user_id,
           # Inherit the world's current pause flag so a Lenie spawned
           # while the world is paused stays dormant until resume.
           paused?: state.paused?,
