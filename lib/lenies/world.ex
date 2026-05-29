@@ -801,7 +801,8 @@ defmodule Lenies.World do
       lineage: {parent_id, parent_generation + 1},
       seed_origin: parent_seed_origin,
       paused?: state.paused?,
-      plasmids: child_plasmids
+      plasmids: child_plasmids,
+      seeder_user_id: Map.get(parent_record, :seeder_user_id)
     ]
 
     {:ok, _child_pid} =
