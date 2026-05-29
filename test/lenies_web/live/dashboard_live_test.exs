@@ -8,7 +8,7 @@ defmodule LeniesWeb.DashboardLiveTest do
   setup %{user: user} do
     # Attach the test pid to the user's sandbox so the world is up and
     # its ETS tables exist BEFORE the LV mounts (most tests pre-populate
-    # tables via `:ets.insert(...)` and only then call `live(conn, "/")`).
+    # tables via `:ets.insert(...)` and only then call `live(conn, "/sandbox")`).
     # Pausing immediately gives us the same "no autonomous ticks" guarantee
     # that `tick_interval_ms: 0` setups provide for standalone worlds.
     :ok = Lenies.Sandboxes.attach(user.id)
@@ -27,14 +27,14 @@ defmodule LeniesWeb.DashboardLiveTest do
     conn: conn,
     user: user
   } do
-    {:ok, view, _html} = live(conn, ~p"/")
+    {:ok, view, _html} = live(conn, ~p"/sandbox")
     world_id = :sys.get_state(view.pid).socket.assigns.world_id
     assert world_id == {:sandbox, user.id}
     assert Lenies.Worlds.alive?(world_id)
   end
 
-  test "mounts on / and renders dashboard panels", %{conn: conn} do
-    {:ok, _view, html} = live(conn, "/")
+  test "mounts on /sandbox and renders dashboard panels", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/sandbox")
 
     assert html =~ ~r/LENIES/
     assert html =~ "id=\"grid-canvas\""
@@ -43,19 +43,19 @@ defmodule LeniesWeb.DashboardLiveTest do
   end
 
   test "flash group is rendered", %{conn: conn} do
-    {:ok, view, _html} = live(conn, "/")
+    {:ok, view, _html} = live(conn, ~p"/sandbox")
     assert has_element?(view, "#flash-group")
     assert has_element?(view, "#client-error")
     assert has_element?(view, "#server-error")
   end
 
   test "shows initial canvas with width and height data attributes", %{conn: conn} do
-    {:ok, _view, html} = live(conn, "/")
+    {:ok, _view, html} = live(conn, ~p"/sandbox")
     assert html =~ ~r/phx-hook="GridCanvas"/
   end
 
   test "clicking sterilize_init shows confirm prompt", %{conn: conn} do
-    {:ok, view, _html} = live(conn, "/")
+    {:ok, view, _html} = live(conn, ~p"/sandbox")
 
     refute render(view) =~ "Are you sure?"
 
@@ -70,7 +70,7 @@ defmodule LeniesWeb.DashboardLiveTest do
     # Un-pause for this test: tick_now requires the world to be running.
     :ok = Lenies.Worlds.resume(world_id)
 
-    {:ok, view, _html} = live(conn, "/")
+    {:ok, view, _html} = live(conn, ~p"/sandbox")
 
     {:ok, handle} = Lenies.Worlds.handle(world_id)
     :ok = GenServer.call(handle.pid, :tick_now)
@@ -94,7 +94,7 @@ defmodule LeniesWeb.DashboardLiveTest do
     # (refute paused?) starts from a known running state.
     :ok = Lenies.Worlds.resume(world_id)
 
-    {:ok, view, _html} = live(conn, "/")
+    {:ok, view, _html} = live(conn, ~p"/sandbox")
 
     refute Lenies.Worlds.paused?(world_id)
 
@@ -112,7 +112,7 @@ defmodule LeniesWeb.DashboardLiveTest do
   end
 
   test "toggling layer changes data attribute", %{conn: conn} do
-    {:ok, view, _html} = live(conn, "/")
+    {:ok, view, _html} = live(conn, ~p"/sandbox")
 
     # When true, Phoenix renders boolean attrs as empty-string (e.g. data-show-lenies="")
     html_before = render(view)
@@ -143,7 +143,7 @@ defmodule LeniesWeb.DashboardLiveTest do
       {"c", %{id: "c", codeome_hash: "hashB", lineage: {nil, 0}}}
     )
 
-    {:ok, _view, html} = live(conn, "/")
+    {:ok, _view, html} = live(conn, ~p"/sandbox")
 
     assert html =~ "hashA"
     assert html =~ "hashB"
@@ -161,27 +161,27 @@ defmodule LeniesWeb.DashboardLiveTest do
       {"CLICKED", %{id: "CLICKED", codeome_hash: "CLICKED-HASH", lineage: {nil, 0}}}
     )
 
-    {:ok, view, _html} = live(conn, "/")
+    {:ok, view, _html} = live(conn, ~p"/sandbox")
 
-    assert {:error, {:live_redirect, %{to: "/editor/edit/CLICKED-HASH"}}} =
+    assert {:error, {:live_redirect, %{to: "/sandbox/editor/edit/CLICKED-HASH"}}} =
              render_hook(view, "select_lenie_at_cell", %{"x" => 5, "y" => 5})
   end
 
   test "select_lenie_at_cell on empty cell stays on dashboard", %{conn: conn} do
-    {:ok, view, _html} = live(conn, "/")
+    {:ok, view, _html} = live(conn, ~p"/sandbox")
     # Cell {7, 8} is empty by default
     assert render_hook(view, "select_lenie_at_cell", %{"x" => 7, "y" => 8})
   end
 
   test "Seed dropdown is rendered with available seeds", %{conn: conn} do
-    {:ok, _view, html} = live(conn, "/")
+    {:ok, _view, html} = live(conn, ~p"/sandbox")
     assert html =~ "Seed"
     assert html =~ "Minimal Replicator"
     assert html =~ "Carnivore"
   end
 
   test "clicking Spawn triggers world spawn_lenie", %{conn: conn, handle: handle} do
-    {:ok, view, _html} = live(conn, "/")
+    {:ok, view, _html} = live(conn, ~p"/sandbox")
 
     pop_before = :ets.info(handle.tables.lenies, :size) || 0
 
@@ -197,7 +197,7 @@ defmodule LeniesWeb.DashboardLiveTest do
 
   test "Tuning slider mutates the sandbox world's state.config in place",
        %{conn: conn, world_id: world_id, handle: handle} do
-    {:ok, view, _html} = live(conn, "/")
+    {:ok, view, _html} = live(conn, ~p"/sandbox")
 
     original = :sys.get_state(handle.pid).config.radiation_per_tick
 
@@ -230,7 +230,7 @@ defmodule LeniesWeb.DashboardLiveTest do
       Application.delete_env(:lenies, :snapshot_root)
     end)
 
-    {:ok, view, _html} = live(conn, "/")
+    {:ok, view, _html} = live(conn, ~p"/sandbox")
 
     [{key, cell}] = :ets.lookup(handle.tables.cells, {2, 2})
     :ets.insert(handle.tables.cells, {key, %{cell | resource: 42}})
@@ -247,7 +247,7 @@ defmodule LeniesWeb.DashboardLiveTest do
     test "dashboard receives :inspector_dirty info messages and reflects them in the DOM", %{
       conn: conn
     } do
-      {:ok, view, _} = live(conn, "/")
+      {:ok, view, _} = live(conn, ~p"/sandbox")
 
       send(view.pid, {:inspector_dirty, true})
       html = render(view)
@@ -265,7 +265,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"L1", %{id: "L1", codeome_hash: "HASH-Z", lineage: {nil, 0}}}
       )
 
-      {:ok, view, _} = live(conn, "/")
+      {:ok, view, _} = live(conn, ~p"/sandbox")
 
       # Simulate component setting dirty state.
       send(view.pid, {:inspector_dirty, true})
@@ -289,7 +289,7 @@ defmodule LeniesWeb.DashboardLiveTest do
 
   describe "species inspector panel" do
     test "panel hidden by default", %{conn: conn} do
-      {:ok, _view, html} = live(conn, "/")
+      {:ok, _view, html} = live(conn, ~p"/sandbox")
       refute html =~ ~s(id="species-inspector")
     end
 
@@ -305,7 +305,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"L2", %{id: "L2", codeome_hash: "HASH-X", lineage: {nil, 1}}}
       )
 
-      {:ok, view, _} = live(conn, "/")
+      {:ok, view, _} = live(conn, ~p"/sandbox")
 
       html =
         view
@@ -322,7 +322,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"L1", %{id: "L1", codeome_hash: "HASH-Y", lineage: {nil, 0}}}
       )
 
-      {:ok, view, _} = live(conn, "/")
+      {:ok, view, _} = live(conn, ~p"/sandbox")
 
       view
       |> element("tr[phx-click='select_species'][phx-value-hash='HASH-Y']")
@@ -347,7 +347,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"L2", %{id: "L2", codeome_hash: "HASH-B", lineage: {nil, 0}}}
       )
 
-      {:ok, view, _} = live(conn, "/")
+      {:ok, view, _} = live(conn, ~p"/sandbox")
 
       view
       |> element("tr[phx-click='select_species'][phx-value-hash='HASH-A']")
@@ -364,10 +364,10 @@ defmodule LeniesWeb.DashboardLiveTest do
   end
 
   describe "controls panel — new seed entry point" do
-    test "+ New Seed link navigates to /editor/new", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/")
+    test "+ New Seed link navigates to /sandbox/editor/new", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/sandbox")
 
-      assert {:error, {:live_redirect, %{to: "/editor/new"}}} =
+      assert {:error, {:live_redirect, %{to: "/sandbox/editor/new"}}} =
                view
                |> element("#open-codeome-editor")
                |> render_click()
@@ -376,7 +376,7 @@ defmodule LeniesWeb.DashboardLiveTest do
 
   describe "map highlight driven by selected species" do
     test "no highlight by default — data-highlight-hue is 0", %{conn: conn} do
-      {:ok, _view, html} = live(conn, "/")
+      {:ok, _view, html} = live(conn, ~p"/sandbox")
       assert html =~ ~s(data-highlight-hue="0")
     end
 
@@ -387,7 +387,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"L1", %{id: "L1", codeome_hash: "HASH-SEL-A", lineage: {nil, 0}}}
       )
 
-      {:ok, view, _} = live(conn, "/")
+      {:ok, view, _} = live(conn, ~p"/sandbox")
 
       html =
         view
@@ -405,7 +405,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"L1", %{id: "L1", codeome_hash: "HASH-SEL-B", lineage: {nil, 0}}}
       )
 
-      {:ok, view, _} = live(conn, "/")
+      {:ok, view, _} = live(conn, ~p"/sandbox")
 
       view |> element("tr#species-row-HASH-SEL-B") |> render_click()
       html = view |> element("tr#species-row-HASH-SEL-B") |> render_click()
@@ -422,7 +422,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"L1", %{id: "L1", codeome_hash: "HASH-GONE", lineage: {nil, 0}}}
       )
 
-      {:ok, view, _} = live(conn, "/")
+      {:ok, view, _} = live(conn, ~p"/sandbox")
       view |> element("tr#species-row-HASH-GONE") |> render_click()
 
       hue = Lenies.SpeciesColor.hue_byte(handle, "HASH-GONE")
@@ -461,7 +461,7 @@ defmodule LeniesWeb.DashboardLiveTest do
           ]
         })
 
-      {:ok, _view, html} = live(conn, "/")
+      {:ok, _view, html} = live(conn, ~p"/sandbox")
 
       assert html =~ "★ My Test"
       assert html =~ ~s(value="custom:)
@@ -494,7 +494,7 @@ defmodule LeniesWeb.DashboardLiveTest do
           opcodes: Enum.map(buffer, &Atom.to_string/1)
         })
 
-      {:ok, view, _} = live(conn, "/")
+      {:ok, view, _} = live(conn, ~p"/sandbox")
 
       pop_before = :ets.info(handle.tables.lenies, :size) || 0
 
@@ -536,7 +536,7 @@ defmodule LeniesWeb.DashboardLiveTest do
           ]
         })
 
-      {:ok, view, _} = live(conn, "/")
+      {:ok, view, _} = live(conn, ~p"/sandbox")
       assert render(view) =~ "★ Delete Me"
 
       view
@@ -553,13 +553,13 @@ defmodule LeniesWeb.DashboardLiveTest do
 
   describe "event payload resilience — malformed inputs are no-ops" do
     test "toggle_layer with unknown layer string survives", %{conn: conn} do
-      {:ok, view, _html} = live(conn, "/")
+      {:ok, view, _html} = live(conn, ~p"/sandbox")
       render_hook(view, "toggle_layer", %{"layer" => "bogus"})
       assert render(view) =~ "id=\"grid-canvas\""
     end
 
     test "toggle_layer with valid layer still toggles", %{conn: conn} do
-      {:ok, view, _html} = live(conn, "/")
+      {:ok, view, _html} = live(conn, ~p"/sandbox")
       html_before = render(view)
       assert html_before =~ ~r/data-show-lenies=""/
       render_hook(view, "toggle_layer", %{"layer" => "lenies"})
@@ -568,19 +568,19 @@ defmodule LeniesWeb.DashboardLiveTest do
     end
 
     test "select_lenie_at_cell with non-integer coords survives", %{conn: conn} do
-      {:ok, view, _html} = live(conn, "/")
+      {:ok, view, _html} = live(conn, ~p"/sandbox")
       render_hook(view, "select_lenie_at_cell", %{"x" => "5", "y" => 0})
       assert render(view) =~ "id=\"grid-canvas\""
     end
 
     test "request_lenie_hover with non-integer coords survives", %{conn: conn} do
-      {:ok, view, _html} = live(conn, "/")
+      {:ok, view, _html} = live(conn, ~p"/sandbox")
       render_hook(view, "request_lenie_hover", %{"x" => "bad", "y" => "also_bad"})
       assert render(view) =~ "id=\"grid-canvas\""
     end
 
     test "unknown event name is a no-op", %{conn: conn} do
-      {:ok, view, _html} = live(conn, "/")
+      {:ok, view, _html} = live(conn, ~p"/sandbox")
       render_hook(view, "no_such_event", %{})
       assert render(view) =~ "id=\"grid-canvas\""
     end
@@ -611,7 +611,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"L1", %{id: "L1", codeome_hash: "POPLO", lineage: {nil, 0}}}
       )
 
-      {:ok, _view, html} = live(conn, "/")
+      {:ok, _view, html} = live(conn, ~p"/sandbox")
 
       assert row_pos(html, "POPHI") < row_pos(html, "POPLO")
     end
@@ -637,7 +637,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"L1", %{id: "L1", codeome_hash: "POPLO", lineage: {nil, 0}}}
       )
 
-      {:ok, view, _} = live(conn, "/")
+      {:ok, view, _} = live(conn, ~p"/sandbox")
 
       html =
         view
@@ -660,7 +660,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"O1", %{id: "O1", codeome_hash: "OLDGEN", lineage: {nil, 9}}}
       )
 
-      {:ok, view, _} = live(conn, "/")
+      {:ok, view, _} = live(conn, ~p"/sandbox")
 
       html =
         view
@@ -680,13 +680,13 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"S1", %{id: "S1", codeome_hash: "STREAM-HASH-1", lineage: {nil, 0}}}
       )
 
-      {:ok, view, _html} = live(conn, "/")
+      {:ok, view, _html} = live(conn, ~p"/sandbox")
 
       assert has_element?(view, "#species-row-STREAM-HASH-1")
     end
 
     test "tbody has phx-update=stream and the wrapping id", %{conn: conn} do
-      {:ok, _view, html} = live(conn, "/")
+      {:ok, _view, html} = live(conn, ~p"/sandbox")
 
       assert html =~ ~s(id="species-rows")
       assert html =~ ~s(phx-update="stream")
@@ -704,7 +704,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"T2", %{id: "T2", codeome_hash: "COUNT-B", lineage: {nil, 0}}}
       )
 
-      {:ok, _view, html} = live(conn, "/")
+      {:ok, _view, html} = live(conn, ~p"/sandbox")
 
       # The header reads "▮ 2 species"
       assert html =~ ~r/2 species/
@@ -717,7 +717,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"HL1", %{id: "HL1", codeome_hash: "HASH-HL", lineage: {nil, 0}}}
       )
 
-      {:ok, view, _html} = live(conn, "/")
+      {:ok, view, _html} = live(conn, ~p"/sandbox")
 
       # Row should exist in the stream from mount
       assert has_element?(view, "#species-row-HASH-HL")
@@ -741,7 +741,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"DH1", %{id: "DH1", codeome_hash: "HASH-DH", lineage: {nil, 0}}}
       )
 
-      {:ok, view, _html} = live(conn, "/")
+      {:ok, view, _html} = live(conn, ~p"/sandbox")
 
       # Select then deselect
       view |> element("#species-row-HASH-DH") |> render_click()
@@ -778,7 +778,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"SR4", %{id: "SR4", codeome_hash: "SORTED-LO", lineage: {nil, 0}}}
       )
 
-      {:ok, view, html_before} = live(conn, "/")
+      {:ok, view, html_before} = live(conn, ~p"/sandbox")
       # Default: population descending → HI appears first
       assert row_pos(html_before, "SORTED-HI") < row_pos(html_before, "SORTED-LO")
 
@@ -803,7 +803,7 @@ defmodule LeniesWeb.DashboardLiveTest do
         {"TK1", %{id: "TK1", codeome_hash: "TICK-HASH", lineage: {nil, 0}}}
       )
 
-      {:ok, view, _html} = live(conn, "/")
+      {:ok, view, _html} = live(conn, ~p"/sandbox")
 
       assert has_element?(view, "#species-row-TICK-HASH")
 
@@ -818,7 +818,7 @@ defmodule LeniesWeb.DashboardLiveTest do
     end
 
     test "all_species is NOT referenced in the rendered HTML (only stream is)", %{conn: conn} do
-      {:ok, _view, html} = live(conn, "/")
+      {:ok, _view, html} = live(conn, ~p"/sandbox")
 
       # The stream tbody is present; there must be no old-style for-loop artifact.
       # The plain tbody without phx-update="stream" would not have this attribute.
@@ -833,14 +833,14 @@ defmodule LeniesWeb.DashboardLiveTest do
   # ---------------------------------------------------------------------------
   describe "audio toggle button — hook wiring" do
     test "audio-toggle button has phx-hook=AudioToggle and phx-update=ignore", %{conn: conn} do
-      {:ok, view, html} = live(conn, "/")
+      {:ok, view, html} = live(conn, ~p"/sandbox")
       assert html =~ ~s(phx-hook="AudioToggle")
       assert has_element?(view, "#audio-toggle[phx-hook='AudioToggle']")
       assert has_element?(view, "#audio-toggle[phx-update='ignore']")
     end
 
     test "audio-toggle button has no inline onclick or LeniesAudio script", %{conn: conn} do
-      {:ok, _view, html} = live(conn, "/")
+      {:ok, _view, html} = live(conn, ~p"/sandbox")
       refute html =~ "onclick"
       refute html =~ "LeniesAudio"
     end
@@ -853,7 +853,7 @@ defmodule LeniesWeb.DashboardLiveTest do
     test "a tuning slider has phx-hook=SliderValue and data-value-target, no oninput", %{
       conn: conn
     } do
-      {:ok, view, html} = live(conn, "/")
+      {:ok, view, html} = live(conn, ~p"/sandbox")
 
       # There must be no inline oninput attribute anywhere
       refute html =~ "oninput"
@@ -875,7 +875,7 @@ defmodule LeniesWeb.DashboardLiveTest do
       # setup already paused the sandbox — leave it paused.
       :ok = Lenies.Worlds.pause(world_id)
 
-      {:ok, _view, html} = live(conn, "/")
+      {:ok, _view, html} = live(conn, ~p"/sandbox")
 
       assert html =~ "▶ Resume"
       refute html =~ "⏸ Pause"
@@ -885,7 +885,7 @@ defmodule LeniesWeb.DashboardLiveTest do
          %{conn: conn, world_id: world_id} do
       :ok = Lenies.Worlds.resume(world_id)
 
-      {:ok, _view, html} = live(conn, "/")
+      {:ok, _view, html} = live(conn, ~p"/sandbox")
 
       assert html =~ "⏸ Pause"
       refute html =~ "▶ Resume"
@@ -897,7 +897,7 @@ defmodule LeniesWeb.DashboardLiveTest do
   # ---------------------------------------------------------------------------
   describe "world totals panel" do
     test "totals panel renders zeroes before any tick", %{conn: conn} do
-      {:ok, _view, html} = live(conn, "/")
+      {:ok, _view, html} = live(conn, ~p"/sandbox")
 
       assert html =~ "Population"
       assert html =~ "Resources"
@@ -911,7 +911,7 @@ defmodule LeniesWeb.DashboardLiveTest do
       # Need the world running to tick.
       :ok = Lenies.Worlds.resume(world_id)
 
-      {:ok, view, _html} = live(conn, "/")
+      {:ok, view, _html} = live(conn, ~p"/sandbox")
 
       {:ok, handle} = Lenies.Worlds.handle(world_id)
       :ok = GenServer.call(handle.pid, :tick_now)

@@ -20,7 +20,7 @@ defmodule LeniesWeb.SpeciesLiveTest do
     %{world_id: world_id, handle: handle}
   end
 
-  test "mount on /species/:hash with a known species shows lineage",
+  test "mount on /sandbox/species/:hash with a known species shows lineage",
        %{conn: conn, handle: handle} do
     [{key, cell}] = :ets.lookup(handle.tables.cells, {3, 3})
     :ets.insert(handle.tables.cells, {key, %{cell | lenie_id: "SP1"}})
@@ -44,7 +44,7 @@ defmodule LeniesWeb.SpeciesLiveTest do
     Process.unlink(pid)
     Process.sleep(50)
 
-    {:ok, _view, html} = live(conn, "/species/#{hash}")
+    {:ok, _view, html} = live(conn, ~p"/sandbox/species/#{hash}")
 
     assert html =~ hash
     assert html =~ ~r/Population/i
@@ -54,13 +54,13 @@ defmodule LeniesWeb.SpeciesLiveTest do
     GenServer.stop(pid)
   end
 
-  test "mount on /species/:hash with unknown hash shows empty/extinct", %{conn: conn} do
-    {:ok, _view, html} = live(conn, "/species/00000000")
+  test "mount on /sandbox/species/:hash with unknown hash shows empty/extinct", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/sandbox/species/00000000")
     assert html =~ ~r/(extinct|not found|never existed|empty)/i
   end
 
   test "flash group is rendered", %{conn: conn} do
-    {:ok, view, _html} = live(conn, "/species/00000000")
+    {:ok, view, _html} = live(conn, ~p"/sandbox/species/00000000")
     assert has_element?(view, "#flash-group")
     assert has_element?(view, "#client-error")
     assert has_element?(view, "#server-error")

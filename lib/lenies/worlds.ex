@@ -131,11 +131,18 @@ defmodule Lenies.Worlds do
   @doc """
   Notify `target` that a Lenie has died (frees the cell, leaves a carcass).
   Async cast — does not return when the cell mutation is observable.
+
+  `seeder_user_id` (default `nil`) is the Arena lineage tag; when set and
+  the world is `:arena`, the World handler broadcasts
+  `{:arena_lineage_changed, user_id}` on the user's per-user PubSub topic.
   """
-  def lenie_died(target, id, pos, energy_at_death, codeome_hash)
+  def lenie_died(target, id, pos, energy_at_death, codeome_hash, seeder_user_id \\ nil)
       when is_binary(codeome_hash) do
     with {:ok, h} <- handle(target) do
-      GenServer.cast(h.pid, {:lenie_died, id, pos, energy_at_death, codeome_hash})
+      GenServer.cast(
+        h.pid,
+        {:lenie_died, id, pos, energy_at_death, codeome_hash, seeder_user_id}
+      )
     end
   end
 

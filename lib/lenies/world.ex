@@ -216,6 +216,10 @@ defmodule Lenies.World do
         dir = Keyword.get(opts, :dir, :n)
         lineage = Keyword.get(opts, :lineage, {nil, 0})
         seed_origin = Keyword.get(opts, :seed_origin)
+        # Arena lineage tag (sub-project #4). `nil` for Sandbox spawns; the
+        # Arena passes the user's id so the "one alive lineage per user" rule
+        # can be enforced via :ets.select on handle.tables.lenies.
+        seeder_user_id = Keyword.get(opts, :seeder_user_id)
         plasmids = Keyword.get(opts, :plasmids, [])
 
         child_opts = [
@@ -226,6 +230,7 @@ defmodule Lenies.World do
           dir: dir,
           lineage: lineage,
           seed_origin: seed_origin,
+          seeder_user_id: seeder_user_id,
           # Inherit the world's current pause flag so a Lenie spawned
           # while the world is paused stays dormant until resume.
           paused?: state.paused?,
@@ -251,7 +256,10 @@ defmodule Lenies.World do
   end
 
   @impl true
-  def handle_cast({:lenie_died, id, {x, y}, energy_at_death, codeome_hash}, state) do
+  def handle_cast(
+        {:lenie_died, id, {x, y}, energy_at_death, codeome_hash, seeder_user_id},
+        state
+      ) do
     case :ets.lookup(state.tables.cells, {x, y}) do
       [{key, cell}] ->
         carcass_value = max(0, trunc(energy_at_death * 0.5))
@@ -267,6 +275,19 @@ defmodule Lenies.World do
     end
 
     :ets.delete(state.tables.lenies, id)
+
+    # Sub-project #4: if the dead Lenie carried a seeder_user_id (Arena lineage),
+    # broadcast on the user's per-user topic so ArenaLive's Seed/Apoptosis UI
+    # refreshes. Covers natural death (starvation, attack) — the seed and
+    # apoptosis paths broadcast from Lenies.Arena directly.
+    if state.world_id == :arena and is_integer(seeder_user_id) do
+      Phoenix.PubSub.broadcast(
+        Lenies.PubSub,
+        "arena:user:#{seeder_user_id}",
+        {:arena_lineage_changed, seeder_user_id}
+      )
+    end
+
     {:noreply, state}
   end
 
@@ -796,7 +817,8 @@ defmodule Lenies.World do
       lineage: {parent_id, parent_generation + 1},
       seed_origin: parent_seed_origin,
       paused?: state.paused?,
-      plasmids: child_plasmids
+      plasmids: child_plasmids,
+      seeder_user_id: Map.get(parent_record, :seeder_user_id)
     ]
 
     {:ok, _child_pid} =

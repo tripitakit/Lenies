@@ -62,7 +62,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
           {String.slice(@selected_hash, 0..15)}…
         </h2>
         <.link
-          navigate={~p"/species/#{@selected_hash}"}
+          navigate={~p"/sandbox/species/#{@selected_hash}"}
           class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
           title="Open full species page"
         >
@@ -71,7 +71,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
         <%= if @selected_hash do %>
           <.link
             id="open-edit-for-species"
-            navigate={~p"/editor/edit/#{@selected_hash}"}
+            navigate={~p"/sandbox/editor/edit/#{@selected_hash}"}
             class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
           >
             Edit

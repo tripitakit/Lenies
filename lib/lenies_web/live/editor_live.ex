@@ -188,7 +188,7 @@ defmodule LeniesWeb.EditorLive do
           )
         end)
 
-        {:noreply, push_navigate(socket, to: ~p"/")}
+        {:noreply, push_navigate(socket, to: ~p"/sandbox")}
 
       {:error, _} ->
         {:noreply, socket}
@@ -224,7 +224,7 @@ defmodule LeniesWeb.EditorLive do
               refresh_custom_seeds: true
             )
 
-            {:noreply, push_navigate(socket, to: ~p"/")}
+            {:noreply, push_navigate(socket, to: ~p"/sandbox")}
 
           {:error, %Ecto.Changeset{}} ->
             {:noreply, socket}
@@ -236,7 +236,7 @@ defmodule LeniesWeb.EditorLive do
   end
 
   def handle_event("cancel_edit", _params, socket) do
-    {:noreply, push_navigate(socket, to: ~p"/")}
+    {:noreply, push_navigate(socket, to: ~p"/sandbox")}
   end
 
   def handle_event("submit_opcode_text", %{"opcodes" => text}, socket) do
@@ -557,7 +557,7 @@ defmodule LeniesWeb.EditorLive do
       <Layouts.flash_group flash={@flash} />
       <header class="codeome-editor-page-header">
         <.link
-          navigate={~p"/"}
+          navigate={~p"/sandbox"}
           class="text-xs px-2 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
         >
           ← Back

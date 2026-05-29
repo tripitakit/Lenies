@@ -38,7 +38,7 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
 
     test "renders the ↗ link to the standalone species page", %{handle: handle} do
       html = render_component(SpeciesInspectorComponent, base_assigns(handle))
-      assert html =~ ~s(href="/species/abc12345abc12345")
+      assert html =~ ~s(href="/sandbox/species/abc12345abc12345")
     end
 
     test "renders the close button targeting the selected hash", %{handle: handle} do
@@ -171,10 +171,10 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
   end
 
   describe "edit link" do
-    test "Edit link visible in read mode and navigates to /editor/edit/:hash",
+    test "Edit link visible in read mode and navigates to /sandbox/editor/edit/:hash",
          %{handle: handle} do
       html = render_component(SpeciesInspectorComponent, base_assigns(handle))
-      assert html =~ ~s(href="/editor/edit/abc12345abc12345")
+      assert html =~ ~s(href="/sandbox/editor/edit/abc12345abc12345")
       refute html =~ ~s(phx-click="enter_edit")
     end
 

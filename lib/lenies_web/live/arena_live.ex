@@ -1,24 +1,27 @@
-defmodule LeniesWeb.DashboardLive do
+defmodule LeniesWeb.ArenaLive do
   @moduledoc """
-  Main dashboard for monitoring the Lenies sandbox.
+  Public LiveView for the singleton `:arena` world at `/`.
 
-  Layout:
-  - **Left** : World canvas, full-height. Owns pan/zoom/dblclick — clicking
-    a Lenie cell opens its codeome editor; the canvas dims every other
-    species when one row in the species table is selected.
-  - **Right top** : Telemetry + species table + (when a row is selected)
-    species inspector.
-  - **Right bottom** : Controls + Tuning (delegated to
-    `LeniesWeb.ControlsPanelComponent`).
+  Mirrors `LeniesWeb.DashboardLive` in structure (canvas, world totals,
+  species table) but for the shared, read-only Arena:
 
-  Only the world canvas and telemetry/species panels re-render on tick;
-  controls live in a LiveComponent so form/input state is preserved.
+  - Anonymous-friendly: `current_scope` may be nil/userless.
+  - Lifecycle is mediated by `Lenies.Arena.attach_viewer/0` — first attach
+    starts/restores the world, last detach (after a grace window) snapshots
+    and stops it.
+  - Subscribes to `world:arena:tick|control|fx` plus `arena:presence` (for
+    the viewer count badge) and `arena:manager_up` (to re-attach if the
+    Arena manager restarts).
+  - The right-hand controls slot is a placeholder pending Task 14
+    (`LeniesWeb.ArenaControlsComponent`).
+  - The inspector "Edit" affordance is removed: Arena is read-only.
   """
 
   use LeniesWeb, :live_view
 
   alias Lenies.SpeciesColor
   alias LeniesWeb.GridRenderer
+  alias LeniesWeb.Presence
 
   # Whitelist of clickable species-table columns -> the sort key. Guards
   # `handle_event("sort_species", ...)` against arbitrary input.
@@ -31,21 +34,42 @@ defmodule LeniesWeb.DashboardLive do
     "avg_generation" => :avg_generation
   }
 
+  @world_id :arena
+  @presence_topic "arena:presence"
+
   @impl true
   def mount(_params, _session, socket) do
-    user = socket.assigns.current_scope.user
-    user_id = user.id
-    world_id = Lenies.Sandboxes.world_id_for(user_id)
+    :ok = Lenies.Arena.attach_viewer()
+    {:ok, world_handle} = Lenies.Worlds.handle(@world_id)
 
-    :ok = Lenies.Sandboxes.attach(user_id)
-    {:ok, world_handle} = Lenies.Worlds.handle(world_id)
+    lineage_count =
+      case socket.assigns[:current_scope] do
+        %{user: %{id: id}} -> Lenies.Arena.lineage_count(id)
+        _ -> 0
+      end
+
+    session_id = derive_session_id(socket)
 
     if connected?(socket) do
       prefix = world_handle.pubsub_prefix
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:tick")
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:control")
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:fx")
-      Phoenix.PubSub.subscribe(Lenies.PubSub, "sandboxes:manager_up")
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "arena:manager_up")
+      Phoenix.PubSub.subscribe(Lenies.PubSub, @presence_topic)
+      {:ok, _ref} = Presence.track(self(), @presence_topic, session_id, %{})
+
+      # Per sub-project #4: per-user PubSub topic — covers natural-death
+      # lineage refresh AND multi-tab same-user sync (a Seed/Apoptosis in
+      # tab A reaches tab B via the broadcast, not just the local
+      # `send(self(), …)` from ArenaControlsComponent).
+      case socket.assigns[:current_scope] do
+        %{user: %{id: id}} ->
+          Phoenix.PubSub.subscribe(Lenies.PubSub, "arena:user:#{id}")
+
+        _ ->
+          :ok
+      end
     end
 
     grid = Lenies.Config.grid_size()
@@ -56,8 +80,11 @@ defmodule LeniesWeb.DashboardLive do
 
     socket =
       socket
-      |> assign(:world_id, world_id)
+      |> assign(:world_id, @world_id)
       |> assign(:world_handle, world_handle)
+      |> assign(:session_id, session_id)
+      |> assign(:viewer_count, viewer_count())
+      |> assign(:lineage_count, lineage_count)
       |> assign(:grid, grid)
       |> assign(:tick_count, 0)
       |> assign(:layers_visible, %{lenies: true, resource: true, carcass: true})
@@ -67,16 +94,13 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:species_total, species_total)
       |> assign(:all_species, all_species)
       |> assign(:selected_hash, nil)
-      |> assign(:selected_species_record, nil)
-      |> assign(:inspector_dirty, false)
       |> assign(:sort_by, sort_by)
       |> assign(:sort_dir, sort_dir)
       |> stream_configure(:species_table, dom_id: fn sp -> "species-row-#{sp.hash}" end)
       |> stream(:species_table, sort_species(all_species, sort_by, sort_dir))
 
     # Push an initial frame as soon as the websocket is connected so the
-    # canvas isn't black between mount and the next throttled tick
-    # (especially after navigating back from the editor).
+    # canvas isn't black between mount and the next throttled tick.
     socket =
       if connected?(socket) do
         payload = GridRenderer.encode_payload(world_handle, grid)
@@ -88,52 +112,40 @@ defmodule LeniesWeb.DashboardLive do
     {:ok, socket}
   end
 
+  # Pull a stable per-tab identifier from the LV connect params (the
+  # CSRF token rotates per session/tab) — falls back to a random id
+  # for the initial disconnected mount so `track/4` always has a key.
+  defp derive_session_id(socket) do
+    case Phoenix.LiveView.get_connect_params(socket) do
+      %{"_csrf_token" => token} when is_binary(token) -> token
+      _ -> "anon-" <> Base.url_encode64(:crypto.strong_rand_bytes(9), padding: false)
+    end
+  end
+
+  defp viewer_count, do: Presence.list(@presence_topic) |> map_size()
+
   # Returns {top_n, all_species, total_count} from a single Species.aggregate/1
-  # pass. The dashboard table uses `top_n`; the World Detail modal needs the
-  # full `all_species` list (sorted by population descending, already).
+  # pass. The Arena table uses `top_n`; `all_species` is kept for the species
+  # inspector lookup parity with DashboardLive.
   defp aggregate_with_top(handle, n) do
     all = Lenies.Species.aggregate(handle)
     {Enum.take(all, n), all, length(all)}
   end
 
-  defp find_selected_record(_handle, nil, _species), do: nil
-
-  defp find_selected_record(handle, hash, species) do
-    case Enum.find(species, &(&1.hash == hash)) do
-      %{} = found ->
-        found
-
-      nil ->
-        case Lenies.Species.for_hash(handle, hash) do
-          [] ->
-            %{hash: hash, population: 0, avg_generation: 0.0}
-
-          records ->
-            gens =
-              records
-              |> Enum.map(fn {_id, snap} -> snap.lineage |> elem(1) end)
-
-            avg =
-              if Enum.empty?(gens),
-                do: 0.0,
-                else: Enum.sum(gens) / length(gens) * 1.0
-
-            %{hash: hash, population: length(records), avg_generation: avg}
-        end
-    end
-  end
-
   @impl true
   def render(assigns) do
     ~H"""
-    <div
-      class="lenies-dashboard h-screen w-screen overflow-hidden flex flex-col p-3 gap-3"
-      data-inspector-dirty={if @inspector_dirty, do: "true", else: nil}
-    >
+    <div class="lenies-dashboard h-screen w-screen overflow-hidden flex flex-col p-3 gap-3">
       <Layouts.flash_group flash={@flash} />
       <header class="flex items-center justify-between px-2 shrink-0">
-        <h1 class="text-lg font-bold tracking-widest">⬡ LENIES · SANDBOX</h1>
+        <h1 class="text-lg font-bold tracking-widest">⬡ LENIES · ARENA</h1>
         <div class="flex items-center gap-4 text-xs">
+          <span class="viewers flex items-center gap-1.5">
+            <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-400 shadow-[0_0_8px_#e879f9]">
+            </span>
+            <span class="text-fuchsia-200 font-bold tabular-nums">{@viewer_count}</span>
+            <span class="opacity-70">watching</span>
+          </span>
           <span class="flex items-center gap-1.5">
             <span class="pulse-dot inline-block w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]">
             </span>
@@ -161,7 +173,7 @@ defmodule LeniesWeb.DashboardLive do
 
       <div class="flex-1 flex gap-3 min-h-0">
         <section class="panel p-3 flex flex-col gap-2 min-h-0 shrink-0 dashboard-map-pane">
-          <h2 class="text-xs">▮ World</h2>
+          <h2 class="text-xs">▮ Arena</h2>
           <div
             id="conjugation-log"
             phx-update="ignore"
@@ -222,7 +234,7 @@ defmodule LeniesWeb.DashboardLive do
             </label>
           </div>
           <p class="dashboard-map-hint">
-            scroll: zoom · drag: pan · click: focus · dblclick on a Lenie: edit codeome
+            scroll: zoom · drag: pan · click: focus
           </p>
         </section>
 
@@ -364,24 +376,19 @@ defmodule LeniesWeb.DashboardLive do
               </div>
             </div>
 
-            <%= if @selected_hash do %>
-              <.live_component
-                module={LeniesWeb.SpeciesInspectorComponent}
-                id="species-inspector"
-                selected_hash={@selected_hash}
-                species_record={@selected_species_record}
-                world_handle={handle_from_assigns(assigns)}
-              />
-            <% end %>
+            <%!-- Arena is read-only: no species inspector / Edit button.
+                  Selecting a row still dims the canvas via :selected_hash. --%>
           </div>
 
-          <.live_component
-            module={LeniesWeb.ControlsPanelComponent}
-            id="controls"
-            current_scope={@current_scope}
-            world_id={@world_id}
-            world_handle={handle_from_assigns(assigns)}
-          />
+          <aside class="arena-controls">
+            <.live_component
+              module={LeniesWeb.ArenaControlsComponent}
+              id="arena-controls"
+              current_scope={@current_scope}
+              world_handle={@world_handle}
+              lineage_count={@lineage_count}
+            />
+          </aside>
         </div>
       </div>
     </div>
@@ -397,10 +404,9 @@ defmodule LeniesWeb.DashboardLive do
   defp highlight_hue(%Lenies.WorldHandle{} = handle, hash) when is_binary(hash),
     do: SpeciesColor.hue_byte(handle, hash)
 
-  # Lookup the world handle from socket assigns. The dashboard mount now
-  # always assigns a %WorldHandle{} (the user's sandbox is attached at
-  # mount time), so the second clause is a defensive fallback for any
-  # stale render path that would otherwise crash.
+  # Lookup the world handle from socket assigns. Arena mount always assigns
+  # a %WorldHandle{} (attach starts the world synchronously); the nil clause
+  # is a defensive fallback for any stale render path.
   defp handle_from_assigns(%{world_handle: %Lenies.WorldHandle{} = h}), do: h
   defp handle_from_assigns(_), do: nil
 
@@ -423,16 +429,7 @@ defmodule LeniesWeb.DashboardLive do
     socket =
       socket
       |> assign(:selected_hash, new_hash)
-      |> assign(
-        :selected_species_record,
-        find_selected_record(socket.assigns.world_handle, new_hash, all_species)
-      )
       |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
-
-    socket =
-      if is_nil(new_hash),
-        do: assign(socket, :inspector_dirty, false),
-        else: socket
 
     {:noreply, socket}
   end
@@ -472,17 +469,6 @@ defmodule LeniesWeb.DashboardLive do
     end
   end
 
-  # Pushed by the GridCanvas hook on dblclick. We resolve the cell to a
-  # Lenie via the :cells / :lenies ETS tables and navigate to its
-  # editor; misses (empty cells) are a silent no-op.
-  def handle_event("select_lenie_at_cell", %{"x" => x, "y" => y}, socket)
-      when is_integer(x) and is_integer(y) do
-    case lookup_lenie_at_cell(socket.assigns.world_handle, x, y) do
-      {:ok, hash} -> {:noreply, push_navigate(socket, to: ~p"/sandbox/editor/edit/#{hash}")}
-      :error -> {:noreply, socket}
-    end
-  end
-
   # Mousemove on the world map fires this event whenever the hovered
   # buffer cell changes (the JS hook debounces by tracked cell). The
   # response carries seed_origin / age / energy for the Lenie at that
@@ -497,18 +483,6 @@ defmodule LeniesWeb.DashboardLive do
   end
 
   def handle_event(_event, _params, socket), do: {:noreply, socket}
-
-  defp lookup_lenie_at_cell(handle, x, y) do
-    with handle when not is_nil(handle) <- handle,
-         [{_, %{lenie_id: id}}] when is_binary(id) <-
-           :ets.lookup(handle.tables.cells, {x, y}),
-         [{^id, lenie_meta}] <- :ets.lookup(handle.tables.lenies, id),
-         hash when is_binary(hash) <- Map.get(lenie_meta, :codeome_hash) do
-      {:ok, hash}
-    else
-      _ -> :error
-    end
-  end
 
   defp lenie_hover_payload(handle, x, y) do
     with handle when not is_nil(handle) <- handle,
@@ -552,14 +526,6 @@ defmodule LeniesWeb.DashboardLive do
         |> assign(:species, species)
         |> assign(:species_total, species_total)
         |> assign(:all_species, all_species)
-        |> assign(
-          :selected_species_record,
-          find_selected_record(
-            socket.assigns.world_handle,
-            socket.assigns.selected_hash,
-            all_species
-          )
-        )
         |> maybe_clear_selected_species(all_species)
         |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
 
@@ -585,13 +551,23 @@ defmodule LeniesWeb.DashboardLive do
     {:noreply, push_event(socket, "render_frame", payload)}
   end
 
-  def handle_info({:inspector_dirty, dirty}, socket) do
-    {:noreply, assign(socket, :inspector_dirty, dirty)}
+  def handle_info(:arena_manager_up, socket) do
+    :ok = Lenies.Arena.attach_viewer()
+    {:noreply, socket}
   end
 
-  def handle_info(:sandboxes_manager_up, socket) do
-    :ok = Lenies.Sandboxes.attach(socket.assigns.current_scope.user.id)
-    {:noreply, socket}
+  def handle_info({:arena_lineage_changed, user_id}, socket) do
+    case socket.assigns[:current_scope] do
+      %{user: %{id: ^user_id}} ->
+        {:noreply, assign(socket, :lineage_count, Lenies.Arena.lineage_count(user_id))}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do
+    {:noreply, assign(socket, :viewer_count, viewer_count())}
   end
 
   def handle_info({:conjugation, %{} = info}, socket) do
@@ -742,10 +718,7 @@ defmodule LeniesWeb.DashboardLive do
         if Enum.any?(species, &(&1.hash == hash)) do
           socket
         else
-          socket
-          |> assign(:selected_hash, nil)
-          |> assign(:selected_species_record, nil)
-          |> assign(:inspector_dirty, false)
+          assign(socket, :selected_hash, nil)
         end
     end
   end

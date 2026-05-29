@@ -21,7 +21,7 @@ defmodule LeniesWeb.LenieInspectorLiveTest do
     %{world_id: world_id, handle: handle}
   end
 
-  test "mount on /lenie/:id with a live Lenie renders state and codeome",
+  test "mount on /sandbox/lenie/:id with a live Lenie renders state and codeome",
        %{conn: conn, handle: handle} do
     [{key, cell}] = :ets.lookup(handle.tables.cells, {3, 3})
     :ets.insert(handle.tables.cells, {key, %{cell | lenie_id: "INSP1"}})
@@ -44,7 +44,7 @@ defmodule LeniesWeb.LenieInspectorLiveTest do
     Process.unlink(pid)
     Process.sleep(50)
 
-    {:ok, _view, html} = live(conn, "/lenie/INSP1")
+    {:ok, _view, html} = live(conn, ~p"/sandbox/lenie/INSP1")
 
     assert html =~ "INSP1"
     assert html =~ ~r/Energy/i
@@ -57,15 +57,15 @@ defmodule LeniesWeb.LenieInspectorLiveTest do
     GenServer.stop(pid)
   end
 
-  test "mount on /lenie/:id with a non-existent Lenie shows a 'not found' message", %{
+  test "mount on /sandbox/lenie/:id with a non-existent Lenie shows a 'not found' message", %{
     conn: conn
   } do
-    {:ok, _view, html} = live(conn, "/lenie/nonexistent")
+    {:ok, _view, html} = live(conn, ~p"/sandbox/lenie/nonexistent")
     assert html =~ ~r/(not found|deceased)/i
   end
 
   test "flash group is rendered", %{conn: conn} do
-    {:ok, view, _html} = live(conn, "/lenie/nonexistent")
+    {:ok, view, _html} = live(conn, ~p"/sandbox/lenie/nonexistent")
     assert has_element?(view, "#flash-group")
     assert has_element?(view, "#client-error")
     assert has_element?(view, "#server-error")
