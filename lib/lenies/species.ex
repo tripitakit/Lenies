@@ -4,8 +4,7 @@ defmodule Lenies.Species do
 
   All read functions take a `%Lenies.WorldHandle{}` (or `nil`) explicitly so
   the same module can serve every per-world Telemetry / LiveView without
-  silently pinning to `:primary` (a real isolation leak for non-primary
-  worlds — fixed after the multi-world engine landed).
+  pinning to a single world (which would leak across world isolation).
 
   Each species record:
   - `hash`: the codeome_hash binary
@@ -64,6 +63,10 @@ defmodule Lenies.Species do
         _ -> true
       end
     end)
+    # Skip snapshots that don't carry a codeome_hash — same defensive
+    # reasoning as the pid filter above (test fixtures sometimes inject
+    # minimal records like %{id: ..., pos: ..., dir: ...}).
+    |> Enum.filter(fn {_id, snap} -> is_binary(Map.get(snap, :codeome_hash)) end)
     |> Enum.group_by(fn {_id, snap} -> snap.codeome_hash end)
     |> Enum.map(fn {hash, entries} ->
       gens =

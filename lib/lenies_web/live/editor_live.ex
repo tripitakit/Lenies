@@ -21,9 +21,19 @@ defmodule LeniesWeb.EditorLive do
 
   @impl true
   def mount(params, _session, socket) do
-    world_id = :primary
-    world_handle = fetch_primary_handle()
-    {mode, selected_hash, buffer} = init_for_route(socket.assigns.live_action, params, world_handle)
+    user = socket.assigns.current_scope.user
+    user_id = user.id
+    world_id = Lenies.Sandboxes.world_id_for(user_id)
+
+    :ok = Lenies.Sandboxes.attach(user_id)
+    {:ok, world_handle} = Lenies.Worlds.handle(world_id)
+
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "sandboxes:manager_up")
+    end
+
+    {mode, selected_hash, buffer} =
+      init_for_route(socket.assigns.live_action, params, world_id, world_handle)
 
     socket =
       socket
@@ -55,15 +65,15 @@ defmodule LeniesWeb.EditorLive do
     {:ok, socket}
   end
 
-  defp init_for_route(:new, _params, _handle) do
+  defp init_for_route(:new, _params, _world_id, _handle) do
     {:new_seed, nil, []}
   end
 
-  defp init_for_route(:edit, %{"hash" => hash}, handle) do
+  defp init_for_route(:edit, %{"hash" => hash}, world_id, handle) do
     buffer =
       case Lenies.Species.for_hash(handle, hash) do
         [{sample_id, _} | _] ->
-          case safe_get_codeome(sample_id) do
+          case safe_get_codeome(world_id, sample_id) do
             {:ok, codeome} -> Lenies.Codeome.to_list(codeome)
             _ -> []
           end
@@ -75,8 +85,8 @@ defmodule LeniesWeb.EditorLive do
     {:edit, hash, buffer}
   end
 
-  defp safe_get_codeome(id) do
-    case Registry.lookup(Lenies.Registry, {:lenie, :primary, id}) do
+  defp safe_get_codeome(world_id, id) do
+    case Registry.lookup(Lenies.Registry, {:lenie, world_id, id}) do
       [{pid, _}] ->
         try do
           GenServer.call(pid, :get_codeome, 1_000)
@@ -529,6 +539,14 @@ defmodule LeniesWeb.EditorLive do
   end
 
   @impl true
+  def handle_info(:sandboxes_manager_up, socket) do
+    :ok = Lenies.Sandboxes.attach(socket.assigns.current_scope.user.id)
+    {:noreply, socket}
+  end
+
+  def handle_info(_msg, socket), do: {:noreply, socket}
+
+  @impl true
   def render(assigns) do
     ~H"""
     <div
@@ -651,7 +669,12 @@ defmodule LeniesWeb.EditorLive do
           </label>
           <label class="flex gap-1 items-center">
             <span class="opacity-70">color</span>
-            <input type="color" name="color_hex" value={suggested_color(@buffer)} class="w-12 h-6" />
+            <input
+              type="color"
+              name="color_hex"
+              value={suggested_color(@buffer, @world_handle)}
+              class="w-12 h-6"
+            />
           </label>
           <label class="flex gap-1 items-center">
             <span class="opacity-70">energy</span>
@@ -1125,26 +1148,15 @@ defmodule LeniesWeb.EditorLive do
 
   defp parse_clamped(_, _, _, default), do: default
 
-  defp suggested_color(buffer) do
+  defp suggested_color(buffer, world_handle) do
     hash =
       buffer
       |> Lenies.Codeome.from_list()
       |> Lenies.Codeome.hash()
 
-    # Multi-world refactor T7: the editor is still primary-world-scoped (the
-    # full world_id awareness lands in T11). When the World isn't running
-    # (e.g. tests), fall back to the hash-derived color.
-    case fetch_primary_handle() do
+    case world_handle do
       %Lenies.WorldHandle{} = handle -> Lenies.SpeciesColor.hex(handle, hash)
-      nil -> hash |> :erlang.phash2(255) |> Kernel.+(1) |> Lenies.SpeciesColor.byte_to_hex()
-    end
-  end
-
-  defp fetch_primary_handle do
-    try do
-      Lenies.Worlds.primary_handle()
-    catch
-      :exit, _ -> nil
+      _ -> hash |> :erlang.phash2(255) |> Kernel.+(1) |> Lenies.SpeciesColor.byte_to_hex()
     end
   end
 

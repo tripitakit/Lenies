@@ -15,8 +15,16 @@ defmodule LeniesWeb.SpeciesLive do
 
   @impl true
   def mount(%{"hash" => hash}, _session, socket) do
-    world_id = :primary
-    world_handle = fetch_primary_handle()
+    user = socket.assigns.current_scope.user
+    user_id = user.id
+    world_id = Lenies.Sandboxes.world_id_for(user_id)
+
+    :ok = Lenies.Sandboxes.attach(user_id)
+    {:ok, world_handle} = Lenies.Worlds.handle(world_id)
+
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "sandboxes:manager_up")
+    end
 
     socket =
       socket
@@ -26,14 +34,6 @@ defmodule LeniesWeb.SpeciesLive do
       |> load_species()
 
     {:ok, socket}
-  end
-
-  defp fetch_primary_handle do
-    try do
-      Lenies.Worlds.primary_handle()
-    catch
-      :exit, _ -> nil
-    end
   end
 
   defp load_species(socket) do
@@ -56,7 +56,7 @@ defmodule LeniesWeb.SpeciesLive do
         |> Enum.sort_by(& &1.generation)
 
       {sample_id, _} = hd(records)
-      codeome_lines = fetch_sample_codeome(sample_id)
+      codeome_lines = fetch_sample_codeome(socket.assigns.world_id, sample_id)
 
       socket
       |> assign(:found?, true)
@@ -66,8 +66,8 @@ defmodule LeniesWeb.SpeciesLive do
     end
   end
 
-  defp fetch_sample_codeome(sample_id) do
-    case Registry.lookup(Lenies.Registry, {:lenie, :primary, sample_id}) do
+  defp fetch_sample_codeome(world_id, sample_id) do
+    case Registry.lookup(Lenies.Registry, {:lenie, world_id, sample_id}) do
       [{pid, _}] ->
         try do
           case GenServer.call(pid, :get_codeome) do
@@ -82,6 +82,14 @@ defmodule LeniesWeb.SpeciesLive do
         []
     end
   end
+
+  @impl true
+  def handle_info(:sandboxes_manager_up, socket) do
+    :ok = Lenies.Sandboxes.attach(socket.assigns.current_scope.user.id)
+    {:noreply, socket}
+  end
+
+  def handle_info(_msg, socket), do: {:noreply, socket}
 
   @impl true
   def render(assigns) do

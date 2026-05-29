@@ -1,92 +1,126 @@
 defmodule Lenies.WorldTestHelpers do
-  @moduledoc ~S"""
-  Shorthand helpers for tests that operate on the primary world's ETS tables
-  and processes.
+  @moduledoc """
+  Test-only helpers for spinning up isolated worlds without going through
+  `Lenies.Sandboxes`. Use `start_test_world/1` for tests that don't care
+  about user-scoping; use `Lenies.Sandboxes.attach(user.id)` directly for
+  tests that exercise the per-user sandbox lifecycle.
 
-  Pre-T6 tests freely accessed the per-world ETS tables by bare atom name
-  (`:ets.lookup(:cells, ...)`) because the `:primary` world's tables were
-  registered as `:named_table`. With that shim removed (T6), tables are
-  unnamed tids held in the world's handle. Tests can either fetch the
-  handle in setup —
-
-      handle = Lenies.Worlds.primary_handle()
-      :ets.insert(handle.tables.cells, ...)
-
-  — or use these helpers, which look up the handle on each call.
-
-  Post-T10 the `:primary` World is registered only via
-  `{:via, Registry, {Lenies.Registry, {:world, :primary}}}`, NOT the global
-  atom `Lenies.World`. Tests that previously called
-  `Process.whereis(Lenies.World)` to check liveness should call
-  `world_pid/0` instead; same for the per-world LenieSupervisor and
-  Telemetry.
+  All accessors take a `world_id` so the same helper can serve any test
+  world. Tests that need the unnamed ETS tids directly should reach into
+  the `%Lenies.WorldHandle{}` returned by `Lenies.Worlds.handle/1`.
   """
 
-  @doc "ETS tid for the primary world's `:cells` table."
-  def cells, do: Lenies.Worlds.primary_handle().tables.cells
+  @config_keys [
+    :tick_interval_ms,
+    :eat_amount,
+    :radiation_per_tick,
+    :carcass_decay,
+    :lenie_metabolize_delay_ms,
+    :copy_substitution_rate,
+    :copy_insert_rate,
+    :copy_delete_rate,
+    :background_mutation_rate_per_1000_ticks,
+    :attack_damage,
+    :grid_width,
+    :grid_height
+  ]
 
-  @doc "ETS tid for the primary world's `:lenies` table."
-  def lenies, do: Lenies.Worlds.primary_handle().tables.lenies
+  @doc """
+  Starts an isolated world under `Lenies.Worlds.Supervisor` and returns
+  `{:ok, world_id}`. Caller is responsible for `stop_test_world(world_id)`
+  (typically in `on_exit/1`).
 
-  @doc "ETS tid for the primary world's `:child_slots` table."
-  def child_slots, do: Lenies.Worlds.primary_handle().tables.child_slots
+  ## Options
+  - `:as` — explicit world id (atom or `{atom, term}` tuple). Defaults to a
+    per-test atom derived from the calling pid.
+  - Any of the per-world `%Lenies.World.Config{}` keys (e.g.
+    `:tick_interval_ms`, `:eat_amount`, ...) — passed as config overrides.
 
-  @doc "ETS tid for the primary world's `:history` table."
-  def history, do: Lenies.Worlds.primary_handle().tables.history
+  Idempotent: if the chosen world id is already running, returns its id.
 
-  @doc "Pid of the running `:primary` World GenServer, or nil if not running."
-  def world_pid do
-    case Registry.lookup(Lenies.Registry, {:world, :primary}) do
-      [{pid, _}] -> pid
-      [] -> nil
-    end
+  Accepts either a keyword list or a map of config overrides; both
+  `start_test_world(%{tick_interval_ms: 0})` and
+  `start_test_world(tick_interval_ms: 0)` are equivalent.
+  """
+  def start_test_world(opts \\ [])
+
+  def start_test_world(opts) when is_map(opts) do
+    start_test_world(Enum.into(opts, []))
   end
 
-  @doc "Pid of the running `:primary` LenieSupervisor, or nil if not running."
-  def lenie_sup_pid do
-    case Registry.lookup(Lenies.Registry, {:lenie_sup, :primary}) do
-      [{pid, _}] -> pid
-      [] -> nil
-    end
-  end
+  def start_test_world(opts) when is_list(opts) do
+    world_id = Keyword.get_lazy(opts, :as, &generate_test_world_id/0)
 
-  @doc "Pid of the running `:primary` Telemetry, or nil if not running."
-  def telemetry_pid do
-    case Registry.lookup(Lenies.Registry, {:telemetry, :primary}) do
-      [{pid, _}] -> pid
-      [] -> nil
+    config =
+      opts
+      |> Keyword.take(@config_keys)
+      |> Map.new()
+
+    case Lenies.Worlds.start_world(world_id, config) do
+      {:ok, _sup} -> {:ok, world_id}
+      {:error, {:already_started, _}} -> {:ok, world_id}
+      other -> other
     end
   end
 
   @doc """
-  Start the full `:primary` world (World + per-world LenieSupervisor +
-  Telemetry) the way `Lenies.Application` does in production, via
-  `Lenies.Worlds.start_world(:primary, …)`.
-
-  Returns the World GenServer pid (NOT the per-world supervisor pid) so
-  existing tests that match `{:ok, _world} = World.start_link(...)` can
-  simply replace the right-hand side with a call to this helper and the
-  semantics line up. The whole sub-tree is torn down in `on_exit` via
-  `stop_primary/0`.
-
-  Idempotent: if the primary world is already running, returns the
-  existing World pid.
+  Stop the world started by `start_test_world/1` (and its full sub-tree:
+  World + LenieSupervisor + Telemetry). Also clears the per-world
+  named-table fixtures registered on this node. Idempotent.
   """
-  def start_primary(config_overrides \\ %{tick_interval_ms: 0}) do
-    case Lenies.Worlds.start_world(:primary, config_overrides) do
-      {:ok, _sup_pid} -> {:ok, world_pid()}
-      {:error, {:already_started, _sup_pid}} -> {:ok, world_pid()}
-    end
-  end
-
-  @doc """
-  Stop the full `:primary` world tree (Supervisor + World +
-  LenieSupervisor + Telemetry) and clean up named-table fixtures.
-  Idempotent.
-  """
-  def stop_primary do
-    Lenies.Worlds.stop_world(:primary)
+  def stop_test_world(world_id) do
+    Lenies.Worlds.stop_world(world_id)
     Lenies.World.Tables.delete_all()
     :ok
+  end
+
+  @doc "ETS tid for the given world's `:cells` table."
+  def cells(world_id), do: handle!(world_id).tables.cells
+
+  @doc "ETS tid for the given world's `:lenies` table."
+  def lenies(world_id), do: handle!(world_id).tables.lenies
+
+  @doc "ETS tid for the given world's `:child_slots` table."
+  def child_slots(world_id), do: handle!(world_id).tables.child_slots
+
+  @doc "ETS tid for the given world's `:history` table."
+  def history(world_id), do: handle!(world_id).tables.history
+
+  @doc "Pid of the running World GenServer for `world_id`, or nil if not running."
+  def world_pid(world_id) do
+    case Registry.lookup(Lenies.Registry, {:world, world_id}) do
+      [{pid, _}] -> pid
+      [] -> nil
+    end
+  end
+
+  @doc "Pid of the running LenieSupervisor for `world_id`, or nil if not running."
+  def lenie_sup_pid(world_id) do
+    case Registry.lookup(Lenies.Registry, {:lenie_sup, world_id}) do
+      [{pid, _}] -> pid
+      [] -> nil
+    end
+  end
+
+  @doc "Pid of the running Telemetry for `world_id`, or nil if not running."
+  def telemetry_pid(world_id) do
+    case Registry.lookup(Lenies.Registry, {:telemetry, world_id}) do
+      [{pid, _}] -> pid
+      [] -> nil
+    end
+  end
+
+  # Internal: fetch the world's handle, raising if the world isn't running.
+  defp handle!(world_id) do
+    case Lenies.Worlds.handle(world_id) do
+      {:ok, h} -> h
+      :error -> raise "Lenies.WorldTestHelpers: world #{inspect(world_id)} is not running"
+    end
+  end
+
+  # Per-test pid → bounded atom growth (pids are reused across runs, so the
+  # atom table doesn't grow unboundedly across a long test run).
+  defp generate_test_world_id do
+    String.to_atom("test_world_" <> inspect(self()))
   end
 end

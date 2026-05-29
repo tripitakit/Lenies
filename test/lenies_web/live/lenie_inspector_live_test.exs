@@ -3,53 +3,42 @@ defmodule LeniesWeb.LenieInspectorLiveTest do
 
   import Phoenix.LiveViewTest
 
-  alias Lenies.{Codeome, Lenie, World}
-  alias Lenies.World.Tables
+  alias Lenies.{Codeome, Lenie}
 
   setup :register_and_log_in_user
 
-  setup do
-    case Lenies.WorldTestHelpers.world_pid() do
-      nil ->
-        {:ok, _} = World.start_link(tick_interval_ms: 0)
+  setup %{user: user} do
+    # Attach the test pid to the user's sandbox so its ETS tables / Registry
+    # are available BEFORE the LV mounts. Pause to keep the world quiescent
+    # so pre-inserted Lenie data isn't perturbed by ticks.
+    :ok = Lenies.Sandboxes.attach(user.id)
+    world_id = {:sandbox, user.id}
+    {:ok, handle} = Lenies.Worlds.handle(world_id)
+    :ok = Lenies.Worlds.pause(world_id)
 
-      _ ->
-        :ok
-    end
+    on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
 
-    on_exit(fn ->
-      case Lenies.WorldTestHelpers.world_pid() do
-        pid when is_pid(pid) ->
-          try do
-            GenServer.stop(pid)
-          catch
-            :exit, _ -> :ok
-          end
-
-        _ ->
-          :ok
-      end
-
-      Tables.delete_all()
-    end)
-
-    :ok
+    %{world_id: world_id, handle: handle}
   end
 
-  test "mount on /lenie/:id with a live Lenie renders state and codeome", %{conn: conn} do
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(), {3, 3})
-    :ets.insert(Lenies.WorldTestHelpers.cells(), {key, %{cell | lenie_id: "INSP1"}})
+  test "mount on /lenie/:id with a live Lenie renders state and codeome",
+       %{conn: conn, handle: handle} do
+    [{key, cell}] = :ets.lookup(handle.tables.cells, {3, 3})
+    :ets.insert(handle.tables.cells, {key, %{cell | lenie_id: "INSP1"}})
 
     codeome = Codeome.from_list([:nop_0, :push1, :move])
 
     {:ok, pid} =
       Lenie.start_link(
-        id: "INSP1",
-        codeome: codeome,
-        energy: 100_000.0,
-        pos: {3, 3},
-        dir: :e,
-        lineage: {nil, 0}
+        {handle,
+         [
+           id: "INSP1",
+           codeome: codeome,
+           energy: 100_000.0,
+           pos: {3, 3},
+           dir: :e,
+           lineage: {nil, 0}
+         ]}
       )
 
     Process.unlink(pid)

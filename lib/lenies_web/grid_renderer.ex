@@ -22,11 +22,16 @@ defmodule LeniesWeb.GridRenderer do
 
   alias Lenies.SpeciesColor
 
-  @doc "Encode cells into 4 binary layers (lenies, resource, carcass, carcass_hue)."
-  @spec encode_layers({pos_integer(), pos_integer()}) ::
+  @doc """
+  Encode cells into 4 binary layers (lenies, resource, carcass, carcass_hue).
+
+  `handle` is the `%Lenies.WorldHandle{}` for the world being rendered (passed
+  in by the LiveView from its socket assigns). `nil` is tolerated and produces
+  an all-zero frame — preferable to crashing on a transient nil handle.
+  """
+  @spec encode_layers(Lenies.WorldHandle.t() | nil, {pos_integer(), pos_integer()}) ::
           {binary(), binary(), binary(), binary()}
-  def encode_layers({w, h}) do
-    handle = fetch_handle()
+  def encode_layers(handle, {w, h}) do
     cells = if handle, do: :ets.tab2list(handle.tables.cells) |> Map.new(), else: %{}
     hash_by_id = build_hash_index(handle)
 
@@ -56,9 +61,9 @@ defmodule LeniesWeb.GridRenderer do
   end
 
   @doc "Encode the grid for transport: base64-encoded layers + dimensions."
-  @spec encode_payload({pos_integer(), pos_integer()}) :: map()
-  def encode_payload({w, h} = grid) do
-    {l, r, c, ch} = encode_layers(grid)
+  @spec encode_payload(Lenies.WorldHandle.t() | nil, {pos_integer(), pos_integer()}) :: map()
+  def encode_payload(handle, {w, h} = grid) do
+    {l, r, c, ch} = encode_layers(handle, grid)
 
     %{
       lenies: Base.encode64(l),
@@ -77,17 +82,6 @@ defmodule LeniesWeb.GridRenderer do
   defp build_hash_index(handle) do
     :ets.tab2list(handle.tables.lenies)
     |> Map.new(fn {id, record} -> {id, Map.get(record, :codeome_hash)} end)
-  end
-
-  # Returns the primary world's handle or nil if the World isn't running.
-  # Empty render output is preferable to crashing when called before the
-  # World has booted.
-  defp fetch_handle do
-    try do
-      Lenies.Worlds.primary_handle()
-    catch
-      :exit, _ -> nil
-    end
   end
 
   defp lenies_byte(%{lenie_id: nil}, _index, _handle), do: 0

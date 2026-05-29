@@ -148,13 +148,15 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
 
   # Pull a representative Lenie process for the species and disassemble its
   # codeome. Returns {:ok, lines} | {:no_sample, []} | {:error, []}.
-  defp fetch_codeome(handle, hash) do
+  defp fetch_codeome(nil, _hash), do: {:no_sample, []}
+
+  defp fetch_codeome(%Lenies.WorldHandle{id: world_id} = handle, hash) do
     case Lenies.Species.for_hash(handle, hash) do
       [] ->
         {:no_sample, []}
 
       [{sample_id, _} | _] ->
-        case safe_whereis(sample_id) do
+        case safe_whereis(world_id, sample_id) do
           pid when is_pid(pid) ->
             try do
               case GenServer.call(pid, :get_codeome, 1_000) do
@@ -171,9 +173,9 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
     end
   end
 
-  defp safe_whereis(id) do
+  defp safe_whereis(world_id, id) do
     try do
-      case Registry.lookup(Lenies.Registry, {:lenie, :primary, id}) do
+      case Registry.lookup(Lenies.Registry, {:lenie, world_id, id}) do
         [{pid, _}] -> pid
         [] -> nil
       end

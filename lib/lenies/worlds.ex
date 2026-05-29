@@ -5,7 +5,7 @@ defmodule Lenies.Worlds do
 
   ## world_id convention
 
-  - Fixed worlds use atoms: `:primary`, `:arena` (one atom per id, safe).
+  - Fixed worlds use atoms: `:arena`, `:test_world` (one atom per id, safe).
   - Dynamic worlds use tuples with bounded atoms: `{:sandbox, user_id}` where
     `user_id` is an integer. **Never** `String.to_atom("sandbox_\#{user_id}")`
     — would re-introduce the atom-table pollution that the multi-world design
@@ -17,7 +17,7 @@ defmodule Lenies.Worlds do
   - Per-world ops: `spawn_lenie/3`, `action/2`, `sterilize/1`, `pause/1`,
     `resume/1`, `paused?/1`, `tune/3`, `snapshot_stats/1`
 
-  All per-world ops accept either a world id (`:primary`, `{:sandbox, 1}`, ...)
+  All per-world ops accept either a world id (`:arena`, `{:sandbox, 1}`, ...)
   OR an already-resolved `%Lenies.WorldHandle{}` for callers that can cache
   the handle in their state.
   """
@@ -26,8 +26,8 @@ defmodule Lenies.Worlds do
   Render a `world_id` as a filesystem- and topic-safe string.
 
   Examples:
-      iex> Lenies.Worlds.id_to_path(:primary)
-      "primary"
+      iex> Lenies.Worlds.id_to_path(:arena)
+      "arena"
       iex> Lenies.Worlds.id_to_path({:sandbox, 42})
       "sandbox-42"
   """
@@ -36,24 +36,6 @@ defmodule Lenies.Worlds do
 
   def id_to_path({atom, rest}) when is_atom(atom) do
     "#{atom}-#{rest}"
-  end
-
-  @doc """
-  Fetch the `%Lenies.WorldHandle{}` for the running `:primary` World.
-
-  Compat helper used during the multi-world refactor — many call sites
-  (Telemetry, GridRenderer, dashboard LiveViews, tests) still operate on
-  the implicit primary world. Thin wrapper around `handle/1`. Exits with
-  `:noproc` if the primary World isn't running (mirrors the legacy
-  `GenServer.call(Lenies.World, :get_handle)` shape so callers that catch
-  `:exit, _` keep working).
-  """
-  @spec primary_handle() :: Lenies.WorldHandle.t()
-  def primary_handle do
-    case handle(:primary) do
-      {:ok, h} -> h
-      :error -> exit({:noproc, {__MODULE__, :primary_handle, []}})
-    end
   end
 
   @doc """
@@ -133,6 +115,29 @@ defmodule Lenies.Worlds do
   def resume(target), do: call(target, :resume)
   def paused?(target), do: call(target, :paused?)
   def snapshot_stats(target), do: call(target, :snapshot_stats)
+
+  @doc "Force a single synchronous tick in `target` (deterministic tests)."
+  def tick_now(target), do: call(target, :tick_now)
+
+  @doc """
+  Synchronous reconciliation sweep on `target`: frees cells and deletes
+  :lenies records whose Lenie is no longer alive in the Registry.
+
+  Returns `{freed_cells, deleted_records}`. Useful for tests and diagnostics;
+  the same sweep runs automatically on the `:reconcile_interval_ms` timer.
+  """
+  def reconcile(target), do: call(target, :reconcile)
+
+  @doc """
+  Notify `target` that a Lenie has died (frees the cell, leaves a carcass).
+  Async cast — does not return when the cell mutation is observable.
+  """
+  def lenie_died(target, id, pos, energy_at_death, codeome_hash)
+      when is_binary(codeome_hash) do
+    with {:ok, h} <- handle(target) do
+      GenServer.cast(h.pid, {:lenie_died, id, pos, energy_at_death, codeome_hash})
+    end
+  end
 
   @doc """
   Save a named snapshot of `target`'s 5 ETS tables to disk, under

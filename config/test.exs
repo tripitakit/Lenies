@@ -42,10 +42,6 @@ config :phoenix, :plug_init_mode, :runtime
 config :phoenix_live_view,
   enable_expensive_runtime_checks: true
 
-# Disable auto-start of simulation processes in test environment.
-# Tests start World, LenieSupervisor, and Telemetry manually as needed.
-config :lenies, auto_start_simulation: false
-
 # Note: simulation-specific test overrides (carcass_decay: 0, initial_resource_per_cell: 0,
 # initial_radiation_ticks: 0) are set in config/runtime.exs inside `if config_env() == :test`
 # because runtime.exs runs AFTER config/*.exs and would otherwise overwrite them.

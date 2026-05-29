@@ -5,8 +5,16 @@ defmodule LeniesWeb.EditorLiveTest do
 
   setup :register_and_log_in_user
 
-  setup do
-    {:ok, _} = Lenies.WorldTestHelpers.start_primary(%{tick_interval_ms: 0})
+  setup %{user: user} do
+    # Attach the test pid to the user's sandbox so its ETS tables (and
+    # LenieSupervisor / Registry entries) are available BEFORE the LV
+    # mounts. Pause immediately to match the legacy tick_interval_ms: 0
+    # behaviour — the editor tests pre-populate ETS / Registry and only
+    # then call `live(conn, "/editor/...")`.
+    :ok = Lenies.Sandboxes.attach(user.id)
+    world_id = {:sandbox, user.id}
+    {:ok, handle} = Lenies.Worlds.handle(world_id)
+    :ok = Lenies.Worlds.pause(world_id)
 
     case Process.whereis(Lenies.Manual) do
       nil -> {:ok, _} = Lenies.Manual.start_link([])
@@ -18,8 +26,8 @@ defmodule LeniesWeb.EditorLiveTest do
       _ -> :ok
     end
 
-    on_exit(fn -> Lenies.WorldTestHelpers.stop_primary() end)
-    :ok
+    on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
+    %{world_id: world_id, handle: handle}
   end
 
   test "mounts on /editor/new with empty buffer", %{conn: conn} do
@@ -58,26 +66,27 @@ defmodule LeniesWeb.EditorLiveTest do
     assert html =~ ~r/Loops|Templates/
   end
 
-  test "/editor/edit/:hash loads codeome of a live species", %{conn: conn} do
+  test "/editor/edit/:hash loads codeome of a live species", %{conn: conn, handle: handle} do
     codeome = Lenies.Codeomes.MinimalReplicator.codeome()
     hash = Lenies.Codeome.hash(codeome)
 
     {:ok, _pid} =
-      Lenies.Lenie.start_link(
-        id: "TEST-EDITOR-L1",
-        codeome: codeome,
-        # Generous energy so the Lenie outlives the editor mount even when
-        # earlier tests leave the BEAM scheduler under load — the editor
-        # just needs the codeome via one GenServer.call, but at energy 100
-        # MR can starve before that call lands.
-        energy: 50_000.0,
-        pos: {0, 0},
-        dir: :n,
-        lineage: {nil, 0}
-      )
+      Lenies.Lenie.start_link({handle,
+       [
+         id: "TEST-EDITOR-L1",
+         codeome: codeome,
+         # Generous energy so the Lenie outlives the editor mount even when
+         # earlier tests leave the BEAM scheduler under load — the editor
+         # just needs the codeome via one GenServer.call, but at energy 100
+         # MR can starve before that call lands.
+         energy: 50_000.0,
+         pos: {0, 0},
+         dir: :n,
+         lineage: {nil, 0}
+       ]})
 
     :ets.insert(
-      Lenies.WorldTestHelpers.lenies(),
+      handle.tables.lenies,
       {"TEST-EDITOR-L1", %{id: "TEST-EDITOR-L1", codeome_hash: hash}}
     )
 

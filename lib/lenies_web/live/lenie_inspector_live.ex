@@ -15,13 +15,18 @@ defmodule LeniesWeb.LenieInspectorLive do
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
-    world_id = :primary
-    world_handle = fetch_primary_handle()
+    user = socket.assigns.current_scope.user
+    user_id = user.id
+    world_id = Lenies.Sandboxes.world_id_for(user_id)
+
+    :ok = Lenies.Sandboxes.attach(user_id)
+    {:ok, world_handle} = Lenies.Worlds.handle(world_id)
 
     if connected?(socket) do
-      # Subscribe to the per-Lenie scoped topic, e.g. "world:primary:lenie:<id>".
-      prefix = (world_handle && world_handle.pubsub_prefix) || "world:primary"
+      # Subscribe to the per-Lenie scoped topic on the user's sandbox prefix.
+      prefix = world_handle.pubsub_prefix
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:lenie:#{id}")
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "sandboxes:manager_up")
     end
 
     socket =
@@ -34,18 +39,11 @@ defmodule LeniesWeb.LenieInspectorLive do
     {:ok, socket}
   end
 
-  defp fetch_primary_handle do
-    try do
-      Lenies.Worlds.primary_handle()
-    catch
-      :exit, _ -> nil
-    end
-  end
-
   defp load_lenie(socket) do
     id = socket.assigns.id
+    world_id = socket.assigns.world_id
 
-    case Registry.lookup(Lenies.Registry, {:lenie, :primary, id}) do
+    case Registry.lookup(Lenies.Registry, {:lenie, world_id, id}) do
       [{pid, _}] ->
         snap =
           try do
@@ -64,7 +62,7 @@ defmodule LeniesWeb.LenieInspectorLive do
         end
 
       [] ->
-        case lookup_lenie_snap(id) do
+        case lookup_lenie_snap(socket.assigns.world_handle, id) do
           {:ok, snap} ->
             socket
             |> assign(:found?, false)
@@ -77,18 +75,16 @@ defmodule LeniesWeb.LenieInspectorLive do
     end
   end
 
-  defp lookup_lenie_snap(id) do
-    try do
-      handle = Lenies.Worlds.primary_handle()
-
-      case :ets.lookup(handle.tables.lenies, id) do
-        [{^id, snap}] -> {:ok, snap}
-        _ -> :error
-      end
-    catch
-      :exit, _ -> :error
+  defp lookup_lenie_snap(%Lenies.WorldHandle{} = handle, id) do
+    case :ets.lookup(handle.tables.lenies, id) do
+      [{^id, snap}] -> {:ok, snap}
+      _ -> :error
     end
+  rescue
+    ArgumentError -> :error
   end
+
+  defp lookup_lenie_snap(_handle, _id), do: :error
 
   defp fetch_codeome_lines(pid, snap) do
     try do
@@ -114,7 +110,7 @@ defmodule LeniesWeb.LenieInspectorLive do
         |> assign(:found?, true)
 
       socket =
-        case Registry.lookup(Lenies.Registry, {:lenie, :primary, snap.id}) do
+        case Registry.lookup(Lenies.Registry, {:lenie, socket.assigns.world_id, snap.id}) do
           [{pid, _}] -> assign(socket, :codeome_lines, fetch_codeome_lines(pid, snap))
           [] -> socket
         end
@@ -123,6 +119,11 @@ defmodule LeniesWeb.LenieInspectorLive do
     else
       {:noreply, socket}
     end
+  end
+
+  def handle_info(:sandboxes_manager_up, socket) do
+    :ok = Lenies.Sandboxes.attach(socket.assigns.current_scope.user.id)
+    {:noreply, socket}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}

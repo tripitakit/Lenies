@@ -4,12 +4,12 @@ defmodule Lenies.World do
   environmental tick, applies radiation and carcass decay, and provides the
   public API for snapshots and sterilization.
 
-  ## Multi-world (Task 5)
+  ## Multi-world
 
-  Each World now carries:
+  Each World carries:
 
   - `world_id` — an atom or `{atom, term}` tuple identifying the world
-    (defaults to `:primary`).
+    (required at `start_link/1`).
   - `config` — a `%Lenies.World.Config{}` struct, the source of truth at
     runtime for tunable simulation parameters. The struct is seeded from
     `Application.get_env(:lenies, …)` at `init/1` and then never re-read
@@ -20,10 +20,8 @@ defmodule Lenies.World do
     exposed via `handle_call(:get_handle, …)`.
 
   Each World registers under `{:via, Registry, {Lenies.Registry, {:world,
-  world_id}}}`. The module-level helpers (`Lenies.World.action/1`,
-  `Lenies.World.sterilize/0`, …) are thin delegators to
-  `Lenies.Worlds.X(:primary, …)` so legacy `:primary`-implicit call sites
-  keep working during the transition; T11 migrates them.
+  world_id}}}`. All external callers go through the `Lenies.Worlds.X(world_id,
+  …)` facade.
 
   See `docs/superpowers/specs/2026-05-11-lenies-design.md` §3, §6, §9.
   """
@@ -36,8 +34,8 @@ defmodule Lenies.World do
 
   # ----- Public API -----
 
-  def start_link(opts \\ []) do
-    world_id = Keyword.get(opts, :world_id, :primary)
+  def start_link(opts) do
+    world_id = Keyword.fetch!(opts, :world_id)
     config_overrides = Keyword.get(opts, :config, %{})
 
     GenServer.start_link(__MODULE__, {world_id, config_overrides, opts},
@@ -47,81 +45,6 @@ defmodule Lenies.World do
 
   defp server_name(world_id),
     do: {:via, Registry, {Lenies.Registry, {:world, world_id}}}
-
-  # ----- :primary delegators (compat for legacy call sites) -----
-  #
-  # The module-level helpers below address the `:primary` world via the
-  # `Lenies.Worlds` facade. They exist so existing call sites in LiveViews,
-  # tests, and console sessions keep working unchanged during the multi-world
-  # transition; T11 migrates the LiveViews and tests to use the facade
-  # directly.
-
-  @doc "Quick sandbox stats for console/test (primary world)."
-  def snapshot_stats, do: Lenies.Worlds.snapshot_stats(:primary)
-
-  @doc "Force a single synchronous tick (primary world; deterministic tests)."
-  def tick_now do
-    with {:ok, h} <- Lenies.Worlds.handle(:primary) do
-      GenServer.call(h.pid, :tick_now)
-    end
-  end
-
-  @doc "Full reset: kill all Lenies, clear ETS, restart the tick (primary world)."
-  def sterilize, do: Lenies.Worlds.sterilize(:primary)
-
-  @doc """
-  Execute an action requested by a Lenie (primary world). Synchronous call.
-
-  Forms:
-  - `{:sense_front, {x, y}, dir}` — returns `{:ok, :empty | {:resource, n} | {:lenie, id}}`
-  - `{:move, {x, y}, dir, lenie_id}` — returns `{:ok, {:moved, {x2, y2}} | :blocked}`
-  - `{:eat, {x, y}}` — returns `{:ok, {:ate, amount}}`
-  """
-  def action(action_spec), do: Lenies.Worlds.action(:primary, action_spec)
-
-  @doc "Pause the environmental tick (primary world)."
-  def pause, do: Lenies.Worlds.pause(:primary)
-
-  @doc "Resume the environmental tick (primary world)."
-  def resume, do: Lenies.Worlds.resume(:primary)
-
-  @doc "Query current pause status (primary world)."
-  def paused?, do: Lenies.Worlds.paused?(:primary)
-
-  @doc """
-  Synchronous reconciliation sweep (primary world): frees cells and deletes
-  :lenies records whose Lenie is no longer alive in the Registry.
-
-  Returns `{freed_cells, deleted_records}`. Useful for tests and diagnostics;
-  the same sweep runs automatically on the `:reconcile_interval_ms` timer.
-  """
-  def reconcile do
-    with {:ok, h} <- Lenies.Worlds.handle(:primary) do
-      GenServer.call(h.pid, :reconcile)
-    end
-  end
-
-  @doc "Notify the primary World that a Lenie has died (frees the cell, optionally leaves a carcass)."
-  def lenie_died(id, pos, energy_at_death, codeome_hash)
-      when is_binary(codeome_hash) do
-    with {:ok, h} <- Lenies.Worlds.handle(:primary) do
-      GenServer.cast(h.pid, {:lenie_died, id, pos, energy_at_death, codeome_hash})
-    end
-  end
-
-  @doc """
-  Spawn a new Lenie with `codeome` on a random free cell (primary world).
-
-  Options:
-  - `:energy` (default 500.0)
-  - `:dir` (default `:n`)
-  - `:lineage` (default `{nil, 0}`)
-
-  Returns `{:ok, {id, pos}}` on success or `{:error, :no_free_cell}` if the grid is full.
-  """
-  def spawn_lenie(codeome, opts \\ []) do
-    Lenies.Worlds.spawn_lenie(:primary, codeome, opts)
-  end
 
   # ----- Server -----
 

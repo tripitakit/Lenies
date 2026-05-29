@@ -26,8 +26,13 @@ defmodule Lenies.Telemetry do
   def via(world_id),
     do: {:via, Registry, {Lenies.Registry, {:telemetry, world_id}}}
 
-  def history(:all) do
-    case fetch_handle(:primary) do
+  @doc """
+  Return all history entries for `world_id`, sorted oldest-first, or `[]` if
+  the world isn't running. Read-only ETS scan; does not touch the Telemetry
+  GenServer.
+  """
+  def history(world_id, :all) do
+    case fetch_handle(world_id) do
       {:ok, handle} ->
         :ets.tab2list(handle.tables.history)
         |> Enum.map(fn {_k, v} -> v end)
@@ -38,8 +43,9 @@ defmodule Lenies.Telemetry do
     end
   end
 
-  def history(:last_n, n) when is_integer(n) and n > 0 do
-    history(:all) |> Enum.take(-n)
+  @doc "Return the last `n` history entries for `world_id`."
+  def history(world_id, :last_n, n) when is_integer(n) and n > 0 do
+    history(world_id, :all) |> Enum.take(-n)
   end
 
   # ----- Server -----
@@ -124,9 +130,9 @@ defmodule Lenies.Telemetry do
 
   # Snapshot of populations for the top-K species at this tick.
   # Bounded to @species_per_snapshot to keep history entries small.
-  # Reads from THIS Telemetry's bound world (state.handle) — passing the
-  # primary handle here for a non-primary world would write :primary's
-  # species snapshot into the wrong world's history.
+  # Reads from THIS Telemetry's bound world (state.handle) — passing a
+  # different world's handle here would write the wrong world's species
+  # snapshot into history.
   defp species_snapshot(handle) do
     Lenies.Species.aggregate(handle)
     |> Enum.take(@species_per_snapshot)
