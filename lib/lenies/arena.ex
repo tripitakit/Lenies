@@ -126,10 +126,66 @@ defmodule Lenies.Arena do
 
   defp start_arena do
     case Lenies.Worlds.start_world(@world_id, %{}) do
-      {:ok, sup_pid} -> {:ok, sup_pid}
-      {:error, {:already_started, sup_pid}} -> {:ok, sup_pid}
-      {:error, _} = err -> err
+      {:ok, sup_pid} ->
+        maybe_auto_restore()
+        {:ok, sup_pid}
+
+      {:error, {:already_started, sup_pid}} ->
+        {:ok, sup_pid}
+
+      {:error, _} = err ->
+        err
     end
+  end
+
+  defp maybe_auto_restore do
+    case Lenies.Snapshot.validate(@world_id, "auto") do
+      :ok ->
+        case Lenies.Worlds.restore_snapshot(@world_id, "auto") do
+          :ok ->
+            :ok
+
+          {:error, reason} ->
+            quarantine_broken_auto(reason)
+            :ok
+        end
+
+      {:error, :missing_file} ->
+        if auto_dir_exists?(), do: quarantine_broken_auto(:missing_file), else: :ok
+
+      {:error, reason} ->
+        quarantine_broken_auto(reason)
+        :ok
+    end
+  end
+
+  defp auto_dir_exists? do
+    root = Lenies.Snapshot.snapshot_root()
+    Path.join([root, Lenies.Worlds.id_to_path(@world_id), "auto"]) |> File.dir?()
+  end
+
+  defp quarantine_broken_auto(reason) do
+    require Logger
+
+    root = Lenies.Snapshot.snapshot_root()
+    dir = Path.join([root, Lenies.Worlds.id_to_path(@world_id), "auto"])
+
+    if File.dir?(dir) do
+      broken =
+        Path.join([
+          root,
+          Lenies.Worlds.id_to_path(@world_id),
+          "auto.broken.#{System.system_time(:second)}"
+        ])
+
+      File.rename(dir, broken)
+
+      Logger.warning(
+        "Lenies.Arena: auto snapshot quarantined as #{broken} (#{inspect(reason)})"
+      )
+    end
+
+    :ok
   end
 
   defp cancel_pending_stop(%{pending_stop: nil} = state), do: state

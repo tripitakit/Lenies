@@ -150,4 +150,53 @@ defmodule Lenies.ArenaTest do
       :ok = Lenies.Worlds.stop_world(:arena)
     end
   end
+
+  describe "auto-restore" do
+    setup do
+      start_supervised!({Lenies.Arena, []})
+      Application.put_env(:lenies, :arena_grace_ms, 50)
+      on_exit(fn -> Application.delete_env(:lenies, :arena_grace_ms) end)
+      :ok
+    end
+
+    @tag :tmp_dir
+    test "first attach restores from an existing auto snapshot", %{tmp_dir: tmp} do
+      Application.put_env(:lenies, :snapshot_root, tmp)
+      on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
+
+      :ok = Lenies.Arena.attach_viewer(self())
+      {:ok, handle1} = Lenies.Worlds.handle(:arena)
+      Lenies.SpeciesColor.set_override(handle1, "arena-marker", "#123456")
+
+      :ok = Lenies.Arena.detach_viewer(self())
+      Process.sleep(1_000)  # grace + auto_save
+      refute Lenies.Worlds.alive?(:arena)
+
+      :ok = Lenies.Arena.attach_viewer(self())
+      {:ok, handle2} = Lenies.Worlds.handle(:arena)
+      assert Lenies.SpeciesColor.override(handle2, "arena-marker") == "#123456"
+
+      :ok = Lenies.Worlds.stop_world(:arena)
+    end
+
+    @tag :tmp_dir
+    test "corrupt auto snapshot is quarantined, world starts empty", %{tmp_dir: tmp} do
+      Application.put_env(:lenies, :snapshot_root, tmp)
+      on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
+
+      auto_dir = Path.join([tmp, Lenies.Worlds.id_to_path(:arena), "auto"])
+      File.mkdir_p!(auto_dir)
+      File.write!(Path.join(auto_dir, "cells.tab"), "garbage, not a valid ets dump")
+
+      :ok = Lenies.Arena.attach_viewer(self())
+      refute File.dir?(auto_dir)
+      broken =
+        Path.join([tmp, Lenies.Worlds.id_to_path(:arena)])
+        |> File.ls!()
+        |> Enum.filter(&String.starts_with?(&1, "auto.broken."))
+      assert length(broken) == 1
+
+      :ok = Lenies.Worlds.stop_world(:arena)
+    end
+  end
 end
