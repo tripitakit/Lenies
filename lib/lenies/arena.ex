@@ -176,7 +176,7 @@ defmodule Lenies.Arena do
             case Registry.lookup(Lenies.Registry, {:lenie, @world_id, id}) do
               [{pid, _}] ->
                 _ = DynamicSupervisor.terminate_child(sup, pid)
-                GenServer.cast(handle.pid, {:lenie_died, id, pos, energy, hash})
+                GenServer.cast(handle.pid, {:lenie_died, id, pos, energy, hash, user.id})
                 acc + 1
 
               [] ->
@@ -187,6 +187,12 @@ defmodule Lenies.Arena do
         :error ->
           0
       end
+
+    Phoenix.PubSub.broadcast(
+      Lenies.PubSub,
+      "arena:user:#{user.id}",
+      {:arena_lineage_changed, user.id}
+    )
 
     {:reply, {:ok, count}, state}
   end
@@ -207,8 +213,17 @@ defmodule Lenies.Arena do
       ]
 
       case Lenies.Worlds.spawn_lenie(@world_id, codeome, opts) do
-        {:ok, {_id, _pos}} -> {:ok, :seeded}
-        {:error, _} = err -> err
+        {:ok, {_id, _pos}} ->
+          Phoenix.PubSub.broadcast(
+            Lenies.PubSub,
+            "arena:user:#{user.id}",
+            {:arena_lineage_changed, user.id}
+          )
+
+          {:ok, :seeded}
+
+        {:error, _} = err ->
+          err
       end
     else
       nil -> {:error, :not_found}

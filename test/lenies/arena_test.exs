@@ -339,6 +339,29 @@ defmodule Lenies.ArenaTest do
       assert Lenies.Arena.lineage_count(user_a.id) == 0
       assert Lenies.Arena.lineage_count(user_b.id) == 1
     end
+
+    test "natural death of a Lenie broadcasts arena:lineage_changed via PubSub" do
+      user = Lenies.AccountsFixtures.user_fixture()
+
+      {:ok, codeome} =
+        Lenies.Collection.create_codeome(user, %{
+          name: "ArenaSeed",
+          color_hex: "#abcdef",
+          energy_default: 500.0,
+          opcodes: ["nop_1", "store", "eat", "eat", "move", "eat", "move", "eat", "move", "eat"]
+        })
+
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "arena:user:#{user.id}")
+
+      {:ok, :seeded} = Lenies.Arena.seed(user, codeome.id)
+      # The seed itself broadcasts; consume the first message.
+      assert_receive {:arena_lineage_changed, user_id}, 1_000
+      assert user_id == user.id
+
+      # Now trigger apoptosis (kills user's Lenies) — should also broadcast.
+      {:ok, _} = Lenies.Arena.apoptosis(user)
+      assert_receive {:arena_lineage_changed, ^user_id}, 1_000
+    end
   end
 
   describe "crash recovery / adopt" do

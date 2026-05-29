@@ -58,6 +58,18 @@ defmodule LeniesWeb.ArenaLive do
       Phoenix.PubSub.subscribe(Lenies.PubSub, "arena:manager_up")
       Phoenix.PubSub.subscribe(Lenies.PubSub, @presence_topic)
       {:ok, _ref} = Presence.track(self(), @presence_topic, session_id, %{})
+
+      # Per sub-project #4: per-user PubSub topic — covers natural-death
+      # lineage refresh AND multi-tab same-user sync (a Seed/Apoptosis in
+      # tab A reaches tab B via the broadcast, not just the local
+      # `send(self(), …)` from ArenaControlsComponent).
+      case socket.assigns[:current_scope] do
+        %{user: %{id: id}} ->
+          Phoenix.PubSub.subscribe(Lenies.PubSub, "arena:user:#{id}")
+
+        _ ->
+          :ok
+      end
     end
 
     grid = Lenies.Config.grid_size()

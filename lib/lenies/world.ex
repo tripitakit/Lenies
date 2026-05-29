@@ -256,7 +256,10 @@ defmodule Lenies.World do
   end
 
   @impl true
-  def handle_cast({:lenie_died, id, {x, y}, energy_at_death, codeome_hash}, state) do
+  def handle_cast(
+        {:lenie_died, id, {x, y}, energy_at_death, codeome_hash, seeder_user_id},
+        state
+      ) do
     case :ets.lookup(state.tables.cells, {x, y}) do
       [{key, cell}] ->
         carcass_value = max(0, trunc(energy_at_death * 0.5))
@@ -272,6 +275,19 @@ defmodule Lenies.World do
     end
 
     :ets.delete(state.tables.lenies, id)
+
+    # Sub-project #4: if the dead Lenie carried a seeder_user_id (Arena lineage),
+    # broadcast on the user's per-user topic so ArenaLive's Seed/Apoptosis UI
+    # refreshes. Covers natural death (starvation, attack) — the seed and
+    # apoptosis paths broadcast from Lenies.Arena directly.
+    if state.world_id == :arena and is_integer(seeder_user_id) do
+      Phoenix.PubSub.broadcast(
+        Lenies.PubSub,
+        "arena:user:#{seeder_user_id}",
+        {:arena_lineage_changed, seeder_user_id}
+      )
+    end
+
     {:noreply, state}
   end
 

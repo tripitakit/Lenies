@@ -132,17 +132,15 @@ defmodule LeniesWeb.UserSessionControllerTest do
   describe "DELETE /users/log-out" do
     test "logs the user out", %{conn: conn, user: user} do
       conn = conn |> log_in_user(user) |> delete(~p"/users/log-out")
-      # Logout redirects to the (future) Arena landing at "/" — currently no
-      # route is defined for "/", so this is a plain-string redirect target
-      # (see UserAuth.log_out_user/1).
-      assert redirected_to(conn) == "/"
+      # Logout redirects to the Arena landing at "/" (LeniesWeb.ArenaLive).
+      assert redirected_to(conn) == ~p"/"
       refute get_session(conn, :user_token)
       assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "Logged out successfully"
     end
 
     test "succeeds even if the user is not logged in", %{conn: conn} do
       conn = delete(conn, ~p"/users/log-out")
-      assert redirected_to(conn) == "/"
+      assert redirected_to(conn) == ~p"/"
       refute get_session(conn, :user_token)
       assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "Logged out successfully"
     end

@@ -318,11 +318,14 @@ defmodule Lenies.Lenie do
   def terminate(_reason, state) do
     hash = Lenies.Codeome.hash(state.codeome)
     # Cast to the world pid directly. World handles `{:lenie_died, id, pos,
-    # energy, hash}` (see lib/lenies/world.ex handle_cast). Matches the arg
-    # order of the legacy World.lenie_died/4 helper.
+    # energy, hash, seeder_user_id}` (see lib/lenies/world.ex handle_cast).
+    # The trailing `seeder_user_id` (nil for non-Arena Lenies) lets the World
+    # broadcast `:arena_lineage_changed` on the user's per-user topic so
+    # ArenaLive's Seed/Apoptosis UI refreshes on natural death.
     GenServer.cast(
       state.world.pid,
-      {:lenie_died, state.id, state.interp.pos, state.interp.energy, hash}
+      {:lenie_died, state.id, state.interp.pos, state.interp.energy, hash,
+       state.seeder_user_id}
     )
 
     :ok

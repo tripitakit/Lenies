@@ -120,8 +120,8 @@ defmodule LeniesWeb.UserAuthTest do
       refute get_session(conn, :user_token)
       refute conn.cookies[@remember_me_cookie]
       assert %{max_age: 0} = conn.resp_cookies[@remember_me_cookie]
-      # Logout redirects to "/" (future Arena landing) — plain string, no route.
-      assert redirected_to(conn) == "/"
+      # Logout redirects to the Arena landing at "/" (LeniesWeb.ArenaLive).
+      assert redirected_to(conn) == ~p"/"
       refute Accounts.get_user_by_session_token(user_token)
     end
 
