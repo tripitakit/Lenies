@@ -56,6 +56,19 @@ defmodule Lenies.Arena do
           | {:error, term}
   def seed(user, codeome_id), do: GenServer.call(__MODULE__, {:seed, user, codeome_id})
 
+  @doc """
+  Kills all Lenies in the Arena whose seeder_user_id matches `user.id`.
+  Returns `{:ok, count_killed}`. Idempotent.
+
+  Terminates each Lenie process via `DynamicSupervisor.terminate_child/2`, then
+  posts `:lenie_died` to the World on each Lenie's behalf so the cell is freed
+  and a carcass is left — mirroring the natural death path. (Lenie doesn't
+  trap exits, so terminate/2 is bypassed by a supervisor shutdown; we send
+  the cast ourselves to keep the world consistent.)
+  """
+  @spec apoptosis(map()) :: {:ok, non_neg_integer()}
+  def apoptosis(user), do: GenServer.call(__MODULE__, {:apoptosis, user})
+
   @impl true
   def init(_opts), do: {:ok, initial_state()}
 
@@ -111,6 +124,41 @@ defmodule Lenies.Arena do
   def handle_call({:seed, user, codeome_id}, _from, state) do
     reply = do_seed(user, codeome_id)
     {:reply, reply, state}
+  end
+
+  def handle_call({:apoptosis, user}, _from, state) do
+    count =
+      case Lenies.Worlds.handle(@world_id) do
+        {:ok, handle} ->
+          # Grab id + the fields needed to post `:lenie_died` on the Lenie's
+          # behalf (pos, energy, codeome_hash). Lenie doesn't trap exits, so
+          # a supervisor shutdown bypasses its terminate/2 — we replay the
+          # cast ourselves to keep the World/ETS state consistent.
+          ms = [
+            {{:"$1", %{seeder_user_id: :"$2", pos: :"$3", energy: :"$4", codeome_hash: :"$5"}},
+             [{:==, :"$2", user.id}], [{{:"$1", :"$3", :"$4", :"$5"}}]}
+          ]
+
+          rows = :ets.select(handle.tables.lenies, ms)
+          sup = Lenies.LenieSupervisor.via(@world_id)
+
+          Enum.reduce(rows, 0, fn {id, pos, energy, hash}, acc ->
+            case Registry.lookup(Lenies.Registry, {:lenie, @world_id, id}) do
+              [{pid, _}] ->
+                _ = DynamicSupervisor.terminate_child(sup, pid)
+                GenServer.cast(handle.pid, {:lenie_died, id, pos, energy, hash})
+                acc + 1
+
+              [] ->
+                acc
+            end
+          end)
+
+        :error ->
+          0
+      end
+
+    {:reply, {:ok, count}, state}
   end
 
   defp do_seed(user, codeome_id) do
@@ -238,9 +286,7 @@ defmodule Lenies.Arena do
 
       File.rename(dir, broken)
 
-      Logger.warning(
-        "Lenies.Arena: auto snapshot quarantined as #{broken} (#{inspect(reason)})"
-      )
+      Logger.warning("Lenies.Arena: auto snapshot quarantined as #{broken} (#{inspect(reason)})")
     end
 
     :ok

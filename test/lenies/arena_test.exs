@@ -66,8 +66,12 @@ defmodule Lenies.ArenaTest do
       task =
         Task.async(fn ->
           :ok = Lenies.Arena.attach_viewer()
-          receive do :exit -> :ok end
+
+          receive do
+            :exit -> :ok
+          end
         end)
+
       Process.sleep(20)
       send(task.pid, :exit)
       Task.await(task)
@@ -82,11 +86,16 @@ defmodule Lenies.ArenaTest do
 
     test "second viewer disconnect leaves first viewer attached, no grace timer" do
       :ok = Lenies.Arena.attach_viewer(self())
+
       task =
         Task.async(fn ->
           :ok = Lenies.Arena.attach_viewer()
-          receive do :exit -> :ok end
+
+          receive do
+            :exit -> :ok
+          end
         end)
+
       Process.sleep(20)
       send(task.pid, :exit)
       Task.await(task)
@@ -116,8 +125,12 @@ defmodule Lenies.ArenaTest do
       task =
         Task.async(fn ->
           :ok = Lenies.Arena.attach_viewer()
-          receive do :exit -> :ok end
+
+          receive do
+            :exit -> :ok
+          end
         end)
+
       Process.sleep(20)
       send(task.pid, :exit)
       Task.await(task)
@@ -136,15 +149,21 @@ defmodule Lenies.ArenaTest do
       task =
         Task.async(fn ->
           :ok = Lenies.Arena.attach_viewer()
-          receive do :exit -> :ok end
+
+          receive do
+            :exit -> :ok
+          end
         end)
+
       Process.sleep(20)
       send(task.pid, :exit)
       Task.await(task)
-      Process.sleep(10)  # 10 ms into the 50 ms grace
+      # 10 ms into the 50 ms grace
+      Process.sleep(10)
 
       :ok = Lenies.Arena.attach_viewer(self())
-      Process.sleep(200)  # past the original grace window
+      # past the original grace window
+      Process.sleep(200)
 
       assert Lenies.Worlds.alive?(:arena)
       :ok = Lenies.Worlds.stop_world(:arena)
@@ -169,7 +188,8 @@ defmodule Lenies.ArenaTest do
       Lenies.SpeciesColor.set_override(handle1, "arena-marker", "#123456")
 
       :ok = Lenies.Arena.detach_viewer(self())
-      Process.sleep(1_000)  # grace + auto_save
+      # grace + auto_save
+      Process.sleep(1_000)
       refute Lenies.Worlds.alive?(:arena)
 
       :ok = Lenies.Arena.attach_viewer(self())
@@ -190,10 +210,12 @@ defmodule Lenies.ArenaTest do
 
       :ok = Lenies.Arena.attach_viewer(self())
       refute File.dir?(auto_dir)
+
       broken =
         Path.join([tmp, Lenies.Worlds.id_to_path(:arena)])
         |> File.ls!()
         |> Enum.filter(&String.starts_with?(&1, "auto.broken."))
+
       assert length(broken) == 1
 
       :ok = Lenies.Worlds.stop_world(:arena)
@@ -250,6 +272,76 @@ defmodule Lenies.ArenaTest do
     test "seed/2 returns {:error, :not_found} when codeome_id doesn't belong to user" do
       user = Lenies.AccountsFixtures.user_fixture()
       assert {:error, :not_found} = Lenies.Arena.seed(user, 999_999)
+    end
+  end
+
+  describe "apoptosis/1" do
+    setup do
+      :ok = Ecto.Adapters.SQL.Sandbox.checkout(Lenies.Repo)
+      Ecto.Adapters.SQL.Sandbox.mode(Lenies.Repo, {:shared, self()})
+      start_supervised!({Lenies.Arena, []})
+      :ok = Lenies.Arena.attach_viewer(self())
+      on_exit(fn -> Lenies.Worlds.stop_world(:arena) end)
+      :ok
+    end
+
+    test "apoptosis on user with lineage=0 returns {:ok, 0}" do
+      user = Lenies.AccountsFixtures.user_fixture()
+      assert {:ok, 0} = Lenies.Arena.apoptosis(user)
+    end
+
+    test "apoptosis on user with lineage>0 kills all their Lenies; seed allowed again" do
+      user = Lenies.AccountsFixtures.user_fixture()
+
+      {:ok, codeome} =
+        Lenies.Collection.create_codeome(user, %{
+          name: "ArenaSeed",
+          color_hex: "#abcdef",
+          energy_default: 500.0,
+          opcodes: ["nop_1", "store", "eat", "eat", "move", "eat", "move", "eat", "move", "eat"]
+        })
+
+      {:ok, :seeded} = Lenies.Arena.seed(user, codeome.id)
+      Process.sleep(50)
+      assert Lenies.Arena.lineage_count(user.id) == 1
+
+      assert {:ok, 1} = Lenies.Arena.apoptosis(user)
+      # allow terminate/2 to run
+      Process.sleep(100)
+      assert Lenies.Arena.lineage_count(user.id) == 0
+
+      # Now seed again succeeds.
+      assert {:ok, :seeded} = Lenies.Arena.seed(user, codeome.id)
+    end
+
+    test "apoptosis only affects the calling user's Lenies; other users untouched" do
+      user_a = Lenies.AccountsFixtures.user_fixture()
+      user_b = Lenies.AccountsFixtures.user_fixture()
+
+      {:ok, codeome_a} =
+        Lenies.Collection.create_codeome(user_a, %{
+          name: "A",
+          color_hex: "#aa0000",
+          energy_default: 500.0,
+          opcodes: ["nop_1", "store", "eat", "eat", "move", "eat", "move", "eat", "move", "eat"]
+        })
+
+      {:ok, codeome_b} =
+        Lenies.Collection.create_codeome(user_b, %{
+          name: "B",
+          color_hex: "#00aa00",
+          energy_default: 500.0,
+          opcodes: ["nop_1", "store", "eat", "eat", "move", "eat", "move", "eat", "move", "eat"]
+        })
+
+      {:ok, :seeded} = Lenies.Arena.seed(user_a, codeome_a.id)
+      {:ok, :seeded} = Lenies.Arena.seed(user_b, codeome_b.id)
+      Process.sleep(50)
+
+      assert {:ok, 1} = Lenies.Arena.apoptosis(user_a)
+      Process.sleep(100)
+      assert Lenies.Arena.lineage_count(user_a.id) == 0
+      assert Lenies.Arena.lineage_count(user_b.id) == 1
     end
   end
 end
