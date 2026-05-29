@@ -31,26 +31,20 @@
     </script>
   </head>
   <body>
-    <ul class="menu menu-horizontal w-full relative z-10 flex items-center gap-4 px-4 sm:px-6 lg:px-8 justify-end">
-      <%= if @current_scope do %>
-        <li>
-          {@current_scope.user.email}
-        </li>
-        <li>
+    <header class="lenies-navbar menu menu-horizontal w-full relative z-10 flex items-center gap-4 px-4 sm:px-6 lg:px-8">
+      <.link href="/" class="lenies-logo font-semibold tracking-wide">Lenies</.link>
+      <nav class="ml-auto flex items-center gap-4">
+        <%= if @current_scope && @current_scope.user do %>
+          <.link href={~p"/sandbox"}>Sandbox</.link>
           <.link href={~p"/users/settings"}>Settings</.link>
-        </li>
-        <li>
+          <span class="user-email opacity-70">{@current_scope.user.email}</span>
           <.link href={~p"/users/log-out"} method="delete">Log out</.link>
-        </li>
-      <% else %>
-        <li>
+        <% else %>
           <.link href={~p"/users/register"}>Register</.link>
-        </li>
-        <li>
           <.link href={~p"/users/log-in"}>Log in</.link>
-        </li>
-      <% end %>
-    </ul>
+        <% end %>
+      </nav>
+    </header>
     {@inner_content}
   </body>
 </html>

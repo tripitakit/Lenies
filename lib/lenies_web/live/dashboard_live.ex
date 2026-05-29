@@ -478,7 +478,7 @@ defmodule LeniesWeb.DashboardLive do
   def handle_event("select_lenie_at_cell", %{"x" => x, "y" => y}, socket)
       when is_integer(x) and is_integer(y) do
     case lookup_lenie_at_cell(socket.assigns.world_handle, x, y) do
-      {:ok, hash} -> {:noreply, push_navigate(socket, to: ~p"/editor/edit/#{hash}")}
+      {:ok, hash} -> {:noreply, push_navigate(socket, to: ~p"/sandbox/editor/edit/#{hash}")}
       :error -> {:noreply, socket}
     end
   end

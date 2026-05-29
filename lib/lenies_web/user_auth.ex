@@ -56,7 +56,9 @@ defmodule LeniesWeb.UserAuth do
     conn
     |> renew_session(nil)
     |> delete_resp_cookie(@remember_me_cookie, @remember_me_options)
-    |> redirect(to: ~p"/")
+    # `/` is the public Arena; ArenaLive lands in Task 13. Bypass
+    # verified_routes here so we don't warn until the route exists.
+    |> redirect(to: "/")
   end
 
   @doc """
@@ -262,7 +264,7 @@ defmodule LeniesWeb.UserAuth do
     ~p"/users/settings"
   end
 
-  def signed_in_path(_), do: ~p"/"
+  def signed_in_path(_), do: ~p"/sandbox"
 
   @doc """
   Plug for routes that require the user to be authenticated.

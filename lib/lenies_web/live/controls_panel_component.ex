@@ -159,7 +159,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
         <div class="flex items-center gap-2 text-xs">
           <.link
             id="open-codeome-editor"
-            navigate={~p"/editor/new"}
+            navigate={~p"/sandbox/editor/new"}
             class="px-2 py-0.5 border border-cyan-500/60 text-cyan-200 hover:bg-cyan-900/40 whitespace-nowrap"
           >
             + New Seed

@@ -31,30 +31,15 @@ defmodule LeniesWeb.Router do
 
   ## Authentication routes
 
+  # Public scope: Arena + auth pages
   scope "/", LeniesWeb do
-    pipe_through [:browser, :require_authenticated_user]
+    pipe_through :browser
 
-    live_session :require_authenticated_user,
-      on_mount: @sandbox_on_mount ++ [{LeniesWeb.UserAuth, :require_authenticated}] do
-      # Application routes — the whole app is gated behind login.
-      live "/", DashboardLive, :index
-      live "/lenie/:id", LenieInspectorLive, :show
-      live "/species/:hash", SpeciesLive, :show
-      live "/editor/new", EditorLive, :new
-      live "/editor/edit/:hash", EditorLive, :edit
-
-      live "/users/settings", UserLive.Settings, :edit
-      live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
-    end
-
-    post "/users/update-password", UserSessionController, :update_password
-  end
-
-  scope "/", LeniesWeb do
-    pipe_through [:browser]
-
-    live_session :current_user,
+    live_session :arena_public,
       on_mount: @sandbox_on_mount ++ [{LeniesWeb.UserAuth, :mount_current_scope}] do
+      # ArenaLive lives here once Task 13 ships. For now, commented out.
+      # live "/", ArenaLive, :index
+
       live "/users/register", UserLive.Registration, :new
       live "/users/log-in", UserLive.Login, :new
       live "/users/log-in/:token", UserLive.Confirmation, :new
@@ -62,6 +47,25 @@ defmodule LeniesWeb.Router do
 
     post "/users/log-in", UserSessionController, :create
     delete "/users/log-out", UserSessionController, :delete
+  end
+
+  # Authenticated scope: Sandbox + Settings, all under /sandbox/... (Settings keeps /users/settings/...)
+  scope "/", LeniesWeb do
+    pipe_through [:browser, :require_authenticated_user]
+
+    live_session :require_authenticated_user,
+      on_mount: @sandbox_on_mount ++ [{LeniesWeb.UserAuth, :require_authenticated}] do
+      live "/sandbox", DashboardLive, :index
+      live "/sandbox/lenie/:id", LenieInspectorLive, :show
+      live "/sandbox/species/:hash", SpeciesLive, :show
+      live "/sandbox/editor/new", EditorLive, :new
+      live "/sandbox/editor/edit/:hash", EditorLive, :edit
+
+      live "/users/settings", UserLive.Settings, :edit
+      live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
+    end
+
+    post "/users/update-password", UserSessionController, :update_password
   end
 
   # Enable Swoosh mailbox preview in development
