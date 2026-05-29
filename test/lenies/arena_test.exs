@@ -199,4 +199,57 @@ defmodule Lenies.ArenaTest do
       :ok = Lenies.Worlds.stop_world(:arena)
     end
   end
+
+  describe "lineage_count/1 and seed/2" do
+    setup do
+      Ecto.Adapters.SQL.Sandbox.checkout(Lenies.Repo)
+      Ecto.Adapters.SQL.Sandbox.mode(Lenies.Repo, {:shared, self()})
+      start_supervised!({Lenies.Arena, []})
+      :ok = Lenies.Arena.attach_viewer(self())
+      on_exit(fn -> Lenies.Worlds.stop_world(:arena) end)
+      :ok
+    end
+
+    test "lineage_count returns 0 when no Lenie carries this user's tag" do
+      assert Lenies.Arena.lineage_count(123) == 0
+    end
+
+    test "seed/2 with lineage=0 spawns and bumps lineage_count to 1" do
+      user = Lenies.AccountsFixtures.user_fixture()
+
+      {:ok, codeome} =
+        Lenies.Collection.create_codeome(user, %{
+          name: "ArenaSeed",
+          color_hex: "#abcdef",
+          energy_default: 500.0,
+          opcodes: ["nop_1", "store", "eat", "eat", "move", "eat", "move", "eat", "move", "eat"]
+        })
+
+      assert {:ok, :seeded} = Lenies.Arena.seed(user, codeome.id)
+      Process.sleep(50)
+      assert Lenies.Arena.lineage_count(user.id) == 1
+    end
+
+    test "seed/2 with lineage>0 returns {:error, :lineage_alive, N}" do
+      user = Lenies.AccountsFixtures.user_fixture()
+
+      {:ok, codeome} =
+        Lenies.Collection.create_codeome(user, %{
+          name: "ArenaSeed",
+          color_hex: "#abcdef",
+          energy_default: 500.0,
+          opcodes: ["nop_1", "store", "eat", "eat", "move", "eat", "move", "eat", "move", "eat"]
+        })
+
+      {:ok, :seeded} = Lenies.Arena.seed(user, codeome.id)
+      Process.sleep(50)
+
+      assert {:error, :lineage_alive, 1} = Lenies.Arena.seed(user, codeome.id)
+    end
+
+    test "seed/2 returns {:error, :not_found} when codeome_id doesn't belong to user" do
+      user = Lenies.AccountsFixtures.user_fixture()
+      assert {:error, :not_found} = Lenies.Arena.seed(user, 999_999)
+    end
+  end
 end

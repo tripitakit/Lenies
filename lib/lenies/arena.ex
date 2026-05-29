@@ -30,6 +30,32 @@ defmodule Lenies.Arena do
   @spec detach_viewer(pid) :: :ok
   def detach_viewer(pid \\ self()), do: GenServer.cast(__MODULE__, {:detach_viewer, pid})
 
+  @doc "Count of Lenies in the Arena whose seeder_user_id matches `user_id`."
+  @spec lineage_count(integer) :: non_neg_integer()
+  def lineage_count(user_id) when is_integer(user_id) do
+    case Lenies.Worlds.handle(@world_id) do
+      {:ok, handle} ->
+        ms = [
+          {{:_, %{seeder_user_id: :"$1"}}, [{:==, :"$1", user_id}], [true]}
+        ]
+
+        :ets.select_count(handle.tables.lenies, ms)
+
+      :error ->
+        0
+    end
+  end
+
+  @doc """
+  Atomically check the user's lineage count and (if 0) spawn one Lenie from their
+  collection into the Arena.
+  """
+  @spec seed(map(), integer | binary) ::
+          {:ok, :seeded}
+          | {:error, :lineage_alive, non_neg_integer()}
+          | {:error, term}
+  def seed(user, codeome_id), do: GenServer.call(__MODULE__, {:seed, user, codeome_id})
+
   @impl true
   def init(_opts), do: {:ok, initial_state()}
 
@@ -80,6 +106,38 @@ defmodule Lenies.Arena do
       end
 
     {:reply, :ok, cancel_pending_stop(new_state)}
+  end
+
+  def handle_call({:seed, user, codeome_id}, _from, state) do
+    reply = do_seed(user, codeome_id)
+    {:reply, reply, state}
+  end
+
+  defp do_seed(user, codeome_id) do
+    with %Lenies.Collection.Codeome{} = entry <- Lenies.Collection.get_codeome(user, codeome_id),
+         {:ok, handle} <- Lenies.Worlds.handle(@world_id),
+         0 <- lineage_count(user.id) do
+      codeome = Lenies.Codeome.from_list(Lenies.Collection.to_opcode_atoms(entry))
+      hash = Lenies.Codeome.hash(codeome)
+      Lenies.SpeciesColor.set_override(handle, hash, entry.color_hex)
+
+      opts = [
+        energy: entry.energy_default,
+        dir: Enum.random([:n, :s, :e, :w]),
+        seeder_user_id: user.id,
+        seed_origin: "★ " <> entry.name
+      ]
+
+      case Lenies.Worlds.spawn_lenie(@world_id, codeome, opts) do
+        {:ok, {_id, _pos}} -> {:ok, :seeded}
+        {:error, _} = err -> err
+      end
+    else
+      nil -> {:error, :not_found}
+      count when is_integer(count) and count > 0 -> {:error, :lineage_alive, count}
+      :error -> {:error, :arena_not_running}
+      {:error, _} = err -> err
+    end
   end
 
   @impl true
