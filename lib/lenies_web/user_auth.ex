@@ -56,9 +56,7 @@ defmodule LeniesWeb.UserAuth do
     conn
     |> renew_session(nil)
     |> delete_resp_cookie(@remember_me_cookie, @remember_me_options)
-    # `/` is the public Arena; ArenaLive lands in Task 13. Bypass
-    # verified_routes here so we don't warn until the route exists.
-    |> redirect(to: "/")
+    |> redirect(to: ~p"/")
   end
 
   @doc """

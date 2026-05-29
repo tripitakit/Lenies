@@ -37,8 +37,7 @@ defmodule LeniesWeb.Router do
 
     live_session :arena_public,
       on_mount: @sandbox_on_mount ++ [{LeniesWeb.UserAuth, :mount_current_scope}] do
-      # ArenaLive lives here once Task 13 ships. For now, commented out.
-      # live "/", ArenaLive, :index
+      live "/", ArenaLive, :index
 
       live "/users/register", UserLive.Registration, :new
       live "/users/log-in", UserLive.Login, :new
