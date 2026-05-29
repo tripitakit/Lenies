@@ -45,3 +45,7 @@ npm-debug.log
 # but not published in the public repo.
 /docs/superpowers/
 
+# Production deployment instructions — kept local; scp'd to the VPS manually.
+# May contain references to VPS paths, secrets layout, etc.
+/DEPLOY.md
+

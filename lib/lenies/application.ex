@@ -26,6 +26,9 @@ defmodule Lenies.Application do
       LeniesWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:lenies, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Lenies.PubSub},
+      # Finch HTTP client — used by Swoosh's Resend adapter in prod to send
+      # registration / magic-link emails. Cheap to run in dev/test too.
+      {Finch, name: Lenies.Finch},
       LeniesWeb.Presence,
       {Registry, keys: :unique, name: Lenies.Registry, partitions: System.schedulers_online()},
       Lenies.Worlds.Supervisor,

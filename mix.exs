@@ -64,6 +64,7 @@ defmodule Lenies.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
       {:swoosh, "~> 1.16"},
+      {:finch, "~> 0.18"},
       {:bandit, "~> 1.5"},
       {:earmark, "~> 1.4"}
     ]

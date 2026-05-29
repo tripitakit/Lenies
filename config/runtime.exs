@@ -68,9 +68,14 @@ if config_env() == :prod do
     System.get_env("DATABASE_URL") ||
       raise "environment variable DATABASE_URL is missing."
 
+  # Set ECTO_IPV6=true if Postgres is reachable only on IPv6 (e.g. a remote
+  # IPv6-only DB host). For a local Postgres on the same VPS this stays off.
+  maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
+
   config :lenies, Lenies.Repo,
     url: database_url,
-    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")
+    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
+    socket_options: maybe_ipv6
 
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
@@ -92,14 +97,45 @@ if config_env() == :prod do
   config :lenies, LeniesWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     http: [
-      # Enable IPv6 and bind on all interfaces.
-      # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
-      # See the documentation on https://hexdocs.pm/bandit/Bandit.html#t:options/0
-      # for details about using IPv6 vs IPv4 and loopback vs public addresses.
-      ip: {0, 0, 0, 0, 0, 0, 0, 0},
+      # Bind on IPv6 loopback only — the app is exclusively reached through
+      # nginx on the same host, so listening on public interfaces would only
+      # widen the attack surface. nginx proxy_pass uses http://localhost:PORT.
+      # If you ever need direct external access (e.g. debugging without
+      # nginx), temporarily switch to {0, 0, 0, 0, 0, 0, 0, 0}.
+      ip: {0, 0, 0, 0, 0, 0, 0, 1},
       port: port
     ],
     secret_key_base: secret_key_base
+
+  # ## Mailer — Resend transactional email service
+  #
+  # The free Resend tier (3000 emails/month) covers a small public community
+  # with room to spare. The sending domain must be verified via DNS (SPF +
+  # DKIM CNAME) in the Resend dashboard before the API key works.
+  #
+  # If you ever migrate to another provider (Postmark, SES, SMTP, etc.) the
+  # only change is the `adapter:` line plus credentials env vars — the rest
+  # of the app does not care which SMTP transport delivers the email.
+  resend_api_key =
+    System.get_env("RESEND_API_KEY") ||
+      raise """
+      environment variable RESEND_API_KEY is missing.
+      Generate one at https://resend.com/api-keys after verifying the sending
+      domain in the Resend dashboard. See DEPLOY.md Phase 0 for details.
+      """
+
+  config :lenies, Lenies.Mailer,
+    adapter: Swoosh.Adapters.Resend,
+    api_key: resend_api_key
+
+  config :lenies, :mailer_from,
+    name: System.get_env("MAILER_FROM_NAME") || "Lenies",
+    address: System.get_env("MAILER_FROM_ADDRESS") || "noreply@#{host}"
+
+  # Swoosh sends through an HTTP API in prod. Enable the Finch-based API
+  # client; the Lenies.Finch process is started in Lenies.Application.
+  config :swoosh, :api_client, Swoosh.ApiClient.Finch
+  config :swoosh, Swoosh.ApiClient.Finch, name: Lenies.Finch
 
   # ## SSL Support
   #

@@ -9,12 +9,22 @@ defmodule Lenies.Accounts.UserNotifier do
     email =
       new()
       |> to(recipient)
-      |> from({"Lenies", "contact@example.com"})
+      |> from(from())
       |> subject(subject)
       |> text_body(body)
 
     with {:ok, _metadata} <- Mailer.deliver(email) do
       {:ok, email}
+    end
+  end
+
+  # In prod the From address is set in `config/runtime.exs` from the
+  # MAILER_FROM_NAME / MAILER_FROM_ADDRESS env vars. In dev/test we fall back
+  # to a placeholder address that the Local/Test adapters never actually send.
+  defp from do
+    case Application.get_env(:lenies, :mailer_from) do
+      [name: name, address: address] -> {name, address}
+      _ -> {"Lenies", "contact@example.com"}
     end
   end
 
