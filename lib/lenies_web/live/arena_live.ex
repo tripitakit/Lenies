@@ -42,6 +42,12 @@ defmodule LeniesWeb.ArenaLive do
     :ok = Lenies.Arena.attach_viewer()
     {:ok, world_handle} = Lenies.Worlds.handle(@world_id)
 
+    lineage_count =
+      case socket.assigns[:current_scope] do
+        %{user: %{id: id}} -> Lenies.Arena.lineage_count(id)
+        _ -> 0
+      end
+
     session_id = derive_session_id(socket)
 
     if connected?(socket) do
@@ -66,6 +72,7 @@ defmodule LeniesWeb.ArenaLive do
       |> assign(:world_handle, world_handle)
       |> assign(:session_id, session_id)
       |> assign(:viewer_count, viewer_count())
+      |> assign(:lineage_count, lineage_count)
       |> assign(:grid, grid)
       |> assign(:tick_count, 0)
       |> assign(:layers_visible, %{lenies: true, resource: true, carcass: true})
@@ -361,8 +368,14 @@ defmodule LeniesWeb.ArenaLive do
                   Selecting a row still dims the canvas via :selected_hash. --%>
           </div>
 
-          <aside class="arena-controls-placeholder panel p-3 text-xs opacity-60">
-            Arena controls (Task 14)
+          <aside class="arena-controls">
+            <.live_component
+              module={LeniesWeb.ArenaControlsComponent}
+              id="arena-controls"
+              current_scope={@current_scope}
+              world_handle={@world_handle}
+              lineage_count={@lineage_count}
+            />
           </aside>
         </div>
       </div>
@@ -529,6 +542,16 @@ defmodule LeniesWeb.ArenaLive do
   def handle_info(:arena_manager_up, socket) do
     :ok = Lenies.Arena.attach_viewer()
     {:noreply, socket}
+  end
+
+  def handle_info({:arena_lineage_changed, user_id}, socket) do
+    case socket.assigns[:current_scope] do
+      %{user: %{id: ^user_id}} ->
+        {:noreply, assign(socket, :lineage_count, Lenies.Arena.lineage_count(user_id))}
+
+      _ ->
+        {:noreply, socket}
+    end
   end
 
   def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do
