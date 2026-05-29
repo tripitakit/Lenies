@@ -52,7 +52,6 @@ defmodule Lenies.ArenaTest do
 
   describe "Lenies.Arena lifecycle" do
     setup do
-      start_supervised!({Lenies.Arena, []})
       :ok
     end
 
@@ -172,7 +171,6 @@ defmodule Lenies.ArenaTest do
 
   describe "auto-restore" do
     setup do
-      start_supervised!({Lenies.Arena, []})
       Application.put_env(:lenies, :arena_grace_ms, 50)
       on_exit(fn -> Application.delete_env(:lenies, :arena_grace_ms) end)
       :ok
@@ -226,7 +224,6 @@ defmodule Lenies.ArenaTest do
     setup do
       Ecto.Adapters.SQL.Sandbox.checkout(Lenies.Repo)
       Ecto.Adapters.SQL.Sandbox.mode(Lenies.Repo, {:shared, self()})
-      start_supervised!({Lenies.Arena, []})
       :ok = Lenies.Arena.attach_viewer(self())
       on_exit(fn -> Lenies.Worlds.stop_world(:arena) end)
       :ok
@@ -279,7 +276,6 @@ defmodule Lenies.ArenaTest do
     setup do
       :ok = Ecto.Adapters.SQL.Sandbox.checkout(Lenies.Repo)
       Ecto.Adapters.SQL.Sandbox.mode(Lenies.Repo, {:shared, self()})
-      start_supervised!({Lenies.Arena, []})
       :ok = Lenies.Arena.attach_viewer(self())
       on_exit(fn -> Lenies.Worlds.stop_world(:arena) end)
       :ok
@@ -342,6 +338,27 @@ defmodule Lenies.ArenaTest do
       Process.sleep(100)
       assert Lenies.Arena.lineage_count(user_a.id) == 0
       assert Lenies.Arena.lineage_count(user_b.id) == 1
+    end
+  end
+
+  describe "crash recovery / adopt" do
+    test "on init, adopts a running :arena world and broadcasts arena:manager_up" do
+      :ok = Lenies.Arena.attach_viewer(self())
+      assert Lenies.Worlds.alive?(:arena)
+
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "arena:manager_up")
+      pid = Process.whereis(Lenies.Arena)
+      Process.exit(pid, :kill)
+
+      assert_receive :arena_manager_up, 1_000
+
+      Process.sleep(50)
+      state = :sys.get_state(Lenies.Arena)
+      assert state.started? == true
+      assert MapSet.size(state.viewers) == 0
+      refute is_nil(state.pending_stop)
+
+      :ok = Lenies.Worlds.stop_world(:arena)
     end
   end
 end

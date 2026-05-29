@@ -70,7 +70,25 @@ defmodule Lenies.Arena do
   def apoptosis(user), do: GenServer.call(__MODULE__, {:apoptosis, user})
 
   @impl true
-  def init(_opts), do: {:ok, initial_state()}
+  def init(_opts) do
+    state =
+      if Lenies.Worlds.alive?(@world_id) do
+        ref = Process.send_after(self(), {:maybe_stop, 1}, grace_ms())
+
+        %{
+          started?: true,
+          viewers: MapSet.new(),
+          monitors: %{},
+          pending_stop: ref,
+          generation: 1
+        }
+      else
+        initial_state()
+      end
+
+    Phoenix.PubSub.broadcast(Lenies.PubSub, "arena:manager_up", :arena_manager_up)
+    {:ok, state}
+  end
 
   defp initial_state do
     %{
@@ -103,22 +121,31 @@ defmodule Lenies.Arena do
     end
   end
 
-  def handle_call({:attach_viewer, pid}, _from, %{started?: true} = state) do
-    new_state =
-      if MapSet.member?(state.viewers, pid) do
-        %{state | generation: state.generation + 1}
-      else
-        ref = Process.monitor(pid)
+  def handle_call({:attach_viewer, pid}, from, %{started?: true} = state) do
+    if Lenies.Worlds.alive?(@world_id) do
+      new_state =
+        if MapSet.member?(state.viewers, pid) do
+          %{state | generation: state.generation + 1}
+        else
+          ref = Process.monitor(pid)
 
-        %{
-          state
-          | viewers: MapSet.put(state.viewers, pid),
-            monitors: Map.put(state.monitors, pid, ref),
-            generation: state.generation + 1
-        }
-      end
+          %{
+            state
+            | viewers: MapSet.put(state.viewers, pid),
+              monitors: Map.put(state.monitors, pid, ref),
+              generation: state.generation + 1
+          }
+        end
 
-    {:reply, :ok, cancel_pending_stop(new_state)}
+      {:reply, :ok, cancel_pending_stop(new_state)}
+    else
+      # World died externally (operator stop, crash). Demonitor any stale
+      # viewer refs, reset to cold-start state, and re-handle so the world
+      # is brought back up.
+      Enum.each(state.monitors, fn {_pid, ref} -> Process.demonitor(ref, [:flush]) end)
+      reset = cancel_pending_stop(%{state | started?: false, viewers: MapSet.new(), monitors: %{}})
+      handle_call({:attach_viewer, pid}, from, reset)
+    end
   end
 
   def handle_call({:seed, user, codeome_id}, _from, state) do

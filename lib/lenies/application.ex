@@ -29,6 +29,7 @@ defmodule Lenies.Application do
       {Registry, keys: :unique, name: Lenies.Registry, partitions: System.schedulers_online()},
       Lenies.Worlds.Supervisor,
       Lenies.Sandboxes,
+      Lenies.Arena,
       Lenies.Snippets.Store,
       Lenies.Manual,
       LeniesWeb.Endpoint
