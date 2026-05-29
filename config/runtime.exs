@@ -94,6 +94,14 @@ if config_env() == :prod do
 
   config :lenies, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
+  # Persistent snapshot root. If LENIES_SNAPSHOT_ROOT is set (as in the systemd
+  # env file pointing at /var/lib/lenies/snapshots), use it. Otherwise the
+  # default Lenies.Snapshot.snapshot_root/0 picks <tmp>/lenies-snapshots/,
+  # which won't survive a reboot.
+  if snapshot_root = System.get_env("LENIES_SNAPSHOT_ROOT") do
+    config :lenies, :snapshot_root, snapshot_root
+  end
+
   config :lenies, LeniesWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     http: [
