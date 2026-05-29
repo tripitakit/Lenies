@@ -143,7 +143,7 @@ if config_env() == :prod do
   # Swoosh sends through an HTTP API in prod. Enable the Finch-based API
   # client; the Lenies.Finch process is started in Lenies.Application.
   config :swoosh, :api_client, Swoosh.ApiClient.Finch
-  config :swoosh, Swoosh.ApiClient.Finch, name: Lenies.Finch
+  config :swoosh, :finch_name, Lenies.Finch
 
   # ## SSL Support
   #
