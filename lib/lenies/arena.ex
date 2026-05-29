@@ -18,12 +18,17 @@ defmodule Lenies.Arena do
   use GenServer
 
   @world_id :arena
+  @grace_ms 30_000
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
   @doc "Attach the calling viewer pid to the Arena. Idempotent; starts the world on first attach."
   @spec attach_viewer(pid) :: :ok | {:error, term}
   def attach_viewer(pid \\ self()), do: GenServer.call(__MODULE__, {:attach_viewer, pid})
+
+  @doc "Explicit detach. Usually unnecessary — :DOWN handles disconnect."
+  @spec detach_viewer(pid) :: :ok
+  def detach_viewer(pid \\ self()), do: GenServer.cast(__MODULE__, {:detach_viewer, pid})
 
   @impl true
   def init(_opts), do: {:ok, initial_state()}
@@ -77,6 +82,14 @@ defmodule Lenies.Arena do
     {:reply, :ok, cancel_pending_stop(new_state)}
   end
 
+  @impl true
+  def handle_cast({:detach_viewer, pid}, state), do: {:noreply, remove_viewer(state, pid)}
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    {:noreply, remove_viewer(state, pid)}
+  end
+
   defp start_arena do
     case Lenies.Worlds.start_world(@world_id, %{}) do
       {:ok, sup_pid} -> {:ok, sup_pid}
@@ -91,4 +104,33 @@ defmodule Lenies.Arena do
     _ = Process.cancel_timer(ref)
     %{state | pending_stop: nil}
   end
+
+  defp remove_viewer(state, pid) do
+    if MapSet.member?(state.viewers, pid) do
+      new_viewers = MapSet.delete(state.viewers, pid)
+      new_monitors = Map.delete(state.monitors, pid)
+      new_state = %{state | viewers: new_viewers, monitors: new_monitors}
+
+      if MapSet.size(new_viewers) == 0 and state.started? do
+        schedule_grace_stop(new_state)
+      else
+        new_state
+      end
+    else
+      state
+    end
+  end
+
+  defp schedule_grace_stop(state) do
+    ref =
+      Process.send_after(
+        self(),
+        {:maybe_stop, state.generation},
+        grace_ms()
+      )
+
+    %{state | pending_stop: ref}
+  end
+
+  defp grace_ms, do: Application.get_env(:lenies, :arena_grace_ms, @grace_ms)
 end

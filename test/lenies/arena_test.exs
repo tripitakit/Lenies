@@ -61,5 +61,52 @@ defmodule Lenies.ArenaTest do
       assert Lenies.Worlds.alive?(:arena)
       :ok = Lenies.Worlds.stop_world(:arena)
     end
+
+    test "last viewer disconnect schedules grace timer; world still alive" do
+      task =
+        Task.async(fn ->
+          :ok = Lenies.Arena.attach_viewer()
+          receive do :exit -> :ok end
+        end)
+      Process.sleep(20)
+      send(task.pid, :exit)
+      Task.await(task)
+      Process.sleep(100)
+
+      state = :sys.get_state(Lenies.Arena)
+      assert MapSet.size(state.viewers) == 0
+      refute is_nil(state.pending_stop)
+      assert Lenies.Worlds.alive?(:arena)
+      :ok = Lenies.Worlds.stop_world(:arena)
+    end
+
+    test "second viewer disconnect leaves first viewer attached, no grace timer" do
+      :ok = Lenies.Arena.attach_viewer(self())
+      task =
+        Task.async(fn ->
+          :ok = Lenies.Arena.attach_viewer()
+          receive do :exit -> :ok end
+        end)
+      Process.sleep(20)
+      send(task.pid, :exit)
+      Task.await(task)
+      Process.sleep(100)
+
+      state = :sys.get_state(Lenies.Arena)
+      assert MapSet.size(state.viewers) == 1
+      assert is_nil(state.pending_stop)
+      :ok = Lenies.Worlds.stop_world(:arena)
+    end
+
+    test "explicit detach_viewer also schedules grace timer when last viewer leaves" do
+      :ok = Lenies.Arena.attach_viewer(self())
+      :ok = Lenies.Arena.detach_viewer(self())
+      Process.sleep(50)
+
+      state = :sys.get_state(Lenies.Arena)
+      assert MapSet.size(state.viewers) == 0
+      refute is_nil(state.pending_stop)
+      :ok = Lenies.Worlds.stop_world(:arena)
+    end
   end
 end
