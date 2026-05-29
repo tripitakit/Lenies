@@ -85,6 +85,12 @@ defmodule Lenies.MixProject do
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind lenies", "esbuild lenies"],
       "assets.deploy": [
+        # `compile` must run first so Phoenix.LiveView's compiler can write the
+        # virtual `phoenix-colocated/lenies` module that `js/app.js` imports
+        # (colocated LiveView JS hooks). Without this, a fresh prod build with
+        # empty `_build/prod/` fails esbuild with
+        # `Could not resolve "phoenix-colocated/lenies"`.
+        "compile",
         "tailwind lenies --minify",
         "esbuild lenies --minify",
         "phx.digest"
