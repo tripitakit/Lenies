@@ -107,10 +107,12 @@ defmodule Lenies.LenieTest do
     test "Lenie stores seeder_user_id from opts and writes it to its ETS snapshot",
          %{world_id: world_id, handle: handle} do
       codeome = Lenies.Seeds.get(:minimal_replicator).codeome
+
       {:ok, {id, _pos}} =
         Lenies.Worlds.spawn_lenie(world_id, codeome, energy: 500.0, seeder_user_id: 42)
 
-      Process.sleep(50)  # let the Lenie process write its initial snapshot
+      # let the Lenie process write its initial snapshot
+      Process.sleep(50)
 
       assert [{^id, snap}] = :ets.lookup(handle.tables.lenies, id)
       assert snap.seeder_user_id == 42

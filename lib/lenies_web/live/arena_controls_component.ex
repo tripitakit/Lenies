@@ -31,11 +31,9 @@ defmodule LeniesWeb.ArenaControlsComponent do
         <% is_nil(@current_scope) or is_nil(@current_scope.user) -> %>
           <p>Log in to seed your Lenie in the Arena.</p>
           <.link navigate={~p"/users/log-in"}>Log in</.link>
-
         <% @codeomes == [] -> %>
           <p>Save a codeome in your Sandbox first.</p>
           <.link navigate={~p"/sandbox/editor/new"}>Open the editor</.link>
-
         <% @lineage_count == 0 -> %>
           <.form for={%{}} as={:seed} phx-submit="seed" phx-target={@myself}>
             <select name="codeome_id">
@@ -45,12 +43,10 @@ defmodule LeniesWeb.ArenaControlsComponent do
             </select>
             <button type="submit">Seed your Lenie</button>
           </.form>
-
         <% @apoptosis_confirming -> %>
           <p>Stop all {@lineage_count} of your Lenies in the Arena?</p>
           <button type="button" phx-click="apoptosis_confirm" phx-target={@myself}>Confirm</button>
           <button type="button" phx-click="apoptosis_cancel" phx-target={@myself}>Cancel</button>
-
         <% true -> %>
           <p>Your lineage: {@lineage_count} Lenies alive</p>
           <button type="button" phx-click="apoptosis_init" phx-target={@myself}>

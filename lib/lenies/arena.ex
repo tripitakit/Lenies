@@ -143,7 +143,10 @@ defmodule Lenies.Arena do
       # viewer refs, reset to cold-start state, and re-handle so the world
       # is brought back up.
       Enum.each(state.monitors, fn {_pid, ref} -> Process.demonitor(ref, [:flush]) end)
-      reset = cancel_pending_stop(%{state | started?: false, viewers: MapSet.new(), monitors: %{}})
+
+      reset =
+        cancel_pending_stop(%{state | started?: false, viewers: MapSet.new(), monitors: %{}})
+
       handle_call({:attach_viewer, pid}, from, reset)
     end
   end
