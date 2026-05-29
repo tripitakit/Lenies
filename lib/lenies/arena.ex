@@ -90,6 +90,40 @@ defmodule Lenies.Arena do
     {:noreply, remove_viewer(state, pid)}
   end
 
+  @impl true
+  def handle_info({:maybe_stop, gen}, state) do
+    cond do
+      state.generation != gen ->
+        # Generation changed (re-attach refreshed lifecycle). Ignore.
+        {:noreply, state}
+
+      MapSet.size(state.viewers) > 0 ->
+        # New attaches since grace was scheduled. Ignore.
+        {:noreply, state}
+
+      true ->
+        auto_save()
+        _ = Lenies.Worlds.stop_world(@world_id)
+        {:noreply, initial_state()}
+    end
+  end
+
+  defp auto_save do
+    case Lenies.Worlds.save_snapshot(@world_id, "auto") do
+      :ok ->
+        :ok
+
+      :error ->
+        # World already gone (race with manual stop). No-op.
+        :ok
+
+      {:error, reason} ->
+        require Logger
+        Logger.error("Lenies.Arena: auto-snapshot save failed: #{inspect(reason)}")
+        :ok
+    end
+  end
+
   defp start_arena do
     case Lenies.Worlds.start_world(@world_id, %{}) do
       {:ok, sup_pid} -> {:ok, sup_pid}

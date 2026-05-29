@@ -108,5 +108,46 @@ defmodule Lenies.ArenaTest do
       refute is_nil(state.pending_stop)
       :ok = Lenies.Worlds.stop_world(:arena)
     end
+
+    test "grace expires with no re-attach: world stops, state resets" do
+      Application.put_env(:lenies, :arena_grace_ms, 50)
+      on_exit(fn -> Application.delete_env(:lenies, :arena_grace_ms) end)
+
+      task =
+        Task.async(fn ->
+          :ok = Lenies.Arena.attach_viewer()
+          receive do :exit -> :ok end
+        end)
+      Process.sleep(20)
+      send(task.pid, :exit)
+      Task.await(task)
+      Process.sleep(200)
+
+      refute Lenies.Worlds.alive?(:arena)
+      state = :sys.get_state(Lenies.Arena)
+      assert state.started? == false
+      assert MapSet.size(state.viewers) == 0
+    end
+
+    test "re-attach during grace cancels the timer and keeps the world alive" do
+      Application.put_env(:lenies, :arena_grace_ms, 50)
+      on_exit(fn -> Application.delete_env(:lenies, :arena_grace_ms) end)
+
+      task =
+        Task.async(fn ->
+          :ok = Lenies.Arena.attach_viewer()
+          receive do :exit -> :ok end
+        end)
+      Process.sleep(20)
+      send(task.pid, :exit)
+      Task.await(task)
+      Process.sleep(10)  # 10 ms into the 50 ms grace
+
+      :ok = Lenies.Arena.attach_viewer(self())
+      Process.sleep(200)  # past the original grace window
+
+      assert Lenies.Worlds.alive?(:arena)
+      :ok = Lenies.Worlds.stop_world(:arena)
+    end
   end
 end
