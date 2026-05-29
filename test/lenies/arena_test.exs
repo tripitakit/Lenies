@@ -49,4 +49,17 @@ defmodule Lenies.ArenaTest do
       refute parent_id in [], "sanity: parent was spawned"
     end
   end
+
+  describe "Lenies.Arena lifecycle" do
+    setup do
+      start_supervised!({Lenies.Arena, []})
+      :ok
+    end
+
+    test "first attach_viewer starts the :arena world" do
+      :ok = Lenies.Arena.attach_viewer(self())
+      assert Lenies.Worlds.alive?(:arena)
+      :ok = Lenies.Worlds.stop_world(:arena)
+    end
+  end
 end
