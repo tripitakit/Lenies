@@ -25,7 +25,7 @@ defmodule LeniesWeb.UserAuthTest do
       conn = UserAuth.log_in_user(conn, user)
       assert token = get_session(conn, :user_token)
       assert get_session(conn, :live_socket_id) == "users_sessions:#{Base.url_encode64(token)}"
-      assert redirected_to(conn) == ~p"/"
+      assert redirected_to(conn) == ~p"/sandbox"
       assert Accounts.get_user_by_session_token(token)
     end
 
@@ -120,7 +120,8 @@ defmodule LeniesWeb.UserAuthTest do
       refute get_session(conn, :user_token)
       refute conn.cookies[@remember_me_cookie]
       assert %{max_age: 0} = conn.resp_cookies[@remember_me_cookie]
-      assert redirected_to(conn) == ~p"/"
+      # Logout redirects to "/" (future Arena landing) — plain string, no route.
+      assert redirected_to(conn) == "/"
       refute Accounts.get_user_by_session_token(user_token)
     end
 
@@ -139,7 +140,7 @@ defmodule LeniesWeb.UserAuthTest do
       conn = conn |> fetch_cookies() |> UserAuth.log_out_user()
       refute get_session(conn, :user_token)
       assert %{max_age: 0} = conn.resp_cookies[@remember_me_cookie]
-      assert redirected_to(conn) == ~p"/"
+      assert redirected_to(conn) == "/"
     end
   end
 

@@ -10,7 +10,7 @@ defmodule LeniesWeb.EditorLiveTest do
     # LenieSupervisor / Registry entries) are available BEFORE the LV
     # mounts. Pause immediately to match the legacy tick_interval_ms: 0
     # behaviour — the editor tests pre-populate ETS / Registry and only
-    # then call `live(conn, "/editor/...")`.
+    # then call `live(conn, "/sandbox/editor/...")`.
     :ok = Lenies.Sandboxes.attach(user.id)
     world_id = {:sandbox, user.id}
     {:ok, handle} = Lenies.Worlds.handle(world_id)
@@ -30,27 +30,27 @@ defmodule LeniesWeb.EditorLiveTest do
     %{world_id: world_id, handle: handle}
   end
 
-  test "mounts on /editor/new with empty buffer", %{conn: conn} do
-    {:ok, _view, html} = live(conn, "/editor/new")
+  test "mounts on /sandbox/editor/new with empty buffer", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/sandbox/editor/new")
     assert html =~ "New Seed"
     assert html =~ ~s(id="manual-pane")
   end
 
   test "flash group is rendered", %{conn: conn} do
-    {:ok, view, _html} = live(conn, "/editor/new")
+    {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
     assert has_element?(view, "#flash-group")
     assert has_element?(view, "#client-error")
     assert has_element?(view, "#server-error")
   end
 
-  test "mounts on /editor/edit/:hash with empty buffer when hash unknown", %{conn: conn} do
-    {:ok, _view, html} = live(conn, "/editor/edit/NONEXISTENT")
+  test "mounts on /sandbox/editor/edit/:hash with empty buffer when hash unknown", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/sandbox/editor/edit/NONEXISTENT")
     assert html =~ "Edit: NONEXISTENT"
     assert html =~ "0 ops"
   end
 
   test "toggling the manual pane updates the grid class", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     refute render(view) =~ "manual-collapsed"
 
     render_hook(view, "toggle_manual", %{})
@@ -59,14 +59,14 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "selecting a chapter updates the current chapter", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "select_chapter", %{"chapter" => "04-loops-and-templates.md"})
 
     html = render(view)
     assert html =~ ~r/Loops|Templates/
   end
 
-  test "/editor/edit/:hash loads codeome of a live species", %{conn: conn, handle: handle} do
+  test "/sandbox/editor/edit/:hash loads codeome of a live species", %{conn: conn, handle: handle} do
     codeome = Lenies.Codeomes.MinimalReplicator.codeome()
     hash = Lenies.Codeome.hash(codeome)
 
@@ -90,12 +90,12 @@ defmodule LeniesWeb.EditorLiveTest do
       {"TEST-EDITOR-L1", %{id: "TEST-EDITOR-L1", codeome_hash: hash}}
     )
 
-    {:ok, _view, html} = live(conn, "/editor/edit/#{hash}")
+    {:ok, _view, html} = live(conn, ~p"/sandbox/editor/edit/#{hash}")
     assert html =~ "155 ops"
   end
 
   test "drag-drop insert via edit_insert handler appends opcode and marks dirty", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     refute render(view) =~ "●dirty"
 
     render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "push0"})
@@ -106,7 +106,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "delete handler removes the opcode at the given index", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "push0"})
     render_hook(view, "edit_insert", %{"index" => 1, "opcode" => "push1"})
     render_hook(view, "edit_delete", %{"index" => "0"})
@@ -122,7 +122,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "submit_opcode_text appends all tokens when all valid", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
 
     view
     |> form("form[phx-submit=submit_opcode_text]", %{opcodes: "push0 push1 add"})
@@ -137,7 +137,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "submit_opcode_text is case-insensitive and tolerates commas", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
 
     view
     |> form("form[phx-submit=submit_opcode_text]", %{opcodes: "PUSH0, ADD"})
@@ -149,7 +149,7 @@ defmodule LeniesWeb.EditorLiveTest do
 
   test "submit_opcode_text rejects all-or-nothing on invalid token and surfaces error",
        %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
 
     view
     |> form("form[phx-submit=submit_opcode_text]", %{opcodes: "push0 foobar baz"})
@@ -165,7 +165,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "submit_opcode_text with empty input is a no-op", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
 
     view
     |> form("form[phx-submit=submit_opcode_text]", %{opcodes: "   "})
@@ -178,7 +178,7 @@ defmodule LeniesWeb.EditorLiveTest do
 
   describe "block selection" do
     defp seeded_editor(conn) do
-      {:ok, view, _} = live(conn, "/editor/new")
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add move eat"})
       view
     end
@@ -216,7 +216,7 @@ defmodule LeniesWeb.EditorLiveTest do
 
   describe "clipboard and editing" do
     defp seeded_editor2(conn) do
-      {:ok, view, _} = live(conn, "/editor/new")
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add move eat"})
       view
     end
@@ -280,7 +280,7 @@ defmodule LeniesWeb.EditorLiveTest do
 
   describe "undo / redo" do
     defp seeded_editor3(conn) do
-      {:ok, view, _} = live(conn, "/editor/new")
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
       view
     end
@@ -304,7 +304,7 @@ defmodule LeniesWeb.EditorLiveTest do
     end
 
     test "undo with empty history is a no-op", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/editor/new")
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       html = render_hook(view, "undo", %{})
       assert names(html) == []
     end
@@ -320,7 +320,7 @@ defmodule LeniesWeb.EditorLiveTest do
     end
 
     test "dirty flag tracks undo/redo back to the original buffer", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/editor/new")
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       html_after = render_hook(view, "submit_opcode_text", %{"opcodes" => "push0"})
       assert html_after =~ "●dirty"
 
@@ -385,7 +385,7 @@ defmodule LeniesWeb.EditorLiveTest do
     end
 
     test "save selection as snippet, then insert it", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/editor/new")
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
       render_hook(view, "select_block", %{"index" => 0, "shift" => false})
       render_hook(view, "select_block", %{"index" => 1, "shift" => true})
@@ -402,14 +402,14 @@ defmodule LeniesWeb.EditorLiveTest do
 
     test "delete a snippet removes it from the section", %{conn: conn} do
       Lenies.Snippets.Store.save(%{id: "loop", name: "Loop", opcodes: [:move, :eat]})
-      {:ok, view, _} = live(conn, "/editor/new")
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       assert render(view) =~ "codeome-snippet-insert"
       html = render_hook(view, "delete_snippet", %{"id" => "loop"})
       refute html =~ "codeome-snippet-insert"
     end
 
     test "submit_snippet with no selection is a no-op", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/editor/new")
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       render_hook(view, "submit_opcode_text", %{"opcodes" => "push0"})
       render_hook(view, "submit_snippet", %{"snippet_name" => "X"})
       assert Lenies.Snippets.Store.all() == []
@@ -418,7 +418,7 @@ defmodule LeniesWeb.EditorLiveTest do
     test "submit_snippet with an invalid name keeps the form open and saves nothing", %{
       conn: conn
     } do
-      {:ok, view, _} = live(conn, "/editor/new")
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
       render_hook(view, "select_block", %{"index" => 0, "shift" => false})
       render_hook(view, "open_snippet_form", %{})
@@ -430,20 +430,20 @@ defmodule LeniesWeb.EditorLiveTest do
 
   describe "editor toolbar" do
     test "paste button is disabled with an empty clipboard", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/editor/new")
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       html = render(view)
       assert html =~ ~r/phx-click="paste_clipboard"[^>]*disabled/
     end
 
     test "copy button enables once a block is selected", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/editor/new")
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
       html = render_hook(view, "select_block", %{"index" => 0, "shift" => false})
       refute html =~ ~r/phx-click="copy_selection"[^>]*disabled/
     end
 
     test "clicking the Delete toolbar button removes the selection", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/editor/new")
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
       render_hook(view, "select_block", %{"index" => 0, "shift" => false})
 
@@ -460,7 +460,7 @@ defmodule LeniesWeb.EditorLiveTest do
     end
 
     test "undo button enables after a mutation", %{conn: conn} do
-      {:ok, view, _} = live(conn, "/editor/new")
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       assert render(view) =~ ~r/phx-click="undo"[^>]*disabled/
       render_hook(view, "submit_opcode_text", %{"opcodes" => "push0"})
       refute render(view) =~ ~r/phx-click="undo"[^>]*disabled/
@@ -468,7 +468,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "clicking a gap places a collapsed caret", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0"})
     # buffer len 1; caret defaults to end (gap 1). Click gap 0.
     render_hook(view, "place_caret", %{"gap" => 0})
@@ -477,7 +477,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "clicking a block selects exactly that block", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
     render_hook(view, "select_block", %{"index" => 1, "shift" => false})
     assert has_element?(view, ".codeome-block-selected[data-idx='1']")
@@ -485,7 +485,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "move_caret up and down navigate through gaps", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
     render_hook(view, "move_caret", %{"dir" => "up", "extend" => false})
     render_hook(view, "move_caret", %{"dir" => "up", "extend" => false})
@@ -495,7 +495,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "Home and End place the caret at the buffer ends", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
     render_hook(view, "move_caret_end", %{"to" => "start"})
     assert has_element?(view, "[data-caret-at='0']")
@@ -504,7 +504,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "palette insert lands at the caret, not at the end", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 add"})
     render_hook(view, "place_caret", %{"gap" => 1})
     render_hook(view, "edit_insert", %{"index" => 1, "opcode" => "push1"})
@@ -513,7 +513,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "inserting with an active selection replaces it", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
     render_hook(view, "select_block", %{"index" => 1, "shift" => false})
     render_hook(view, "select_block", %{"index" => 2, "shift" => true})
@@ -529,7 +529,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "snippet inserts at the caret", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     :ok = Lenies.Snippets.Store.save(%{id: "twoops", name: "twoops", opcodes: [:push0, :push1]})
     render_hook(view, "submit_opcode_text", %{"opcodes" => "add eat"})
     render_hook(view, "place_caret", %{"gap" => 1})
@@ -538,7 +538,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "dropping a snippet at a gap inserts it there", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     :ok = Lenies.Snippets.Store.save(%{id: "pp", name: "pp", opcodes: [:push0, :push1]})
     render_hook(view, "submit_opcode_text", %{"opcodes" => "add eat"})
     render_hook(view, "insert_snippet_at", %{"id" => "pp", "index" => 1})
@@ -555,7 +555,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "move_range relocates the selected block range", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add eat"})
     render_hook(view, "select_block", %{"index" => 0, "shift" => false})
     render_hook(view, "select_block", %{"index" => 1, "shift" => true})
@@ -567,7 +567,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "Alt+arrow nudges the selection down by one", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
     render_hook(view, "select_block", %{"index" => 0, "shift" => false})
     render_hook(view, "move_range_step", %{"dir" => "down"})
@@ -577,7 +577,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "duplicate copies the selection after itself and selects the copy", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
     render_hook(view, "select_block", %{"index" => 0, "shift" => false})
     render_hook(view, "duplicate_selection", %{})
@@ -587,7 +587,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "undo collapses the caret to the end of the restored buffer", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
     render_hook(view, "place_caret", %{"gap" => 3})
     render_hook(view, "submit_opcode_text", %{"opcodes" => "eat"})
@@ -600,7 +600,7 @@ defmodule LeniesWeb.EditorLiveTest do
   # order in the listing pane — this avoids false positives from palette chips
   # (e.g. PUSH1 appears in the palette regardless of buffer contents).
   test "submit_replace swaps the opcode at an index", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
     render_hook(view, "submit_replace", %{"index" => 1, "opcode" => "eat"})
     html = render(view)
@@ -610,7 +610,7 @@ defmodule LeniesWeb.EditorLiveTest do
   test "submit_replace with an unknown opcode keeps the editor open and shows an error", %{
     conn: conn
   } do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
     render_hook(view, "start_inline_edit", %{"index" => 0})
     render_hook(view, "submit_replace", %{"index" => 0, "opcode" => "notreal"})
@@ -626,7 +626,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "submit_replace with a valid opcode closes the editor", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
     render_hook(view, "start_inline_edit", %{"index" => 1})
     render_hook(view, "submit_replace", %{"index" => 1, "opcode" => "eat"})
@@ -636,7 +636,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "cancel_inline_edit closes the inline editor", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
     render_hook(view, "start_inline_edit", %{"index" => 0})
     assert render(view) =~ "codeome-inline-input"
@@ -645,7 +645,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "a jump block shows its target index badge", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "jmp_t nop_0 add nop_1 eat"})
     html = render(view)
     assert html =~ "codeome-jump-badge"
@@ -653,7 +653,7 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "an unresolved jump shows the not-found badge", %{conn: conn} do
-    {:ok, view, _} = live(conn, "/editor/new")
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "jmp_t nop_0 add eat"})
     assert render(view) =~ "codeome-jump-badge-missing"
   end
