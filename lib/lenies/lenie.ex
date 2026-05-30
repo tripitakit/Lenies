@@ -328,8 +328,7 @@ defmodule Lenies.Lenie do
     # ArenaLive's Seed/Apoptosis UI refreshes on natural death.
     GenServer.cast(
       state.world.pid,
-      {:lenie_died, state.id, state.interp.pos, state.interp.energy, hash,
-       state.seeder_user_id}
+      {:lenie_died, state.id, state.interp.pos, state.interp.energy, hash, state.seeder_user_id}
     )
 
     :ok
