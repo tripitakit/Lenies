@@ -15,11 +15,11 @@ defmodule LeniesWeb.ControlsPanelComponent do
     %{
       key: :lenie_metabolize_delay_ms,
       label: "Lenie metabolize delay (ms)",
-      min: 0,
+      min: 100,
       max: 500,
       step: 5
     },
-    %{key: :tick_interval_ms, label: "World tick interval (ms)", min: 20, max: 1000, step: 10},
+    %{key: :tick_interval_ms, label: "World tick interval (ms)", min: 200, max: 1000, step: 10},
     %{
       key: :copy_substitution_rate,
       label: "Copy substitution rate",

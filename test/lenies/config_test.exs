@@ -8,11 +8,11 @@ defmodule Lenies.ConfigTest do
   end
 
   test "tick_interval_ms/0 returns configured value" do
-    assert Config.tick_interval_ms() == 100
+    assert Config.tick_interval_ms() == 200
   end
 
   test "radiation_per_tick/0 returns configured value" do
-    assert Config.radiation_per_tick() == 1000
+    assert Config.radiation_per_tick() == 500
   end
 
   test "cell_resource_cap/0 returns configured value" do

@@ -33,7 +33,7 @@ defmodule Lenies.WorldTest do
     Lenies.Worlds.tick_now(world_id)
     stats_after = Lenies.Worlds.snapshot_stats(world_id)
     # radiation_per_tick default (config/runtime.exs)
-    assert stats_after.total_resource == 1000
+    assert stats_after.total_resource == 500
     assert stats_after.tick_count == 1
   end
 

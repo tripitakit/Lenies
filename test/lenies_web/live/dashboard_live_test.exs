@@ -865,6 +865,16 @@ defmodule LeniesWeb.DashboardLiveTest do
                "#slider-radiation_per_tick[phx-hook='SliderValue'][data-value-target='val-radiation_per_tick']"
              )
     end
+
+    test "tick_interval_ms slider has min=200", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/sandbox")
+      assert html =~ ~r/id="slider-tick_interval_ms"[^>]+min="200"/
+    end
+
+    test "lenie_metabolize_delay_ms slider has min=100", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/sandbox")
+      assert html =~ ~r/id="slider-lenie_metabolize_delay_ms"[^>]+min="100"/
+    end
   end
 
   # ---------------------------------------------------------------------------
