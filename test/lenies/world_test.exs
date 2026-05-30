@@ -247,4 +247,52 @@ defmodule Lenies.WorldTest do
       assert is_number(stats.total_carcass)
     end
   end
+
+  describe "spawn_cap enforcement (Task 4)" do
+    test "spawn_lenie returns {:error, :spawn_cap_exceeded} when world is at spawn_cap" do
+      world_id = :"spawn_cap_test_#{System.unique_integer([:positive])}"
+
+      {:ok, _} =
+        Lenies.Worlds.start_world(world_id, %{
+          spawn_cap: 2,
+          replication_cap: :infinity,
+          tick_interval_ms: 0
+        })
+
+      on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
+
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
+      codeome = Lenies.Seeds.get(:minimal_replicator).codeome
+
+      assert {:ok, {_id1, _pos1}} =
+               GenServer.call(handle.pid, {:spawn_lenie, codeome, [energy: 100.0]})
+
+      assert {:ok, {_id2, _pos2}} =
+               GenServer.call(handle.pid, {:spawn_lenie, codeome, [energy: 100.0]})
+
+      assert {:error, :spawn_cap_exceeded} =
+               GenServer.call(handle.pid, {:spawn_lenie, codeome, [energy: 100.0]})
+    end
+
+    test "spawn_lenie succeeds without limit when spawn_cap is :infinity" do
+      world_id = :"spawn_cap_inf_test_#{System.unique_integer([:positive])}"
+
+      {:ok, _} =
+        Lenies.Worlds.start_world(world_id, %{
+          spawn_cap: :infinity,
+          replication_cap: :infinity,
+          tick_interval_ms: 0
+        })
+
+      on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
+
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
+      codeome = Lenies.Seeds.get(:minimal_replicator).codeome
+
+      for _ <- 1..15 do
+        assert {:ok, {_id, _pos}} =
+                 GenServer.call(handle.pid, {:spawn_lenie, codeome, [energy: 100.0]})
+      end
+    end
+  end
 end

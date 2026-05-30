@@ -209,6 +209,16 @@ defmodule Lenies.World do
 
   @impl true
   def handle_call({:spawn_lenie, codeome, opts}, _from, state) do
+    current_pop = :ets.info(state.tables.lenies, :size)
+
+    if state.config.spawn_cap != :infinity and current_pop >= state.config.spawn_cap do
+      {:reply, {:error, :spawn_cap_exceeded}, state}
+    else
+      do_spawn_lenie(codeome, opts, state)
+    end
+  end
+
+  defp do_spawn_lenie(codeome, opts, state) do
     case find_random_free_cell(state.grid, state.tables) do
       {:ok, pos} ->
         lenie_id = generate_lenie_id()

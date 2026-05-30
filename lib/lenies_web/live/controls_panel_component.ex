@@ -84,7 +84,35 @@ defmodule LeniesWeb.ControlsPanelComponent do
           assign(socket, :paused?, paused?)
       end
 
-    {:ok, socket}
+    # Spawn cap status — read the world's current population vs configured
+    # cap. Used by the template to disable the Spawn button when at cap.
+    # :sys.get_state is acceptable here because update/2 runs only on
+    # parent re-renders (not per simulation tick).
+    at_spawn_cap = compute_at_spawn_cap(socket.assigns[:world_id])
+
+    {:ok, assign(socket, :at_spawn_cap, at_spawn_cap)}
+  end
+
+  defp compute_at_spawn_cap(nil), do: false
+
+  defp compute_at_spawn_cap(world_id) do
+    case Lenies.Worlds.handle(world_id) do
+      {:ok, h} ->
+        cap =
+          try do
+            case :sys.get_state(h.pid) do
+              %{config: %{spawn_cap: c}} -> c
+              _ -> 10
+            end
+          catch
+            :exit, _ -> 10
+          end
+
+        cap != :infinity and (:ets.info(h.tables.lenies, :size) || 0) >= cap
+
+      _ ->
+        false
+    end
   end
 
   @impl true
@@ -191,23 +219,16 @@ defmodule LeniesWeb.ControlsPanelComponent do
                 <option value={"custom:" <> to_string(s.id)}>★ {s.name}</option>
               <% end %>
             </select>
-          </label>
-          <label class="flex items-center gap-2 text-[11px]">
-            <span class="opacity-70 w-12">count</span>
-            <input
-              type="number"
-              name="count"
-              value="1"
-              min="1"
-              max="50"
-              class="w-16 text-xs"
-            />
             <button
               id="spawn-btn"
               phx-hook="ActionFeedback"
               data-fx="success"
               type="submit"
-              class="ml-auto text-xs px-3 py-1 border border-cyan-500/60 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/50"
+              disabled={@at_spawn_cap}
+              class={[
+                "ml-auto text-xs px-3 py-1 border border-cyan-500/60 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/50",
+                @at_spawn_cap && "opacity-50 cursor-not-allowed"
+              ]}
             >
               Spawn
             </button>
@@ -346,7 +367,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
     end
   end
 
-  def handle_event("spawn_seed", %{"seed_id" => "custom:" <> id, "count" => count_str}, socket) do
+  def handle_event("spawn_seed", %{"seed_id" => "custom:" <> id}, socket) do
     user = socket.assigns.current_scope && socket.assigns.current_scope.user
 
     case user && Lenies.Collection.get_codeome(user, id) do
@@ -357,32 +378,26 @@ defmodule LeniesWeb.ControlsPanelComponent do
         # world handle in @world_handle.
         Lenies.SpeciesColor.set_override(socket.assigns.world_handle, hash, seed.color_hex)
 
-        count = String.to_integer(count_str) |> max(1) |> min(50)
-        dirs = [:n, :s, :e, :w]
-
-        for _ <- 1..count do
+        result =
           Lenies.Worlds.spawn_lenie(socket.assigns.world_id, codeome,
             energy: seed.energy_default,
-            dir: Enum.random(dirs),
+            dir: Enum.random([:n, :s, :e, :w]),
             seed_origin: "★ " <> seed.name
           )
-        end
 
-        {:noreply, socket}
+        {:noreply, maybe_flash_cap_exceeded(socket, result)}
 
       _ ->
         {:noreply, assign(socket, :custom_seeds, custom_seeds(user))}
     end
   end
 
-  def handle_event("spawn_seed", %{"seed_id" => seed_id_str, "count" => count_str}, socket) do
+  def handle_event("spawn_seed", %{"seed_id" => seed_id_str}, socket) do
     seed_id = String.to_existing_atom(seed_id_str)
-    count = String.to_integer(count_str) |> max(1) |> min(50)
 
     case Lenies.Seeds.get(seed_id) do
       %{codeome: codeome, default_options: opts, name: seed_name} = seed ->
         energy = Map.get(opts, :energy, 500.0)
-        dirs = [:n, :s, :e, :w]
         plasmid_opcodes = Map.get(seed, :plasmid)
 
         plasmid_opt =
@@ -392,22 +407,19 @@ defmodule LeniesWeb.ControlsPanelComponent do
             []
           end
 
-        for _ <- 1..count do
-          spawn_opts =
-            [
-              energy: energy,
-              dir: Enum.random(dirs),
-              seed_origin: seed_name
-            ] ++ plasmid_opt
+        spawn_opts =
+          [
+            energy: energy,
+            dir: Enum.random([:n, :s, :e, :w]),
+            seed_origin: seed_name
+          ] ++ plasmid_opt
 
-          Lenies.Worlds.spawn_lenie(socket.assigns.world_id, codeome, spawn_opts)
-        end
+        result = Lenies.Worlds.spawn_lenie(socket.assigns.world_id, codeome, spawn_opts)
+        {:noreply, maybe_flash_cap_exceeded(socket, result)}
 
       nil ->
-        :ok
+        {:noreply, socket}
     end
-
-    {:noreply, socket}
   end
 
   def handle_event("tune_param", %{"key" => key_str, "value" => value_str}, socket) do
@@ -466,6 +478,15 @@ defmodule LeniesWeb.ControlsPanelComponent do
 
   defp custom_seeds(nil), do: []
   defp custom_seeds(%{id: _} = user), do: Lenies.Collection.list_codeomes(user)
+
+  # When World rejects a spawn for hitting the cap, relay a flash to the
+  # parent LiveView (LiveComponents can't put_flash directly).
+  defp maybe_flash_cap_exceeded(socket, {:error, :spawn_cap_exceeded}) do
+    send(self(), {:flash, :info, "Sandbox full: max 10 alive Lenies"})
+    socket
+  end
+
+  defp maybe_flash_cap_exceeded(socket, _other), do: socket
 
   defp tunable_params, do: @tunable_params
 

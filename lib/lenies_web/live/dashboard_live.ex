@@ -608,6 +608,10 @@ defmodule LeniesWeb.DashboardLive do
      })}
   end
 
+  def handle_info({:flash, kind, msg}, socket) do
+    {:noreply, put_flash(socket, kind, msg)}
+  end
+
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   # Recognise the two shipped seed plasmids by their phash2; fall back to

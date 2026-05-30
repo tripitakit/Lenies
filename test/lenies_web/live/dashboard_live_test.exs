@@ -186,7 +186,7 @@ defmodule LeniesWeb.DashboardLiveTest do
     pop_before = :ets.info(handle.tables.lenies, :size) || 0
 
     view
-    |> form("form[phx-submit='spawn_seed']", %{seed_id: "minimal_replicator", count: "1"})
+    |> form("form[phx-submit='spawn_seed']", %{seed_id: "minimal_replicator"})
     |> render_submit()
 
     Process.sleep(100)
@@ -498,12 +498,13 @@ defmodule LeniesWeb.DashboardLiveTest do
 
       pop_before = :ets.info(handle.tables.lenies, :size) || 0
 
-      view
-      |> form("form[phx-submit='spawn_seed']", %{
-        seed_id: "custom:#{seed.id}",
-        count: "2"
-      })
-      |> render_submit()
+      # Each submit now spawns exactly 1 (Task 4: count input removed).
+      # Submit twice to grow by 2.
+      for _ <- 1..2 do
+        view
+        |> form("form[phx-submit='spawn_seed']", %{seed_id: "custom:#{seed.id}"})
+        |> render_submit()
+      end
 
       Process.sleep(100)
 
@@ -926,6 +927,49 @@ defmodule LeniesWeb.DashboardLiveTest do
       assert html =~ "Detritus"
     after
       Application.delete_env(:lenies, :dashboard_throttle_ticks)
+    end
+  end
+
+  describe "spawn cap UI (Task 4)" do
+    test "spawn button is disabled when sandbox is at spawn_cap", %{
+      conn: conn,
+      handle: handle
+    } do
+      # The sandbox world boots with default spawn_cap=10. Fill the :lenies
+      # ETS table with 10 fake records so the component update/2 sees the
+      # cap as reached.
+      for i <- 1..10 do
+        :ets.insert(
+          handle.tables.lenies,
+          {"fake-#{i}", %{id: "fake-#{i}", codeome_hash: "abc", lineage: {nil, 0}}}
+        )
+      end
+
+      {:ok, _view, html} = live(conn, ~p"/sandbox")
+
+      # The submit button in the spawn form should be disabled.
+      assert html =~ ~r/<button[^>]*id="spawn-btn"[^>]*disabled/s
+    end
+
+    test "spawning when at cap surfaces a flash", %{conn: conn, handle: handle} do
+      for i <- 1..10 do
+        :ets.insert(
+          handle.tables.lenies,
+          {"fake-#{i}", %{id: "fake-#{i}", codeome_hash: "abc", lineage: {nil, 0}}}
+        )
+      end
+
+      {:ok, view, _html} = live(conn, ~p"/sandbox")
+
+      # Force the form submission even though the UI button is disabled —
+      # this exercises the engine-level :spawn_cap_exceeded path and verifies
+      # the flash relay from LiveComponent → parent LiveView fires.
+      view
+      |> form("form[phx-submit='spawn_seed']", %{seed_id: "minimal_replicator"})
+      |> render_submit()
+
+      html = render(view)
+      assert html =~ "Sandbox full"
     end
   end
 end
