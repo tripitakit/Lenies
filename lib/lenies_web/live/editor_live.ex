@@ -194,8 +194,7 @@ defmodule LeniesWeb.EditorLive do
   end
 
   def handle_event("open_save_form", _params, socket) do
-    {:noreply,
-     assign(socket, show_save_form: true, show_spawn_form: false, save_form_error: nil)}
+    {:noreply, assign(socket, show_save_form: true, show_spawn_form: false, save_form_error: nil)}
   end
 
   def handle_event("cancel_save_form", _params, socket) do

@@ -744,6 +744,7 @@ defmodule LeniesWeb.EditorLiveTest do
       render_hook(view, "submit_opcode_text", %{
         "opcodes" => "push0 push1 add move eat push0 push1 add move eat"
       })
+
       render_click(view, "open_spawn_form")
 
       # The handler must accept an empty params map (form has no inputs)
