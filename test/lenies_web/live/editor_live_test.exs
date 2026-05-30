@@ -657,4 +657,37 @@ defmodule LeniesWeb.EditorLiveTest do
     render_hook(view, "submit_opcode_text", %{"opcodes" => "jmp_t nop_0 add eat"})
     assert render(view) =~ "codeome-jump-badge-missing"
   end
+
+  describe "spawn form (simplified)" do
+    test "spawn form has no count input and no energy input", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+
+      # Seed the buffer with something valid so the Spawn button is enabled
+      # and the spawn form is reachable.
+      # 10+ non-nop opcodes to satisfy min_viable_codeome_opcodes = 10
+      render_hook(view, "submit_opcode_text", %{
+        "opcodes" => "push0 push1 add move eat push0 push1 add move eat"
+      })
+
+      render_click(view, "open_spawn_form")
+      html = render(view)
+
+      refute html =~ ~r/<input[^>]+name=["']count["']/
+      refute html =~ ~r/<input[^>]+name=["']energy["']/
+    end
+
+    test "submit_spawn fires with no params required", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+      # 10+ non-nop opcodes to satisfy min_viable_codeome_opcodes = 10
+      render_hook(view, "submit_opcode_text", %{
+        "opcodes" => "push0 push1 add move eat push0 push1 add move eat"
+      })
+      render_click(view, "open_spawn_form")
+
+      # The handler must accept an empty params map (form has no inputs)
+      # and navigate back to /sandbox.
+      render_submit(form(view, "form[phx-submit='submit_spawn']"), %{})
+      assert_redirect(view, "/sandbox")
+    end
+  end
 end

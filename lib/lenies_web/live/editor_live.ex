@@ -170,23 +170,20 @@ defmodule LeniesWeb.EditorLive do
     {:noreply, assign(socket, :show_spawn_form, false)}
   end
 
-  def handle_event("submit_spawn", %{"count" => count_str, "energy" => energy_str}, socket) do
-    count = parse_clamped(count_str, 1, 50, 1)
-    energy = parse_clamped(energy_str, 1, 1_000_000, 10_000)
-
+  def handle_event("submit_spawn", _params, socket) do
+    # Single Lenie per click (UX simplification matching the controls panel
+    # cleanup in sandbox-resource-protection). Energy is the project default
+    # 500.0 — the form no longer collects count or energy.
     case socket.assigns.validation do
       {:ok, _} ->
         codeome = LeniesWeb.CodeomeBuffer.to_codeome(socket.assigns.buffer)
-        dirs = [:n, :s, :e, :w]
         seed_origin = spawn_seed_origin(socket.assigns)
 
-        Enum.each(1..count, fn _ ->
-          Lenies.Worlds.spawn_lenie(socket.assigns.world_id, codeome,
-            energy: energy * 1.0,
-            dir: Enum.random(dirs),
-            seed_origin: seed_origin
-          )
-        end)
+        Lenies.Worlds.spawn_lenie(socket.assigns.world_id, codeome,
+          energy: 500.0,
+          dir: Enum.random([:n, :s, :e, :w]),
+          seed_origin: seed_origin
+        )
 
         {:noreply, push_navigate(socket, to: ~p"/sandbox")}
 
@@ -622,21 +619,6 @@ defmodule LeniesWeb.EditorLive do
           phx-submit="submit_spawn"
           class="flex gap-2 items-center text-[11px] p-2 border-b border-emerald-500/30"
         >
-          <label class="flex gap-1 items-center">
-            <span class="opacity-70">count</span>
-            <input type="number" name="count" value="1" min="1" max="50" class="w-16 text-xs" />
-          </label>
-          <label class="flex gap-1 items-center">
-            <span class="opacity-70">energy</span>
-            <input
-              type="number"
-              name="energy"
-              value="10000"
-              min="1"
-              max="1000000"
-              class="w-24 text-xs"
-            />
-          </label>
           <button
             type="button"
             phx-click="cancel_spawn_form"
