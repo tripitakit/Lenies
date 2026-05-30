@@ -167,6 +167,25 @@ defmodule Lenies.ArenaTest do
       assert Lenies.Worlds.alive?(:arena)
       :ok = Lenies.Worlds.stop_world(:arena)
     end
+
+    test "arena world starts with :infinity caps so Arena's own lineage rule is the only enforcement" do
+      # Arena.start_link is already running under the application supervisor.
+      # attach_viewer/1 is the trigger that brings up the :arena world the
+      # first time (see arena.ex handle_call({:attach_viewer, _}, _, %{started?: false} = state)).
+      Lenies.Worlds.stop_world(:arena)
+      :ok = Lenies.Arena.attach_viewer(self())
+      # The world start is synchronous within attach_viewer's call path; wait
+      # briefly just for ETS publication if needed.
+      Process.sleep(50)
+
+      {:ok, handle} = Lenies.Worlds.handle(:arena)
+      state = :sys.get_state(handle.pid)
+
+      assert state.config.spawn_cap == :infinity
+      assert state.config.replication_cap == :infinity
+
+      :ok = Lenies.Worlds.stop_world(:arena)
+    end
   end
 
   describe "auto-restore" do

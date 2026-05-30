@@ -276,7 +276,7 @@ defmodule Lenies.Arena do
   end
 
   defp start_arena do
-    case Lenies.Worlds.start_world(@world_id, %{}) do
+    case Lenies.Worlds.start_world(@world_id, %{spawn_cap: :infinity, replication_cap: :infinity}) do
       {:ok, sup_pid} ->
         maybe_auto_restore()
         {:ok, sup_pid}
