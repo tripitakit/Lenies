@@ -19,9 +19,11 @@ import Config
 config :lenies,
   grid_size: {256, 256},
   dashboard_throttle_ticks: 5,
-  # No explicit population cap: the grid itself (grid_size cells) is the
-  # hard ceiling — a Lenie can only exist in a free cell, so replication
-  # back-pressures naturally once cells fill up.
+  # Population is bounded by two mechanisms (see :spawn_cap / :replication_cap
+  # at the bottom of this block): explicit per-world caps are the primary
+  # safety net for sandboxes on a small VPS, and grid_size cells act as a
+  # secondary hard ceiling — a Lenie can only exist in a free cell, so
+  # replication also back-pressures naturally once cells fill up.
   tick_interval_ms: 100,
   radiation_per_tick: 1000,
   initial_resource_per_cell: 30,

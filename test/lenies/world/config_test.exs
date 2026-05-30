@@ -1,5 +1,8 @@
 defmodule Lenies.World.ConfigTest do
-  use ExUnit.Case, async: true
+  # async: false — tests below mutate Application env (:spawn_cap, :replication_cap)
+  # which is process-global. Matches the convention used by world_replication_test.exs,
+  # plasmid_inheritance_test.exs and arena_test.exs.
+  use ExUnit.Case, async: false
 
   alias Lenies.World.Config
 
@@ -27,8 +30,15 @@ defmodule Lenies.World.ConfigTest do
   end
 
   test "defaults/0 includes spawn_cap and replication_cap from app env or struct fallback" do
+    saved_spawn = Application.get_env(:lenies, :spawn_cap)
+    saved_repl = Application.get_env(:lenies, :replication_cap)
     Application.delete_env(:lenies, :spawn_cap)
     Application.delete_env(:lenies, :replication_cap)
+
+    on_exit(fn ->
+      restore_env(:spawn_cap, saved_spawn)
+      restore_env(:replication_cap, saved_repl)
+    end)
 
     cfg = Lenies.World.Config.defaults()
     assert cfg.spawn_cap == 10
@@ -36,12 +46,14 @@ defmodule Lenies.World.ConfigTest do
   end
 
   test "defaults/0 reads spawn_cap and replication_cap from app env when set" do
+    saved_spawn = Application.get_env(:lenies, :spawn_cap)
+    saved_repl = Application.get_env(:lenies, :replication_cap)
     Application.put_env(:lenies, :spawn_cap, 7)
     Application.put_env(:lenies, :replication_cap, 25)
 
     on_exit(fn ->
-      Application.delete_env(:lenies, :spawn_cap)
-      Application.delete_env(:lenies, :replication_cap)
+      restore_env(:spawn_cap, saved_spawn)
+      restore_env(:replication_cap, saved_repl)
     end)
 
     cfg = Lenies.World.Config.defaults()
@@ -57,4 +69,7 @@ defmodule Lenies.World.ConfigTest do
     assert cfg.spawn_cap == :infinity
     assert cfg.replication_cap == :infinity
   end
+
+  defp restore_env(_key, nil), do: :ok
+  defp restore_env(key, value), do: Application.put_env(:lenies, key, value)
 end
