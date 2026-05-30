@@ -349,4 +349,12 @@ defmodule Lenies.WorldTest do
       refute match?({:ok, :replication_cap_exceeded}, result)
     end
   end
+
+  describe "scheduler priority" do
+    test "World process is started with :low scheduler priority", %{world_id: world_id} do
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
+
+      assert {:priority, :low} = :erlang.process_info(handle.pid, :priority)
+    end
+  end
 end

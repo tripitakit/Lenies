@@ -79,6 +79,10 @@ defmodule Lenies.Lenie do
 
   @impl true
   def init({%Lenies.WorldHandle{} = handle, opts}) do
+    # Lenies are simulation workers — deprioritize so Phoenix/PubSub/LiveView
+    # (running at :normal) stay responsive under load.
+    Process.flag(:priority, :low)
+
     id = Keyword.fetch!(opts, :id)
     codeome = Keyword.fetch!(opts, :codeome)
     energy = Keyword.fetch!(opts, :energy)

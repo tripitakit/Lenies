@@ -52,6 +52,10 @@ defmodule Lenies.Telemetry do
 
   @impl true
   def init({world_id, opts}) do
+    # Telemetry recording is observability, not gameplay — keep it below the
+    # :normal-priority web tier so HTTP/LiveView/PubSub always preempt it.
+    Process.flag(:priority, :low)
+
     max_entries = Keyword.get(opts, :max_entries, @default_max_entries)
     # Cache this world's handle so we don't pay a GenServer.call on every
     # tick. The handle struct is immutable; the tids inside survive World

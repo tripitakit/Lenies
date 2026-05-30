@@ -50,6 +50,10 @@ defmodule Lenies.World do
 
   @impl true
   def init({world_id, config_overrides, opts}) do
+    # Run the simulation engine below normal-priority Phoenix/PubSub/LiveView
+    # work so the UI stays responsive when the world saturates the scheduler.
+    Process.flag(:priority, :low)
+
     # Seed per-world Config from Application env, then layer caller overrides.
     # The legacy `tick_interval_ms:` keyword opt (heavily used by tests to
     # disable auto-ticking with `0`) wins over both config_overrides and
