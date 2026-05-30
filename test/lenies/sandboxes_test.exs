@@ -72,6 +72,43 @@ defmodule Lenies.SandboxesTest do
       :ok = Lenies.Worlds.stop_world({:sandbox, user_id})
     end
 
+    test "default grace timer is ~10 s when no :sandbox_grace_ms override is set" do
+      # Guard: ensure no test-bleed env override is in place.
+      refute Application.get_env(:lenies, :sandbox_grace_ms),
+             "expected no :sandbox_grace_ms override leaking from another test"
+
+      user_id = unique_user_id()
+
+      task =
+        Task.async(fn ->
+          :ok = Lenies.Sandboxes.attach(user_id)
+
+          receive do
+            :exit -> :ok
+          end
+        end)
+
+      Process.sleep(50)
+      send(task.pid, :exit)
+      Task.await(task)
+      Process.sleep(100)
+
+      state = :sys.get_state(Lenies.Sandboxes)
+      entry = state[user_id]
+      remaining = Process.read_timer(entry.pending_stop)
+
+      assert is_integer(remaining),
+             "expected pending_stop to be a live timer ref, got #{inspect(remaining)}"
+
+      # Allow a generous lower bound: scheduling + sleeps consumed some of the
+      # original window. The upper bound is the strict default ceiling.
+      assert remaining > 9_000 and remaining <= 10_000,
+             "expected ~10_000 ms grace remaining, got #{remaining}"
+
+      # cleanup
+      :ok = Lenies.Worlds.stop_world({:sandbox, user_id})
+    end
+
     test "one pid disconnect of two does NOT schedule a grace timer" do
       user_id = unique_user_id()
       :ok = Lenies.Sandboxes.attach(user_id)
@@ -101,7 +138,7 @@ defmodule Lenies.SandboxesTest do
 
   describe ":maybe_stop" do
     setup do
-      # Speed up grace period for tests so we don't wait 30 s.
+      # Speed up grace period for tests so we don't wait 10 s.
       Application.put_env(:lenies, :sandbox_grace_ms, 50)
       on_exit(fn -> Application.delete_env(:lenies, :sandbox_grace_ms) end)
       :ok

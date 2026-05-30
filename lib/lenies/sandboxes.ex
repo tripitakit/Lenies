@@ -14,7 +14,7 @@ defmodule Lenies.Sandboxes do
   """
   use GenServer
 
-  @grace_ms 30_000
+  @grace_ms 10_000
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
