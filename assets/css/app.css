@@ -1026,3 +1026,50 @@
 .codeome-inline-input { font-size: 12px; width: 9ch; background: #0a0f1a; color: #e2e8f0; border: 1px solid var(--cyan-500, #06b6d4); padding: 0 4px; }
 .codeome-inline-error { color: #fbbf24; font-size: 11px; }
 .codeome-template-nop { outline: 1px dashed rgba(103, 232, 249, 0.5); outline-offset: -1px; }
+
+/* === Splash landing page === */
+.lenies-splash {
+  background:
+    radial-gradient(1200px 800px at 30% 20%, rgba(34, 211, 238, 0.05), transparent 60%),
+    radial-gradient(900px 700px at 90% 100%, rgba(167, 139, 250, 0.05), transparent 60%),
+    #050816;
+  color: #e2e8f0;
+}
+.lenies-splash-card {
+  display: flex;
+  flex-direction: column;
+  padding: 2rem;
+  border-radius: 1rem;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  transition: transform 200ms ease, background-color 200ms ease,
+    border-color 200ms ease, box-shadow 200ms ease;
+  text-decoration: none;
+  color: inherit;
+}
+.lenies-splash-card:hover {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(34, 211, 238, 0.4);
+  transform: translateY(-4px);
+  box-shadow: 0 18px 30px -12px rgba(34, 211, 238, 0.18);
+}
+.splash-card-icon { margin-bottom: 1rem; color: #67e8f9; }
+.splash-card-title {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.5rem;
+}
+.splash-card-blurb {
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+  opacity: 0.7;
+  margin-bottom: 1.5rem;
+}
+.splash-card-cta {
+  margin-top: auto;
+  color: #67e8f9;
+  font-size: 0.875rem;
+  font-weight: 500;
+}

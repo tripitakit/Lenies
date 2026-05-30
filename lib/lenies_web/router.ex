@@ -31,13 +31,16 @@ defmodule LeniesWeb.Router do
 
   ## Authentication routes
 
-  # Public scope: Arena + auth pages
+  # Public scope: Splash + Arena + auth pages
   scope "/", LeniesWeb do
     pipe_through :browser
 
+    # Splash landing — static page served by PageController.
+    get "/", PageController, :landing
+
     live_session :arena_public,
       on_mount: @sandbox_on_mount ++ [{LeniesWeb.UserAuth, :mount_current_scope}] do
-      live "/", ArenaLive, :index
+      live "/arena", ArenaLive, :index
 
       live "/users/register", UserLive.Registration, :new
       live "/users/log-in", UserLive.Login, :new

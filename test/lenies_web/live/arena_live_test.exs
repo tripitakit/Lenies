@@ -4,19 +4,19 @@ defmodule LeniesWeb.ArenaLiveTest do
 
   describe "anonymous viewer" do
     test "mounts at / and sees Arena content", %{conn: conn} do
-      {:ok, _view, html} = live(conn, ~p"/")
+      {:ok, _view, html} = live(conn, ~p"/arena")
       assert html =~ "watching"
     end
 
     test "presence count visible (1 viewer = self)", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/")
+      {:ok, view, _html} = live(conn, ~p"/arena")
       Process.sleep(50)
       assert render(view) =~ "watching"
     end
 
     test "shows the 'Log in to seed' prompt instead of seed/apoptosis controls",
          %{conn: conn} do
-      {:ok, _view, html} = live(conn, ~p"/")
+      {:ok, _view, html} = live(conn, ~p"/arena")
       assert html =~ "Log in to seed"
       refute html =~ "Seed your Lenie"
     end
@@ -29,7 +29,7 @@ defmodule LeniesWeb.ArenaLiveTest do
     end
 
     test "shows the 'Save a codeome in your Sandbox first' hint", %{conn: conn} do
-      {:ok, _view, html} = live(conn, ~p"/")
+      {:ok, _view, html} = live(conn, ~p"/arena")
       assert html =~ "Save a codeome in your Sandbox first"
     end
   end
@@ -51,7 +51,7 @@ defmodule LeniesWeb.ArenaLiveTest do
     end
 
     test "shows the codeome dropdown + Seed button", %{conn: conn} do
-      {:ok, _view, html} = live(conn, ~p"/")
+      {:ok, _view, html} = live(conn, ~p"/arena")
       assert html =~ "Seed your Lenie"
       assert html =~ "MyArenaSeed"
     end
@@ -61,7 +61,7 @@ defmodule LeniesWeb.ArenaLiveTest do
       user: user,
       codeome: codeome
     } do
-      {:ok, view, _html} = live(conn, ~p"/")
+      {:ok, view, _html} = live(conn, ~p"/arena")
 
       view
       |> form("form[phx-submit=seed]", %{codeome_id: to_string(codeome.id)})
@@ -95,13 +95,13 @@ defmodule LeniesWeb.ArenaLiveTest do
     end
 
     test "shows Apoptosis button with count", %{conn: conn} do
-      {:ok, _view, html} = live(conn, ~p"/")
+      {:ok, _view, html} = live(conn, ~p"/arena")
       assert html =~ "Apoptosis"
       assert html =~ "Your lineage:"
     end
 
     test "two-step Apoptosis (init + confirm) kills the lineage", %{conn: conn, user: user} do
-      {:ok, view, _html} = live(conn, ~p"/")
+      {:ok, view, _html} = live(conn, ~p"/arena")
 
       view |> element("button[phx-click=apoptosis_init]") |> render_click()
       assert render(view) =~ "Confirm"
@@ -125,8 +125,13 @@ defmodule LeniesWeb.ArenaLiveTest do
       assert {:ok, _view, _html} = live(conn, ~p"/sandbox")
     end
 
-    test "old / path is now public (Arena), no redirect to login", %{conn: conn} do
+    test "/ is now the public splash, no redirect to login", %{conn: conn} do
       conn = get(conn, ~p"/")
+      assert conn.status == 200
+    end
+
+    test "/arena is public (anon), no redirect to login", %{conn: conn} do
+      conn = get(conn, ~p"/arena")
       assert conn.status == 200
     end
   end

@@ -1,0 +1,29 @@
+<div class="lenies-splash h-full flex items-center justify-center px-4">
+  <div class="max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 gap-8">
+    <.link navigate={~p"/arena"} class="lenies-splash-card group">
+      <div class="splash-card-icon">
+        <.icon name="hero-globe-alt" class="size-12 opacity-90" />
+      </div>
+      <h2 class="splash-card-title">Arena</h2>
+      <p class="splash-card-blurb">
+        The shared evolutionary world. Watch lineages compete in real time, or seed your own evolved Lenie.
+      </p>
+      <span class="splash-card-cta">Open Arena →</span>
+    </.link>
+
+    <.link navigate={~p"/sandbox"} class="lenies-splash-card group">
+      <div class="splash-card-icon">
+        <.icon name="hero-beaker" class="size-12 opacity-90" />
+      </div>
+      <h2 class="splash-card-title">Sandbox</h2>
+      <p class="splash-card-blurb">
+        Your private world. Edit Lenies, tune the simulation, save evolved genomes for the Arena.
+      </p>
+      <%= if @current_scope && @current_scope.user do %>
+        <span class="splash-card-cta">Open Sandbox →</span>
+      <% else %>
+        <span class="splash-card-cta">Sign in to play →</span>
+      <% end %>
+    </.link>
+  </div>
+</div>
