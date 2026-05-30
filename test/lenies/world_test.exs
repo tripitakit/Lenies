@@ -295,4 +295,58 @@ defmodule Lenies.WorldTest do
       end
     end
   end
+
+  describe "replication_cap enforcement (Task 5)" do
+    test "divide returns {:ok, :replication_cap_exceeded} when at replication_cap; Lenie stays alive" do
+      world_id = :"replication_cap_test_#{System.unique_integer([:positive])}"
+
+      {:ok, _} =
+        Lenies.Worlds.start_world(world_id, %{
+          spawn_cap: :infinity,
+          replication_cap: 1,
+          tick_interval_ms: 0
+        })
+
+      on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
+
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
+      codeome = Lenies.Seeds.get(:minimal_replicator).codeome
+
+      assert {:ok, {parent_id, pos}} =
+               GenServer.call(handle.pid, {:spawn_lenie, codeome, [energy: 100.0]})
+
+      # World already has 1 (the parent) and replication_cap = 1 → divide blocked
+      divide_action = {:divide, 50.0, pos, :n, parent_id}
+
+      assert {:ok, :replication_cap_exceeded} =
+               GenServer.call(handle.pid, {:action, divide_action})
+
+      # Parent unharmed: still in ETS
+      assert [_] = :ets.lookup(handle.tables.lenies, parent_id)
+    end
+
+    test "divide proceeds normally when below replication_cap" do
+      world_id = :"replication_cap_below_test_#{System.unique_integer([:positive])}"
+
+      {:ok, _} =
+        Lenies.Worlds.start_world(world_id, %{
+          spawn_cap: :infinity,
+          replication_cap: 100,
+          tick_interval_ms: 0
+        })
+
+      on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
+
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
+      codeome = Lenies.Seeds.get(:minimal_replicator).codeome
+
+      assert {:ok, {parent_id, pos}} =
+               GenServer.call(handle.pid, {:spawn_lenie, codeome, [energy: 100.0]})
+
+      # Below cap → divide returns its usual success/no_slot envelope, NOT :replication_cap_exceeded
+      divide_action = {:divide, 50.0, pos, :n, parent_id}
+      result = GenServer.call(handle.pid, {:action, divide_action})
+      refute match?({:ok, :replication_cap_exceeded}, result)
+    end
+  end
 end

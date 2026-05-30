@@ -710,18 +710,28 @@ defmodule Lenies.World do
   end
 
   defp do_action({:divide, parent_energy, _pos, _dir, parent_id}, state) do
-    case :ets.lookup(state.tables.lenies, parent_id) do
-      [{^parent_id, %{child_slot_id: slot_id} = parent_record}] when is_binary(slot_id) ->
-        case ChildSlots.get(state.tables.child_slots, slot_id) do
-          {:ok, slot} ->
-            do_divide(parent_id, parent_record, slot_id, slot, parent_energy, state)
+    current_pop = :ets.info(state.tables.lenies, :size)
 
-          :not_found ->
-            {{:ok, :no_slot}, state}
-        end
+    if state.config.replication_cap != :infinity and
+         current_pop >= state.config.replication_cap do
+      # Hit replication cap — Lenie skips this divide (treated identically to
+      # :no_slot by the calling Lenie's apply_world_action({:divide, …})
+      # which has a catch-all {:ok, _failure} branch at lenie.ex:449).
+      {{:ok, :replication_cap_exceeded}, state}
+    else
+      case :ets.lookup(state.tables.lenies, parent_id) do
+        [{^parent_id, %{child_slot_id: slot_id} = parent_record}] when is_binary(slot_id) ->
+          case ChildSlots.get(state.tables.child_slots, slot_id) do
+            {:ok, slot} ->
+              do_divide(parent_id, parent_record, slot_id, slot, parent_energy, state)
 
-      _ ->
-        {{:ok, :no_slot}, state}
+            :not_found ->
+              {{:ok, :no_slot}, state}
+          end
+
+        _ ->
+          {{:ok, :no_slot}, state}
+      end
     end
   end
 
