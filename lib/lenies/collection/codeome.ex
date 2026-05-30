@@ -28,6 +28,10 @@ defmodule Lenies.Collection.Codeome do
     |> validate_format(:name, @alnum_re, message: "must contain a letter or digit")
     |> validate_format(:color_hex, @hex_re, message: "must be a #RRGGBB hex colour")
     |> validate_opcodes()
+    # Translates the partial unique_index(:codeomes, [:owner_id, :name]) DB
+    # constraint into a changeset error so Collection.create_codeome/2 can
+    # classify it as {:error, :name_taken} instead of raising on duplicates.
+    |> unique_constraint(:name, name: :codeomes_owner_id_name_index)
   end
 
   defp maybe_trim(nil), do: nil

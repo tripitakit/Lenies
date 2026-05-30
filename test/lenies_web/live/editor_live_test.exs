@@ -658,6 +658,68 @@ defmodule LeniesWeb.EditorLiveTest do
     assert render(view) =~ "codeome-jump-badge-missing"
   end
 
+  describe "save as fork in :edit mode" do
+    # 10+ non-nop opcodes to satisfy min_viable_codeome_opcodes = 10 so the
+    # validation passes and the Save button isn't disabled.
+    @valid_buf_text "push0 push1 add move eat push0 push1 add move eat"
+
+    test "save button is visible in :edit mode (was hidden before)", %{conn: conn} do
+      # Editor in :edit mode with an unknown hash mounts with an empty
+      # buffer — that's enough to verify the button's render condition;
+      # we don't need a live Lenie for this assertion.
+      {:ok, _view, html} = live(conn, ~p"/sandbox/editor/edit/NONEXISTENT")
+
+      assert html =~ ~r/phx-click="open_save_form"/
+    end
+
+    test "save with a new name in :edit mode creates a new Collection entry (fork)",
+         %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/edit/NONEXISTENT")
+      render_hook(view, "submit_opcode_text", %{"opcodes" => @valid_buf_text})
+      render_click(view, "open_save_form")
+
+      view
+      |> form("form[phx-submit='submit_save_seed']", %{
+        "seed_name" => "evolved-v1",
+        "color_hex" => "#abcdef",
+        "energy_default" => "600"
+      })
+      |> render_submit()
+
+      assert [c] = Lenies.Collection.list_codeomes(user)
+      assert c.name == "evolved-v1"
+      assert c.color_hex == "#abcdef"
+    end
+
+    test "save with an existing name shows inline name-taken error",
+         %{conn: conn, user: user} do
+      {:ok, _} =
+        Lenies.Collection.create_codeome(user, %{
+          name: "taken",
+          color_hex: "#abcdef",
+          energy_default: 500.0,
+          opcodes: ["nop_1", "store", "eat"]
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/edit/NONEXISTENT")
+      render_hook(view, "submit_opcode_text", %{"opcodes" => @valid_buf_text})
+      render_click(view, "open_save_form")
+
+      result =
+        view
+        |> form("form[phx-submit='submit_save_seed']", %{
+          "seed_name" => "taken",
+          "color_hex" => "#ffffff",
+          "energy_default" => "500"
+        })
+        |> render_submit()
+
+      assert result =~ ~r/already (taken|exists)|name.*taken/i
+      # No new entry created — still only the seed row.
+      assert length(Lenies.Collection.list_codeomes(user)) == 1
+    end
+  end
+
   describe "spawn form (simplified)" do
     test "spawn form has no count input and no energy input", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")

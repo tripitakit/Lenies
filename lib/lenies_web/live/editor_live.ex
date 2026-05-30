@@ -48,6 +48,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:economics, current_economics(buffer))
       |> assign(:show_spawn_form, false)
       |> assign(:show_save_form, false)
+      |> assign(:save_form_error, nil)
       |> assign(:current_chapter, @default_chapter)
       |> assign(:manual_collapsed?, false)
       |> assign(:text_input_value, "")
@@ -193,11 +194,12 @@ defmodule LeniesWeb.EditorLive do
   end
 
   def handle_event("open_save_form", _params, socket) do
-    {:noreply, assign(socket, show_save_form: true, show_spawn_form: false)}
+    {:noreply,
+     assign(socket, show_save_form: true, show_spawn_form: false, save_form_error: nil)}
   end
 
   def handle_event("cancel_save_form", _params, socket) do
-    {:noreply, assign(socket, :show_save_form, false)}
+    {:noreply, assign(socket, show_save_form: false, save_form_error: nil)}
   end
 
   def handle_event(
@@ -223,8 +225,24 @@ defmodule LeniesWeb.EditorLive do
 
             {:noreply, push_navigate(socket, to: ~p"/sandbox")}
 
+          {:error, :name_taken} ->
+            # Fork-only flow: refuse to silently overwrite a prior save.
+            # Keep the form open with an inline error so the user can pick
+            # a fresh name without re-typing their colour/energy.
+            {:noreply,
+             assign(
+               socket,
+               :save_form_error,
+               "A codeome named “#{name}” is already taken — pick another name."
+             )}
+
           {:error, %Ecto.Changeset{}} ->
-            {:noreply, socket}
+            {:noreply,
+             assign(
+               socket,
+               :save_form_error,
+               "Invalid codeome — check the name, colour, and opcodes."
+             )}
         end
 
       {:error, _} ->
@@ -602,16 +620,19 @@ defmodule LeniesWeb.EditorLive do
           Spawn
         </button>
 
-        <%= if @mode == :new_seed do %>
-          <button
-            type="button"
-            phx-click="open_save_form"
-            disabled={!match?({:ok, _}, @validation)}
-            class="text-xs px-2 py-0.5 border border-violet-500/60 text-violet-200 hover:bg-violet-900/40 disabled:opacity-40"
-          >
-            Save
-          </button>
-        <% end %>
+        <%!-- Visible in BOTH :new_seed and :edit modes. In :edit mode it
+              opens a fork-only save form (server-side uniqueness check on
+              (owner, name) — see Lenies.Collection.create_codeome/2), which
+              is the missing piece of the "evolve in Sandbox → save → seed
+              in Arena" loop. --%>
+        <button
+          type="button"
+          phx-click="open_save_form"
+          disabled={!match?({:ok, _}, @validation)}
+          class="text-xs px-2 py-0.5 border border-violet-500/60 text-violet-200 hover:bg-violet-900/40 disabled:opacity-40"
+        >
+          Save
+        </button>
       </header>
 
       <%= if @show_spawn_form do %>
@@ -679,6 +700,9 @@ defmodule LeniesWeb.EditorLive do
           <button type="submit" class="px-2 py-0.5 border border-violet-500/60 text-violet-200">
             Save
           </button>
+          <%= if @save_form_error do %>
+            <span class="text-red-400 text-[11px] ml-2" role="alert">{@save_form_error}</span>
+          <% end %>
         </form>
       <% end %>
 

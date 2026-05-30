@@ -67,15 +67,35 @@ defmodule Lenies.CollectionTest do
                Lenies.Collection.create_codeome(user, %{@valid_attrs | color_hex: "nope"})
     end
 
-    test "create_codeome/2 upserts by (owner, name) — second save wins", %{user: user} do
-      {:ok, _} = Lenies.Collection.create_codeome(user, @valid_attrs)
+    test "create_codeome/2 returns {:error, :name_taken} when (owner, name) already exists",
+         %{user: user} do
+      assert {:ok, _} = Lenies.Collection.create_codeome(user, @valid_attrs)
 
-      {:ok, c2} =
-        Lenies.Collection.create_codeome(user, %{@valid_attrs | opcodes: ["eat", "move"]})
+      # Second create with same name MUST fail (no silent overwrite — the
+      # save-evolved-Lenie flow is fork-only and surfaces this as an inline
+      # form error).
+      assert {:error, :name_taken} =
+               Lenies.Collection.create_codeome(user, %{@valid_attrs | opcodes: ["eat", "move"]})
 
+      # Original row untouched.
       assert [only] = Lenies.Collection.list_codeomes(user)
-      assert only.id == c2.id
-      assert only.opcodes == ["eat", "move"]
+      assert only.opcodes == ["nop_1", "store", "eat"]
+    end
+
+    test "create_codeome/2 with a different name succeeds for the same user", %{user: user} do
+      assert {:ok, _} =
+               Lenies.Collection.create_codeome(user, %{@valid_attrs | name: "alpha"})
+
+      assert {:ok, _} =
+               Lenies.Collection.create_codeome(user, %{@valid_attrs | name: "beta"})
+
+      assert length(Lenies.Collection.list_codeomes(user)) == 2
+    end
+
+    test "create_codeome/2 — two users may use the same codeome name (scope is per-owner)",
+         %{user: user, other: other} do
+      assert {:ok, _} = Lenies.Collection.create_codeome(user, @valid_attrs)
+      assert {:ok, _} = Lenies.Collection.create_codeome(other, @valid_attrs)
     end
 
     test "list_codeomes/1 returns only the owner's rows", %{user: user, other: other} do

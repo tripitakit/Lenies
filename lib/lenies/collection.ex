@@ -22,17 +22,33 @@ defmodule Lenies.Collection do
   end
 
   @doc """
-  Create or replace (by `{owner, name}`) a codeome for `user`.
-  Mirrors the old save-overwrites-by-name behaviour.
+  Create a codeome for `user`. Fork-only: a duplicate `(owner, name)` is
+  refused with `{:error, :name_taken}` rather than silently overwriting.
+  The save-evolved-Lenie flow surfaces `:name_taken` as an inline form
+  error so users always pick a fresh name (no accidental overwrite of a
+  previous save).
   """
   def create_codeome(%{id: owner_id}, attrs) do
     %Codeome{owner_id: owner_id}
     |> Codeome.changeset(attrs)
-    |> Repo.insert(
-      on_conflict: {:replace, [:color_hex, :energy_default, :opcodes, :updated_at]},
-      conflict_target: [:owner_id, :name],
-      returning: true
-    )
+    |> Repo.insert()
+    |> case do
+      {:ok, codeome} ->
+        {:ok, codeome}
+
+      {:error, %Ecto.Changeset{} = cs} ->
+        if name_taken?(cs), do: {:error, :name_taken}, else: {:error, cs}
+    end
+  end
+
+  # The `unique_constraint(:name, ...)` validator on the Codeome changeset
+  # surfaces a DB unique-index violation as a `{message, [constraint: :unique, ...]}`
+  # error on the :name field. Any other validation error stays a changeset.
+  defp name_taken?(%Ecto.Changeset{errors: errors}) do
+    Enum.any?(errors, fn
+      {:name, {_msg, opts}} -> Keyword.get(opts, :constraint) == :unique
+      _ -> false
+    end)
   end
 
   @doc "Delete a codeome by id, scoped to `user`."
