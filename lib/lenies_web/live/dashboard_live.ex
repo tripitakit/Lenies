@@ -127,7 +127,7 @@ defmodule LeniesWeb.DashboardLive do
   def render(assigns) do
     ~H"""
     <div
-      class="lenies-dashboard h-screen w-screen overflow-hidden flex flex-col p-3 gap-3"
+      class="lenies-dashboard h-full w-full overflow-hidden flex flex-col p-3 gap-3"
       data-inspector-dirty={if @inspector_dirty, do: "true", else: nil}
     >
       <Layouts.flash_group flash={@flash} />

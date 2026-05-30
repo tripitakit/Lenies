@@ -135,7 +135,7 @@ defmodule LeniesWeb.ArenaLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="lenies-dashboard h-screen w-screen overflow-hidden flex flex-col p-3 gap-3">
+    <div class="lenies-dashboard h-full w-full overflow-hidden flex flex-col p-3 gap-3">
       <Layouts.flash_group flash={@flash} />
       <header class="flex items-center justify-between px-2 shrink-0">
         <h1 class="text-lg font-bold tracking-widest">⬡ LENIES · ARENA</h1>
