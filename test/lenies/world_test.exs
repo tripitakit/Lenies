@@ -56,8 +56,8 @@ defmodule Lenies.WorldTest do
 
     # Some early ticks may have already fired before subscribe; just wait for
     # two consecutive ticks at the configured cadence.
-    assert_receive {:tick, _}, 500
-    assert_receive {:tick, _}, 500
+    assert_receive {:tick, _, _}, 500
+    assert_receive {:tick, _, _}, 500
   end
 
   test "tick_now/0 decays carcasses by configured rate", %{world_id: world_id} do
@@ -228,6 +228,23 @@ defmodule Lenies.WorldTest do
       [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {2, 2})
       assert cell.carcass > 0
       assert cell.carcass_hue == 99
+    end
+  end
+
+  describe "tick broadcast payload (Task 3: Telemetry decouple)" do
+    test "tick broadcast carries {:tick, n, stats} with population/total_resource/total_carcass",
+         %{world_id: world_id} do
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "#{handle.pubsub_prefix}:tick")
+
+      Lenies.Worlds.tick_now(world_id)
+
+      assert_receive {:tick, n, stats}, 500
+      assert is_integer(n)
+      assert is_map(stats)
+      assert is_integer(stats.population)
+      assert is_number(stats.total_resource)
+      assert is_number(stats.total_carcass)
     end
   end
 end

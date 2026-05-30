@@ -73,16 +73,24 @@ defmodule Lenies.Telemetry do
   end
 
   @impl true
-  def handle_info({:tick, tick_n}, state) do
+  def handle_info({:tick, tick_n, stats}, state) do
     state = ensure_handle(state)
-    stats = GenServer.call(state.handle.pid, :snapshot_stats)
+    # No GenServer.call to World — stats arrives in the broadcast payload
+    # (decouples Telemetry from World mailbox contention). `cells` was
+    # previously sourced from :snapshot_stats too; read it directly from
+    # the cached handle's ETS — it's an O(1) :ets.info call.
+    cells_size =
+      case state.handle do
+        %{tables: %{cells: tid}} -> :ets.info(tid, :size) || 0
+        _ -> 0
+      end
 
     entry = %{
       tick: tick_n,
       population: stats.population,
       total_resource: stats.total_resource,
       total_carcass: stats.total_carcass,
-      cells: stats.cells,
+      cells: cells_size,
       species: species_snapshot(state.handle),
       timestamp_ms: System.system_time(:millisecond)
     }

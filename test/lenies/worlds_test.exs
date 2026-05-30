@@ -253,7 +253,7 @@ defmodule Lenies.WorldsTest do
 
       # Subscribe to :b's tick topic; tickers tick at the configured interval.
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{hb.pubsub_prefix}:tick")
-      assert_receive {:tick, _}, 1_000
+      assert_receive {:tick, _, _}, 1_000
 
       # Subscribe to BOTH worlds' control topics BEFORE triggering :a's
       # sterilize. If the broadcast leaked into :b's topic (regression), TWO

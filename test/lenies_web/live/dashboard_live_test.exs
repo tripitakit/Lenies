@@ -431,7 +431,7 @@ defmodule LeniesWeb.DashboardLiveTest do
       # The Lenie disappears (extinct) — the next tick recomputes the top-N
       # and the selection should be dropped along with the highlight.
       :ets.delete(handle.tables.lenies, "L1")
-      send(view.pid, {:tick, 1})
+      send(view.pid, {:tick, 1, %{population: 0, total_resource: 0, total_carcass: 0}})
 
       assert render(view) =~ ~s(data-highlight-hue="0")
     after
@@ -809,7 +809,7 @@ defmodule LeniesWeb.DashboardLiveTest do
 
       # Remove the lenie and send a tick — stream should clear the row
       :ets.delete(handle.tables.lenies, "TK1")
-      send(view.pid, {:tick, 1})
+      send(view.pid, {:tick, 1, %{population: 0, total_resource: 0, total_carcass: 0}})
       render(view)
 
       refute has_element?(view, "#species-row-TICK-HASH")
@@ -917,7 +917,7 @@ defmodule LeniesWeb.DashboardLiveTest do
       :ok = GenServer.call(handle.pid, :tick_now)
       # Give PubSub a moment to propagate tick → Telemetry, then the dashboard tick
       Process.sleep(50)
-      send(view.pid, {:tick, 1})
+      send(view.pid, {:tick, 1, %{population: 0, total_resource: 0, total_carcass: 0}})
       html = render(view)
 
       # Population, Resources, Detritus columns are present

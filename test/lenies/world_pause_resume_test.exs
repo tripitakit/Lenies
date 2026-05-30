@@ -24,19 +24,19 @@ defmodule Lenies.WorldPauseResumeTest do
 
     Phoenix.PubSub.subscribe(Lenies.PubSub, handle.pubsub_prefix <> ":tick")
 
-    assert_receive {:tick, _}, 500
+    assert_receive {:tick, _, _}, 500
 
     :ok = Lenies.Worlds.pause(world_id)
 
     receive do
-      {:tick, _} -> :ok
+      {:tick, _, _} -> :ok
     after
       0 -> :ok
     end
 
-    refute_receive {:tick, _}, 200
+    refute_receive {:tick, _, _}, 200
 
     :ok = Lenies.Worlds.resume(world_id)
-    assert_receive {:tick, _}, 500
+    assert_receive {:tick, _, _}, 500
   end
 end

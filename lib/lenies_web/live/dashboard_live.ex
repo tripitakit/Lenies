@@ -530,7 +530,7 @@ defmodule LeniesWeb.DashboardLive do
   end
 
   @impl true
-  def handle_info({:tick, n}, socket) do
+  def handle_info({:tick, n, _stats}, socket) do
     throttle = Application.get_env(:lenies, :dashboard_throttle_ticks, 5)
     new_counter = socket.assigns.throttle_counter + 1
 

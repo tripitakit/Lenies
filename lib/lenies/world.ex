@@ -390,7 +390,13 @@ defmodule Lenies.World do
 
     hotspots = Hotspots.drift(state.hotspots, state.grid)
 
-    broadcast(state, "tick", {:tick, state.tick_count + 1})
+    stats = %{
+      population: :ets.info(state.tables.lenies, :size),
+      total_resource: total_resource,
+      total_carcass: total_carcass
+    }
+
+    broadcast(state, "tick", {:tick, state.tick_count + 1, stats})
 
     %{
       state

@@ -9,7 +9,7 @@ defmodule Lenies.TelemetryTest do
     {:ok, world_id: world_id}
   end
 
-  # Synchronously drain Telemetry's mailbox so any pending {:tick, _} or
+  # Synchronously drain Telemetry's mailbox so any pending {:tick, _, _} or
   # {:sterilized, _} message has been processed before we read history.
   defp drain_telemetry(world_id) do
     :sys.get_state(WorldTestHelpers.telemetry_pid(world_id))
@@ -114,6 +114,40 @@ defmodule Lenies.TelemetryTest do
       entries = Lenies.Telemetry.history(world_id, :all)
       ticks = Enum.map(entries, & &1.tick) |> Enum.sort()
       assert ticks == [3, 4, 5]
+    end
+  end
+
+  describe "decoupling from World GenServer (Task 3)" do
+    test "Telemetry records tick stats without calling World GenServer",
+         %{world_id: world_id} do
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
+
+      # Trace World's mailbox: any GenServer.call to World should NOT happen
+      # from Telemetry on a tick.
+      :erlang.trace(handle.pid, true, [:receive])
+
+      Lenies.Worlds.tick_now(world_id)
+      Process.sleep(100)
+
+      # Drain all traces and assert none are `:snapshot_stats` calls
+      trace_msgs =
+        receive_all_trace_msgs([])
+        |> Enum.filter(fn
+          {:trace, _pid, :receive, {:"$gen_call", _, :snapshot_stats}} -> true
+          _ -> false
+        end)
+
+      :erlang.trace(handle.pid, false, [:receive])
+
+      assert trace_msgs == [], "Telemetry should not call :snapshot_stats on World"
+    end
+  end
+
+  defp receive_all_trace_msgs(acc) do
+    receive do
+      msg -> receive_all_trace_msgs([msg | acc])
+    after
+      50 -> acc
     end
   end
 end
