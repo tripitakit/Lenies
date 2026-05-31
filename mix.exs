@@ -11,8 +11,36 @@ defmodule Lenies.MixProject do
       aliases: aliases(),
       deps: deps(),
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
-      listeners: [Phoenix.CodeReloader]
+      listeners: [Phoenix.CodeReloader],
+      releases: [
+        lenies: [
+          # Custom step: bundle docs/manual/*.md into priv/manual/ so the
+          # release self-contains the manual content. Lenies.Manual reads
+          # from `Application.app_dir(:lenies, "priv/manual")` in releases;
+          # without this copy, prod silently serves no chapters (the dev
+          # fallback `__DIR__/../../docs/manual` points outside the release
+          # boundary and is not portable). Source of truth stays at
+          # docs/manual; priv/manual is gitignored and rebuilt every release.
+          steps: [&copy_manual_to_priv/1, :assemble]
+        ]
+      ]
     ]
+  end
+
+  defp copy_manual_to_priv(%Mix.Release{} = release) do
+    src = "docs/manual"
+    dest = "priv/manual"
+
+    if File.dir?(src) do
+      File.rm_rf!(dest)
+      File.cp_r!(src, dest)
+      n = Path.wildcard(dest <> "/*.md") |> length()
+      IO.puts("[release] bundled #{n} manual chapters: #{src}/ -> #{dest}/")
+    else
+      IO.warn("[release] manual source dir not found: #{src}; release will lack manual content")
+    end
+
+    release
   end
 
   # Configuration for the OTP application.
