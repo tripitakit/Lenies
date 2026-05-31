@@ -172,10 +172,10 @@ state_after_pop =
 
 The resulting state — with the tested value removed — is what advances to the next instruction, whether the jump fired or not.
 
-**Example of the trap.** Suppose the stack holds `[5, 3]` (top = 5) and execution reaches `jz_t`:
+**Example of the trap.** Suppose the stack holds `[3, 5]` (top on the right per the manual convention — so `5` is the top, `3` is below) and execution reaches `jz_t`:
 
 ```
-before jz_t:   stack = [5, 3]
+before jz_t:   stack = [3, 5]    (top = 5)
 jz_t tests 5 (not zero → condition false, no jump)
 jz_t pops 5 regardless
 after jz_t:    stack = [3]

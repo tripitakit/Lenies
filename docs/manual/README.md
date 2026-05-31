@@ -65,6 +65,17 @@ The positions refer to the zero-based index of the opcode in the codeome ring.
 on the right. For example, `( b a -- b+a )` means: pop `a` (top), pop `b`,
 push their sum. An empty side means no operands consumed or produced.
 
+**Stack state** (the concrete contents of the stack at a moment in time) is
+written in square brackets, **also with the top on the right**: `[a, b, c]`
+means bottom=`a`, second-from-top=`b`, **top=`c`**. Pushing 5 then 7 onto
+an empty stack yields `[5, 7]` (top=7), never `[7, 5]`. The Elixir source
+internally uses head=top lists; the manual deliberately reverses this for
+display so that "stack grows rightward" matches how you read.
+
+The same notation rules are restated at the start of [Chapter 1, §1](01-vm-anatomy.md)
+where the stack is first defined, so readers who skip the README still
+encounter them before any worked example.
+
 **Anchor bit patterns** are written as a list such as `[0,1,0,1]`, where `0`
 stands for `:nop_0` and `1` stands for `:nop_1`. The complement of
 `[0,1,0,1]` is `[1,0,1,0]`. When a jump opcode is followed by the template

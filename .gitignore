@@ -48,4 +48,5 @@ npm-debug.log
 # Production deployment instructions — kept local; scp'd to the VPS manually.
 # May contain references to VPS paths, secrets layout, etc.
 /DEPLOY.md
+/DEPLOY-VPS.md
 

@@ -31,11 +31,29 @@ falls off the end.
 
 ### `stack` — the data stack
 
-The stack holds up to 16 integers. The head of the list is the top. When a
-push would make the length exceed 16, `Enum.take(new_stack, 16)` keeps the
-16 youngest values and silently drops the oldest (the bottom). Popping an
-empty stack returns `0` without error — this is intentional; mutations can
-produce code that pops more than it pushes, and the VM must survive that.
+The stack holds up to 16 integers. When a push would make the length
+exceed 16, the oldest (bottom) value is silently dropped. Popping an
+empty stack returns `0` without error — this is intentional; mutations
+can produce code that pops more than it pushes, and the VM must survive
+that.
+
+> **📐 Notation convention used throughout this manual** — Stack contents
+> are always written with the **top on the right**, in BOTH notations the
+> manual uses:
+>
+> - **Bracket notation** (showing concrete stack state): `[a, b, c]` means
+>   bottom=`a`, second-from-top=`b`, **top=`c`**. So if you push 5 then 7
+>   onto an empty stack, the result is written `[5, 7]`, not `[7, 5]`.
+> - **Stack-effect notation** (showing what an opcode does): `( before -- after )`
+>   with top on the right of each side. `( a b -- a+b )` means pop `b`
+>   (the top), pop `a`, push their sum.
+>
+> The Elixir source implements the stack as a list where the *head* is
+> the top — so internally the same state above is `[c, b, a]`. The
+> manual deliberately reverses this for display, because reading
+> bottom-to-top left-to-right matches how stack growth is intuited and
+> matches the Forth/PostScript family of stack-language docs. If you read
+> source code, remember to mentally flip.
 
 ### `slots` — local memory
 
@@ -209,28 +227,33 @@ energy starves naturally.
 
 ## 6. Stack Diagrams
 
-Tracing `push5 ; push7 ; swap ; drop` step by step. Each column shows the
-stack contents from bottom to top (top of stack at the top of the box).
+Tracing `push0 ; push1 ; swap ; drop` step by step. (The VM only has three
+push opcodes: `push0`, `push1`, and `pushN` — there is no `push5` or
+`push7`; arbitrary values are built with arithmetic, e.g.
+`push1; push1; add` builds 2.) Each column shows the stack contents from
+bottom to top — the top of the stack is at the top of the box.
 
 ```
-  │   │   │ 5 │   │ 7 │   │ 5 │   │ 5 │
-  │   │   │   │   │ 5 │   │ 7 │   │   │
+  │   │   │ 0 │   │ 1 │   │ 0 │   │ 1 │
+  │   │   │   │   │ 0 │   │ 1 │   │   │
   └───┘   └───┘   └───┘   └───┘   └───┘
-  start   push5   push7    swap    drop
+  start   push0   push1    swap    drop
 ```
 
 Stack effects in `( before -- after )` notation:
 
 | Opcode  | Stack effect          |
 |---------|-----------------------|
-| `push5` | `( -- 5 )`            |
-| `push7` | `( -- 7 )`            |
+| `push0` | `( -- 0 )`            |
+| `push1` | `( -- 1 )`            |
 | `swap`  | `( a b -- b a )`      |
 | `drop`  | `( a -- )`            |
 
-After `push5` the stack is `[5]`. After `push7` it is `[7, 5]` (7 is the new
-top). `swap` exchanges the two top elements to give `[5, 7]`. `drop` removes
-the top to leave `[7]`.
+In bracket notation (top on the right, per the convention introduced in
+§1): after `push0` the stack is `[0]`. After `push1` it is `[0, 1]` —
+`1` is the new top, written on the right. `swap` exchanges the two
+top elements to give `[1, 0]`. `drop` removes the top (now `0`) to
+leave `[1]`.
 
 ---
 

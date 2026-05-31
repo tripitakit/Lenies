@@ -16,15 +16,18 @@ Every Lenie has its own VM state and runs one opcode per tick (modulo
 `interpreter_steps_per_batch`).
 
 **Stack.** A single data stack, max depth **16** opcodes. Push beyond the cap
-discards the BOTTOM (oldest) element — the top survives. `pop` and `peek` on
-an empty stack return **0** (never crash). `dup` pops top then pushes it
-twice (net: duplicate). `swap` pops `a` (top) and `b`, pushes `a` then `b`
+discards the BOTTOM (oldest) element — the top survives. Popping an empty
+stack returns **0** (never crash). `dup` pops top then pushes it twice
+(net: duplicate). `swap` pops `a` (top) and `b`, pushes `a` then `b`
 (net: top and second swap).
 
-**Manual notation.** Stack effects are written `( before -- after )` with
-**TOP ON THE RIGHT**. Example: `( b a -- b+a )` means pop `a` (top), pop `b`
-(second), push `a+b`. Internally Elixir lists are head=top, but every public
-document — including this appendix — uses top-on-right.
+**Manual notation.** Two display conventions, BOTH with **TOP ON THE RIGHT**:
+- Stack-effect notation `( before -- after )` — e.g., `( b a -- b+a )`
+  means pop `a` (top), pop `b` (second), push `a+b`.
+- Bracket state notation `[a, b, c]` — bottom=`a`, second-from-top=`b`,
+  **top=`c`**. Push 5 then 7 onto an empty stack yields `[5, 7]`, not
+  `[7, 5]`. (Internally the Elixir source uses head=top lists; the
+  appendix and the manual deliberately reverse this for human reading.)
 
 **Slots.** A fixed-size scratchpad of **4 integer slots** indexed `0..3`. All
 slot accesses do `slot_idx mod 4`, so indices > 3 wrap. Slots start at 0.
@@ -862,10 +865,13 @@ replication. Steady state ≈ +805 energy per generation cycle.
    use `:sense_front`.
 
 8. **Treating empty pop as a crash.** It is NOT. Popping from an empty
-   stack returns 0 (and similarly for `:peek`, `:load` on an unwritten
-   slot, etc.). `:ret` from an empty call stack does NOT halt either —
-   it just advances IP by 1. Plan defensively but don't pre-fill the
-   stack "to be safe" — that's extra opcodes for nothing.
+   stack returns 0 (and `:load` on an unwritten slot returns 0 too).
+   `:ret` from an empty call stack does NOT halt either — it just
+   advances IP by 1. Plan defensively but don't pre-fill the stack "to
+   be safe" — that's extra opcodes for nothing. (Note: `:peek` is NOT
+   an opcode — it's an internal `State.peek/1` helper in source. The
+   only way to non-destructively read the top is `:dup` then use one
+   of the copies.)
 
 9. **Codeome length out of bounds.** The acceptable codeome length range is
    **[5, 1000]** opcodes. Below 5: rejected. Above 1000: rejected. Also
