@@ -46,6 +46,7 @@ instructions in the top-level project README at
 - [Chapter 10 — Cookbook](10-cookbook.md) — six recurring idioms
 - [Chapter 11 — Conjugation and Plasmids](11-conjugation-and-plasmids.md) — horizontal gene transfer; writing your own conjugable plasmid
 - [Chapter 12 — Recipes](12-recipes.md) — beginner-friendly idioms (loops, if-else, stack/storage patterns)
+- [Appendix: LLM Knowledge Base](LLM-APPENDIX.md) — single-file reference for AI coding agents writing Lenies codeomes
 
 ---
 
