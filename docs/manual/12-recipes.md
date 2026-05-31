@@ -301,7 +301,7 @@ defend                    yields :defend
 jmp_t[4] (0.4) = 6.30` energy plus the no-op tail through anchor B
 (4 × 0.1 = 0.4) = **6.70** total.
 **Cost (FALSE path):** `sense_front (0.5) + jz_t[4] (0.4) + defend (2.0)
-+ 4 nops for anchor B (0.4) = **3.30** energy.
++ 4 nops for anchor B (0.4)` = **3.30** energy.
 
 **Discussion — anchor and template choice:**
 
