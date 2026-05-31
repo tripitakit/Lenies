@@ -64,7 +64,9 @@ spread them by calling `conjugate` on every forage step. We dissect both below.
 
 Pops `length` (top) and `start_addr`. Carves
 `codeome[start_addr .. start_addr+length-1]` — reading with toroidal wrap, like
-every codeome access — into the plasmid buffer, replacing whatever was there.
+every codeome access — and **appends** it to this creature's plasmid buffer.
+Multiple plasmids can be carried simultaneously (the buffer is a list;
+`:conjugate` later picks one uniformly at random to transfer).
 `length` must be in `[1, 64]`; an invalid length pushes `0` and changes nothing.
 On success pushes `1`.
 
@@ -418,9 +420,10 @@ copied, never executed.
    forage body (after `move`), so the creature tries to infect whatever is
    ahead each step.
 3. Append a Veer payload — anchor `nop_0 nop_1 nop_0 nop_1`, then `turn_left`,
-   then `jmp_t` with template `nop_1 nop_0 nop_1 nop_0` — to the end of the
-   codeome. Note its start position and length (10).
-4. Before the forage loop, push that start position and `10`, then add
+   then `jmp_t` with template `nop_1 nop_0 nop_1 nop_0`, then `:push0`
+   (separator) — to the end of the codeome. Note its start position and length
+   (11).
+4. Before the forage loop, push that start position and `11`, then add
    `make_plasmid` and `drop` to load the payload into the buffer.
 5. Save the seed, give it a colour, and spawn one copy next to a plain Minimal
    Replicator (spawn the built-in seed first, pause, then spawn yours adjacent —

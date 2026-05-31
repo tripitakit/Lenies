@@ -137,7 +137,7 @@ comfortably energy-positive.
 Before the editor will save a codeome it runs `LeniesWeb.CodeomeBuffer.validate/1`.
 Three things must be true:
 
-1. **Length in bounds:** the codeome must have between 5 and 500 opcodes.
+1. **Length in bounds:** the codeome must have between 5 and 1000 opcodes.
 2. **Enough non-nop opcodes:** at least 10 opcodes that are not `:nop_0` or `:nop_1`.
 3. **All opcodes in the whitelist:** every atom must be in the 36-entry opcode set.
 

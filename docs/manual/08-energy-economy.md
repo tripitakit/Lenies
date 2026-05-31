@@ -31,7 +31,7 @@ Exact costs for the one-time setup before the copy loop:
 ```
 LOOP_HEAD anchor   4 × nop              0.40
 Init block         get_size+push0+store 0.90
-Allocate(121)      5.0 + 0.05×121      11.65
+Allocate(121)      5.0 + 0.05×121      11.05
 jz_t alloc check   4-bit template       0.40
 Copy counter init  push0+push1+store    0.70
 ```
@@ -120,7 +120,7 @@ Forage init                  2.80
 Forage loop (128 × 7.5)    960.00
 Final jmp_t                  0.40
                            ──────
-Total per cycle           1764.45 energy
+Total per cycle           1763.85 energy
 ```
 
 All numbers are exact, derived directly from `costs.ex` and the opcode layout in
@@ -145,7 +145,7 @@ gain per cycle = 128 × 20 × hit_rate = 2560 × hit_rate
 | 0.50 | 1280 | 1764 | -484 |
 
 At 50% hit rate the replicator starves. At 80% it survives with a moderate surplus. Hit rate is
-not a free parameter — it emerges from radiation replenishment (`radiation_per_tick = 1000` across
+not a free parameter — it emerges from radiation replenishment (`radiation_per_tick = 500` across
 a 256×256 grid) and population pressure. A crowded world collapses hit rate and triggers crashes.
 
 ---
@@ -260,11 +260,11 @@ At different hit rates (for a 121-op codeome, forage_cost_per_iter = 7.5):
 
 At 80% hit rate K = 94 already works; K = 128 gives a comfortable margin. At 50% hit rate you
 would need K > 320, making each cycle very slow. This is why the default world uses
-`initial_resource_per_cell: 30` and `radiation_per_tick: 1000` — those values keep hit rate
+`initial_resource_per_cell: 30` and `radiation_per_tick: 500` — those values keep hit rate
 well above 0.69 in the early game.
 
-For a 50-op codeome, `replication_cycle_cost ≈ 344` (copy loop 320 + other 24). At 80% hit
-rate K_min ≈ 41, so K = 64 is comfortable.
+For a 50-op codeome, `replication_cycle_cost ≈ 340` (copy loop 320 + other 20). At 80% hit
+rate K_min ≈ 40, so K = 64 is comfortable.
 
 ---
 

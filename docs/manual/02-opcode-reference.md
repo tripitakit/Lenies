@@ -178,10 +178,7 @@ image of `jz_t`.
 
 **Stack:** `( -- )`
 **Cost:** `0.2 + 0.05 × template_len`
-**Description:** Pushes the return address onto the *call stack* (not the data
-stack), then jumps to the complement. If no complement is found, the return
-address is still pushed and execution falls through. Does not affect the data
-stack.
+**Description:** Pushes the return address (`ip + 1 + template_len`) onto the *call stack* (not the data stack), then jumps to the position right after the complement of the following template. If no complement is found, the return address is NOT pushed and execution simply falls through to the instruction after the template — the call stack stays untouched.
 
 ### `ret`
 
@@ -381,8 +378,8 @@ slots return `0`.
 **Stack:** `( start_addr length -- 1|0 )`
 **Cost:** `2.0 + 0.05 × length` on success, `2.0` on a validation failure.
 **Description:** Carves `codeome[start_addr .. start_addr+length-1]` (with
-toroidal wrap, like every codeome read) into this creature's *plasmid buffer*,
-replacing any plasmid already held. `length` must be in `[1, 64]`; an invalid
+toroidal wrap, like every codeome read) and **appends** it to this creature's
+*plasmid buffer* (multiple plasmids can be carried simultaneously). `length` must be in `[1, 64]`; an invalid
 length pushes `0` and leaves the buffer untouched. On success pushes `1`. The
 plasmid buffer is not executed — it is the payload that `conjugate` transfers.
 Pure VM operation (no world round-trip). See Chapter 11.
@@ -391,8 +388,7 @@ Pure VM operation (no world round-trip). See Chapter 11.
 
 **Stack:** `( -- 1|0 )`
 **Cost:** `4.0 + 0.05 × plasmid_size` on success, `4.0` on any failure path.
-**Description:** Transfers this creature's plasmid buffer to the Lenie in the
-cell directly ahead: the plasmid opcodes are appended to the recipient's
+**Description:** Selects one plasmid uniformly at random from this creature's plasmid buffer and transfers its opcodes to the Lenie in the cell directly ahead: the plasmid opcodes are appended to the recipient's
 codeome and become its plasmid buffer too (so it can re-conjugate). Pushes `1`
 on success, `0` if there is no plasmid, no Lenie ahead, the recipient is full
 (would exceed the codeome length bound), or the recipient is busy. The transfer

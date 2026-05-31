@@ -72,13 +72,7 @@ target_ip = (match_pos + T) mod size
 That is, just past the matched anchor — the first real instruction in the procedure body.
 
 **Step 5b — Search fails.**
-The VM falls through: `ip ← return_ip`. Execution continues as if the `call_t` had been a no-op.
-**Important: the return address was already pushed onto the call stack in step 3, even when the
-search fails.** The call stack therefore contains an orphaned frame. This is what the code actually
-does — it is not a design omission but a consequence of the push happening before the search
-result is examined. In practice, that orphaned frame will be consumed by the next `ret` the lenie
-executes, which may return to an unexpected location. Keep this in mind when designing codeomes that
-could plausibly lose their procedure anchor through mutation.
+The VM falls through: `ip ← return_ip` (where `return_ip = ip + 1 + template_len`, computed in Step 3). Execution continues from the instruction immediately after the template. **The return address is NOT pushed onto the call stack on failure** — `State.push_call` only fires in the success branch. No orphaned frame is created. The cost (`0.2 + 0.05·t_len`) is paid either way.
 
 ### 2.2  `ret` step by step
 

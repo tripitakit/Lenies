@@ -5,7 +5,7 @@
 `MinimalReplicator` is the canonical hand-tuned replicator bundled with
 Lenies — the reference against which new codeomes are benchmarked.
 
-Every idiom introduced in chapters 03–07 appears in its 121 opcodes:
+Every idiom introduced in chapters 03–07 appears in its 123 opcodes:
 anchor-based loops (chapter 04), slot-based counters (chapter 05), the
 doubling chain for large constants (chapter 05), the `read_self` /
 `write_child` copy idiom (chapter 07). What the chapter-07 sustainable
@@ -16,11 +16,11 @@ replicator left as an exercise — graceful handling of a busy front cell —
 
 ## 2. The shape, at a glance
 
-- **121 opcodes total** (positions 0–120, ring-indexed).
+- **123 opcodes total** (positions 0–122, ring-indexed).
 - **6 named anchors** (4-bit `nop_0`/`nop_1` sequences):
   `LOOP_HEAD`, `COPY_LOOP_HEAD`, `ABORT_TARGET`, `TURN_LEFT_ANCHOR`,
   `SKIP_TURN_ANCHOR`, `FORAGE_LOOP_HEAD`.
-- **Two `:push0` separators** at positions 67 and 120, preventing the
+- **Two `:push0` separators** at positions 67 and 122, preventing the
   template extractor from reading across adjacent nop blocks.
 - **K = 128 forage iterations** between division attempts (vs K = 64 in the
   chapter-07 sustainable replicator).
@@ -51,7 +51,7 @@ Cross-reference: chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.
 :get_size, :push0, :store,
 ```
 
-`:get_size` pushes 121; `:store` writes `slots[0] ← 121`. Slot[0] serves
+`:get_size` pushes 123; `:store` writes `slots[0] ← 123`. Slot[0] serves
 double duty — holds N here, then the forage counter K at pos 92–93;
 the lifetimes never overlap. Cross-reference: chapter 05
 ([05-memory-and-arithmetic.md](05-memory-and-arithmetic.md)).
@@ -326,14 +326,49 @@ forward; blocked → no-op. Cross-reference: chapter 03
 ([04-loops-and-templates.md](04-loops-and-templates.md)).
 
 
-### pos 102..114 — decrement counter, loop back to FORAGE_LOOP_HEAD
+### pos 102..103 — try to infect a neighbour with a plasmid
 
 ```elixir
-# ── pos 102..107: counter := counter - 1 (slot[0]) ───────────────────
+# ── pos 102..103: try to spread (conjugate); discard the success flag ──
+:conjugate, :drop,
+```
+
+Tucked inside the forage body so it fires on **every** forage iteration —
+128 opportunistic horizontal-gene-transfer attempts per generation cycle,
+piggy-backing on the same forward sweep that gathers food. There is no
+sense-and-branch guard: the codeome simply asks the world "if there's a
+neighbour ahead and I'm carrying a plasmid, hand them a copy". This
+densely-spammed strategy is what makes plasmids spread through a
+MinimalReplicator population in seconds rather than minutes.
+
+`:conjugate` yields to the world (like `:eat` and `:move`): the world
+process inspects the front cell and, if a peer Lenie lives there, picks
+**one** plasmid uniformly at random from the carrier's buffer and grafts
+it into the neighbour. The opcode pushes `1` on a successful transfer
+and `0` on any failure path (no neighbour, neighbour already carries
+that plasmid, carrier holds no plasmids, etc.). `:drop` then throws the
+success flag away — this codeome doesn't react to either outcome, it
+just keeps trying on the next iteration.
+
+Energy cost: a flat `4.0` base charged locally, plus a `0.05 ·
+plasmid_size` surcharge applied by the world only on success (so a
+no-target attempt costs exactly 4.0; transferring the 32-opcode Twitch
+plasmid costs `4.0 + 1.6 = 5.6`). A plasmid-free carrier still pays the
+4.0 base every iteration — a small but real "vaccination" tax baked into
+the reference codeome. Cross-reference: chapter 11
+([11-plasmids-and-conjugation.md](11-plasmids-and-conjugation.md)) for
+the full plasmid lifecycle, the trailing `:push0` separator pattern, and
+the energy accounting that makes this every-iteration spam sustainable.
+
+
+### pos 104..116 — decrement counter, loop back to FORAGE_LOOP_HEAD
+
+```elixir
+# ── pos 104..109: counter := counter - 1 (slot[0]) ───────────────────
 :push0, :load, :push1, :sub, :push0, :store,
-# ── pos 108..109: load counter for check ─────────────────────────────
+# ── pos 110..111: load counter for check ─────────────────────────────
 :push0, :load,
-# ── pos 110..114: jnz_t → back to FORAGE_LOOP_HEAD if counter != 0 ───
+# ── pos 112..116: jnz_t → back to FORAGE_LOOP_HEAD if counter != 0 ───
 :jnz_t, :nop_1, :nop_0, :nop_1, :nop_0,
 ```
 
@@ -344,10 +379,10 @@ Cross-reference: chapter 05 ([05-memory-and-arithmetic.md](05-memory-and-arithme
 chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.md)).
 
 
-### pos 115..119 — jmp_t back to LOOP_HEAD
+### pos 117..121 — jmp_t back to LOOP_HEAD
 
 ```elixir
-# ── pos 115..119: jmp_t → back to LOOP_HEAD to restart replication ───
+# ── pos 117..121: jmp_t → back to LOOP_HEAD to restart replication ───
 :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
 ```
 
@@ -357,16 +392,16 @@ cycle completes here.
 Cross-reference: chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.md)).
 
 
-### pos 120 — SEPARATOR `:push0`
+### pos 122 — SEPARATOR `:push0`
 
 ```elixir
-# ── pos 120: separator (dead code, never executed) ───────────────────
+# ── pos 122: separator (dead code, never executed) ───────────────────
 :push0,
 ```
 
-**Robustness addition 3b.** In a 121-opcode ring, pos 119 wraps directly
+**Robustness addition 3b.** In a 123-opcode ring, pos 121 wraps directly
 to pos 0. Without this separator, the `jmp_t` template (four `nop_0` at
-116–119) and `LOOP_HEAD` (four `nop_1` at 0–3) would be contiguous and
+118–121) and `LOOP_HEAD` (four `nop_1` at 0–3) would be contiguous and
 the extractor would read eight nops — producing a template matching nothing.
 The subtlest separator: the adjacency is invisible in a linear listing.
 Cross-reference: chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.md)).
@@ -388,9 +423,9 @@ fall-through position doubles as the abort landing pad. Both paths need
 identical follow-on behaviour, so zero extra opcodes are spent on a separate
 landing anchor.
 
-**3. Two `:push0` separators (pos 67 and 120).** Both prevent the template
+**3. Two `:push0` separators (pos 67 and 122).** Both prevent the template
 extractor from reading across adjacent nop blocks and producing an oversized
-template that matches no anchor. The pos 120 separator is the subtler one:
+template that matches no anchor. The pos 122 separator is the subtler one:
 it guards the ring wrap, a boundary invisible in a linear source listing.
 
 ---
@@ -401,8 +436,8 @@ Full derivation in chapter 08 ([08-energy-economy.md](08-energy-economy.md)).
 
 | Quantity | Value |
 |---|---|
-| Codeome length | 121 opcodes |
-| Copy loop cost (≈ 6 energy/opcode × 121) | ≈ 726 |
+| Codeome length | 123 opcodes |
+| Copy loop cost (≈ 6 energy/opcode × 123) | ≈ 738 |
 | Allocate + setup + divide overhead | ≈ 33 |
 | **Total per-cycle replication cost** | **≈ 759** |
 | Forage body cost per iteration | ≈ 8.6 energy |
@@ -440,11 +475,11 @@ end
 
 `inject_attack/2` walks the list accumulating `acc`. When it hits the first
 `:eat`, it reverses `acc`, appends `:attack`, then `:eat` and `rest`
-unchanged — the tail is never touched. Result: 122 opcodes, all six anchors
+unchanged — the tail is never touched. Result: 124 opcodes, all six anchors
 and both separators inherited intact.
 
 **Why this design is interesting.** Predation is a behavioural mutation, not
-a separate codeome. The Carnivore shares 121 of its 122 opcodes with
+a separate codeome. The Carnivore shares 123 of its 124 opcodes with
 `MinimalReplicator`; children inherit `:attack` and are also Carnivores.
 
 ### Attack and defence numerics
@@ -488,8 +523,8 @@ sparse ones.
 
 | Codeome | Ops | Non-nops | Key idiom introduced | Replicates? | Sustainable? | Notes |
 |---|---|---|---|---|---|---|
-| **MinimalReplicator** | **121** | **many** | Alloc-failure guard + dual anchor | **Yes** | **Yes (~2160)** | Production reference |
-| **Carnivore** | **122** | **many** | Behavioural mutation via `:attack` | **Yes** | **Density-dependent** | One-opcode patch on MR |
+| **MinimalReplicator** | **123** | **many** | Alloc-failure guard + dual anchor | **Yes** | **Yes (~2160)** | Production reference |
+| **Carnivore** | **124** | **many** | Behavioural mutation via `:attack` | **Yes** | **Density-dependent** | One-opcode patch on MR |
 | **Defender** | **93** | **many** | `defend` per iter, K=32, deterministic post-divide turn | **Yes** | **Yes (~+50 margin)** | Drops random-turn machinery to fit K=32 |
 | **Forager** (shipped) | **139** | **many** | 3-way `pushN mod 3` random walk every step | **Yes** | **Yes (~+1786)** | Distinct from the chapter-4 teaching Forager |
 | **Hunter** | **164** | **many** | L/R alternation via slot parity + lock-on attack | **Yes** | **Yes (~+315)** | sense_front + attack with no move/turn on prey |

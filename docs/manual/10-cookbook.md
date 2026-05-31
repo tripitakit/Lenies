@@ -33,15 +33,16 @@ suitable value elsewhere.
 # → stack: [8]
 
 # General rule: push1 followed by k repetitions of (dup, add) → 2^k
-# Cost formula: 0.1 × (1 + 2k)
-#   k=1 → 2,   cost 0.30
-#   k=3 → 8,   cost 0.70
-#   k=7 → 128, cost 1.50
-#   k=8 → 256, cost 1.70
+# Cost formula: 0.1 + 0.3k  (initial push1 plus k repetitions of dup + add)
+#   k=1 → 2,   cost 0.40
+#   k=3 → 8,   cost 1.00
+#   k=7 → 128, cost 2.20
+#   k=8 → 256, cost 2.50
 ```
 
-**Cost:** `0.1 × (1 + 2k)` energy for 2^k.  Building 8 (k=3) costs 0.70;
-building 128 (k=7) costs 1.50; building 256 (k=8) costs 1.70.
+**Cost:** `0.1 + 0.3k` energy for 2^k (initial `:push1` plus k repetitions of `:dup + :add`).
+Building 2 (k=1) costs 0.40; building 8 (k=3) costs 1.00; building 128 (k=7) costs 2.20;
+building 256 (k=8) costs 2.50.
 
 **Discussion:** There is no `:push N` opcode for arbitrary N — `:pushN`
 produces a *random* integer in 0..255.  The doubling chain is therefore the
@@ -230,7 +231,7 @@ working starting point for the self-copy cycle.
   :write_child,                        # writes opcode_int at child[i]; pops both
                                        #                    cost 1.00
   :push1, :load,                       # → [i]              cost 0.60
-  :push1, :add,                        # → [i+1]            cost 0.20
+  :push1, :add,                        # → [i+1]            cost 0.30
   :push1, :store,                      # slot[1] = i+1      cost 0.60
 
   # ── CONDITION: remaining = size - counter ─────────────────────────────────
@@ -258,17 +259,18 @@ working starting point for the self-copy cycle.
 | Phase              | Formula               | Example (N=100) |
 |--------------------|-----------------------|-----------------|
 | init + allocate    | `0.60 + 5.0 + 0.05N`  | 10.60           |
-| copy body × N      | `N × 3.90`            | 390.00          |
+| copy body × N      | `N × 4.10`            | 410.00          |
 | condition + jnz_t  | `N × 1.80`            | 180.00          |
 | divide             | `10.0`                | 10.00           |
-| **total**          | `≈ 5.75N + 15.6`      | **590.60**      |
+| **total**          | `≈ 5.95N + 15.60`     | **610.60**      |
 
 Per-iteration copy body breakdown: `push1+load (0.60) + read_self (0.30) +
 push1+load (0.60) + swap (0.10) + write_child (1.00) + push1+load (0.60) +
-push1+add (0.20) + push1+store (0.60) = 4.00` energy; condition overhead:
+push1+add (0.30) + push1+store (0.60) = 4.10` energy; condition overhead:
 `push0+load (0.60) + push1+load (0.60) + sub (0.20) + jnz_t[4] (0.40) =
-1.80` energy — for a total of 5.80 per iteration, consistent with the table
-above.
+1.80` energy — for a total of 5.90 per iteration of the loop body (copy +
+condition); the `5.95N` figure in the table above also amortises allocate's
+per-byte cost (`0.05N`) over each iteration.
 
 **Discussion:** This skeleton is intentionally minimal — it will not survive
 long without a forage block, because each replication cycle at N=100 costs

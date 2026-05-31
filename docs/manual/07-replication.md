@@ -161,7 +161,7 @@ self-replicator reads its own instructions to copy them into the child buffer.
 The return value is an **integer encoding** of the opcode, not the opcode atom. The encoding
 is the index of the opcode in the whitelist defined in `Lenies.Codeome.Opcodes`:
 
-The full 36-entry whitelist (from `Lenies.Codeome.Opcodes`):
+The full 38-entry whitelist (from `Lenies.Codeome.Opcodes`):
 
 ```
 nop_0(0),  nop_1(1),  push0(2),  push1(3),  pushN(4),   dup(5),   drop(6),  swap(7),
@@ -172,10 +172,10 @@ move(22),  turn_left(23), turn_right(24), eat(25),
 attack(26), defend(27),
 get_ip(28), get_size(29), read_self(30),
 allocate(31), write_child(32), divide(33),
-store(34), load(35)
+store(34), load(35), make_plasmid(36), conjugate(37)
 ```
 
-36 entries (indices 0–35). Out-of-range integers decode to `:nop_0` (index 0).
+38 entries (indices 0–37). Out-of-range integers decode to `:nop_0` (index 0).
 
 ---
 
@@ -536,7 +536,7 @@ Both separators are `:push0` and are never executed (control flow always jumps p
   # ── pos 65..68  AFTER_TURN anchor [1,0,1,1] ─────────────────────────────
   :nop_1, :nop_0, :nop_1, :nop_1,
 
-  # ── pos 69..80  build K=64 on stack: push1, then 6 doublings ─────────────
+  # ── pos 69..81  build K=64 on stack: push1, then 6 doublings ─────────────
   # push1 → 1; dup+add → 2; dup+add → 4; ... dup+add → 64
   :push1,
   :dup, :add,

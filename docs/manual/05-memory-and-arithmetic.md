@@ -75,12 +75,12 @@ You have `:push1` (pushes 1) and `:dup` / `:add`. Doubling a value costs one `:d
 |----------|--------|-------------------|-------------|
 | `:push1` | 1 | 1 | 0.1 |
 | `:push1, :dup, :add` | 2 | 3 | 0.1 + 0.1 + 0.2 = 0.4 |
-| `:push1, :dup, :add, :dup, :add` | 4 | 5 | 0.6 |
-| `:push1, :dup, :add, :dup, :add, :dup, :add` | 8 | 7 | 0.8 |
-| + one more `:dup, :add` | 16 | 9 | 1.0 |
-| + one more `:dup, :add` | 32 | 11 | 1.2 |
-| + one more `:dup, :add` | 64 | 13 | 1.4 |
-| + one more `:dup, :add` | 128 | 15 | 1.6 |
+| `:push1, :dup, :add, :dup, :add` | 4 | 5 | 0.7 |
+| `:push1, :dup, :add, :dup, :add, :dup, :add` | 8 | 7 | 1.0 |
+| + one more `:dup, :add` | 16 | 9 | 1.3 |
+| + one more `:dup, :add` | 32 | 11 | 1.6 |
+| + one more `:dup, :add` | 64 | 13 | 1.9 |
+| + one more `:dup, :add` | 128 | 15 | 2.2 |
 
 Pattern: to build 2^k, use `push1` then k doublings. Energy = `0.1 + k × 0.3` (push + k doublings at 0.2 each, plus k dups at 0.1 each).
 
@@ -93,7 +93,7 @@ You can combine doublings with additions and subtractions to reach non-powers-of
 | `:add` | `( a b -- a+b )` | pops `b` (top), pops `a`, pushes `a + b` | 0.2 |
 | `:sub` | `( a b -- a-b )` | pops `b` (top), pops `a`, pushes `a - b` | 0.2 |
 | `:mul` | `( a b -- a*b )` | pops `b` (top), pops `a`, pushes `a * b` | 0.2 |
-| `:mod` | `( a b -- b mod a )` | pops `a` (top), pops `b`, pushes `b mod a`; if `a == 0`, pushes 0 | 0.2 |
+| `:mod` | `( a b -- a mod b )` | pops `b` (top), pops `a`, pushes `a mod b`; if `b == 0`, pushes 0 | 0.2 |
 
 The **right operand** (divisor for `:mod`, subtrahend for `:sub`) is popped first because it is on top. Push the left operand first, push the right operand on top, then execute.
 
