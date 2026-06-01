@@ -32,6 +32,8 @@ defmodule Lenies.World do
   alias Lenies.World.{Cell, ChildSlots, Hotspots, Radiation, Tables}
   alias Lenies.{Codeome, Mutator}
 
+  require Logger
+
   # ----- Public API -----
 
   def start_link(opts) do
@@ -155,6 +157,18 @@ defmodule Lenies.World do
     # `:cells` / `:lenies` tables aren't clobbered.
     case Lenies.Snapshot.load_validated(state.handle, name) do
       :ok ->
+        # After load_validated, ETS.lenies contains records whose `pid`
+        # fields are stale (the saved GenServer pids died long ago).
+        # Without a respawn, those records are ghosts — Species.aggregate
+        # filters them out via Process.alive?, Population shows N but
+        # the world is effectively empty, and the reconcile loop reaps
+        # them after ~130 ticks. Respawn a fresh Lenie GenServer for
+        # each ghost so the world is actually populated post-restore.
+        respawned = respawn_lenies_from_snapshots(state)
+        Logger.info(
+          "World #{inspect(state.world_id)} restored from snapshot \"#{name}\" — respawned #{respawned} Lenies"
+        )
+
         {r, c} = sum_cells(state.tables)
         new_state = %{state | total_resource: r, total_carcass: c}
         broadcast(new_state, "control", {:restored, System.system_time(:millisecond)})
@@ -1014,5 +1028,98 @@ defmodule Lenies.World do
       "#{state.handle.pubsub_prefix}:#{channel}",
       message
     )
+  end
+
+  # ----- snapshot restore: respawn ghost Lenies -----
+
+  # Iterate every entry in the freshly-loaded :lenies ETS and start a
+  # corresponding Lenie GenServer for each. The new GenServer's init/2
+  # will write a fresh snapshot back into ETS, which Map.merges over the
+  # existing record — preserving fields outside the snapshot map (e.g.
+  # :child_slot_id set by World on previous :allocate calls) while
+  # updating pid/pos/dir/energy/lineage/seed_origin/seeder_user_id/
+  # plasmids to the values we passed as opts.
+  #
+  # Trade-off: interpreter state (ip, stack, slots, call_stack, age)
+  # is NOT preserved — the respawned Lenie restarts execution from
+  # ip=0 with empty stack/slots/call_stack and age=0. Preserving the
+  # interpreter state would require extending Lenie.init/1 with an
+  # :interp_state opt; out of scope for this fix.
+  defp respawn_lenies_from_snapshots(state) do
+    state.tables.lenies
+    |> :ets.tab2list()
+    |> Enum.reduce(0, fn {_id, snap}, acc ->
+      case respawn_one_from_snap(snap, state) do
+        :ok -> acc + 1
+        :skip -> acc
+      end
+    end)
+  end
+
+  defp respawn_one_from_snap(snap, state) do
+    case codeome_from_snap(snap) do
+      nil ->
+        Logger.warning(
+          "Snapshot restore: skipping Lenie #{inspect(snap[:id])} — codeome not recoverable (old snapshot format and codeome_hash not in :species_codeomes cache)"
+        )
+
+        :skip
+
+      codeome ->
+        child_opts = [
+          id: snap.id,
+          codeome: codeome,
+          energy: Map.get(snap, :energy, 500.0) * 1.0,
+          pos: Map.get(snap, :pos, {0, 0}),
+          dir: Map.get(snap, :dir, :n),
+          lineage: Map.get(snap, :lineage, {nil, 0}),
+          seed_origin: Map.get(snap, :seed_origin),
+          seeder_user_id: Map.get(snap, :seeder_user_id),
+          paused?: state.paused?,
+          plasmids: Map.get(snap, :plasmids, [])
+        ]
+
+        case DynamicSupervisor.start_child(
+               Lenies.LenieSupervisor.via(state.world_id),
+               Supervisor.child_spec({Lenies.Lenie, {state.handle, child_opts}},
+                 restart: :temporary
+               )
+             ) do
+          {:ok, _pid} ->
+            :ok
+
+          other ->
+            Logger.warning(
+              "Snapshot restore: failed to respawn Lenie #{inspect(snap[:id])}: #{inspect(other)}"
+            )
+
+            :skip
+        end
+    end
+  end
+
+  # New-format snapshots (post-2026-06-01) persist the full opcode list
+  # under :codeome. Older snapshots only have :codeome_hash — for those
+  # we fall back to the node-wide :species_codeomes cache (populated by
+  # Lenie.init/1 across every Lenie ever spawned on this node). Cache
+  # miss (e.g. fresh node restart with no prior Lenies of that species)
+  # returns nil, and the caller skips the entry with a warning.
+  defp codeome_from_snap(snap) do
+    case Map.get(snap, :codeome) do
+      list when is_list(list) and list != [] ->
+        list
+
+      _ ->
+        case Map.get(snap, :codeome_hash) do
+          hash when is_binary(hash) ->
+            case :ets.lookup(:species_codeomes, hash) do
+              [{^hash, opcodes}] when is_list(opcodes) -> opcodes
+              _ -> nil
+            end
+
+          _ ->
+            nil
+        end
+    end
   end
 end

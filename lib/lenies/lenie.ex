@@ -374,6 +374,13 @@ defmodule Lenies.Lenie do
         energy: state.interp.energy,
         age: state.interp.age,
         ip: state.interp.ip,
+        # Persist the full opcode list, not just its hash. Required by
+        # snapshot restore (`Lenies.World.handle_call({:restore_snapshot, …})`)
+        # to respawn ghost Lenies after `:lenies` ETS is reloaded from disk
+        # — without the opcodes, the World can only fall back to the
+        # node-wide `:species_codeomes` cache, which is empty after a node
+        # restart.
+        codeome: state.codeome,
         codeome_hash: Lenies.Codeome.hash(state.codeome),
         lineage: state.lineage,
         seed_origin: state.seed_origin,
