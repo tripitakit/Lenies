@@ -25,8 +25,15 @@ defmodule LeniesWeb.StepperLive do
           {:ok, assign(socket, :session, %{new_session | status: :breakpoint_hit})}
 
         true ->
-          send(self(), {:stepper_tick, socket.assigns.id})
-          {:ok, assign(socket, :session, new_session)}
+          # `Stepper.step/1` resets status to :ready after every step. Restore
+          # :running so subsequent ticks keep firing (and the Pause button
+          # stays visible). Without this, Run advances exactly one opcode and
+          # the button flickers Pause → Run on the next render.
+          running_session = %{new_session | status: :running}
+          # Delay the next tick so the animation is visible to the user.
+          # 100ms ≈ 10 ops/sec, slow enough to follow state changes by eye.
+          Process.send_after(self(), {:stepper_tick, socket.assigns.id}, 100)
+          {:ok, assign(socket, :session, running_session)}
       end
     else
       {:ok, socket}

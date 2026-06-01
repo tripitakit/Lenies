@@ -1206,7 +1206,12 @@
 
 .stepper-body {
   display: grid;
-  grid-template-columns: 260px minmax(380px, 1fr) clamp(440px, 520px, 42vw);
+  /* LEFT inspector keeps its 260px slab (its sub-panels are dense numerics).
+     RIGHT mini-world claims 50% of the page so the 64×64 canvas can render
+     at a usable size. CENTER codeome listing absorbs whatever's left
+     (≈ 50vw − 260px on widescreen) — plenty for a 3-column row of pos /
+     opcode / arrow without dead space. */
+  grid-template-columns: 260px minmax(0, 1fr) 50%;
   gap: 0.75rem;
   padding: 0.75rem;
   flex: 1 1 0;
@@ -1304,10 +1309,12 @@
 .stepper-world {
   display: flex;
   flex-direction: column;
+  align-items: center;
   border: 1px solid rgba(148, 163, 184, 0.2);
   background: rgba(2, 6, 23, 0.4);
   padding: 0.5rem;
   min-height: 0;
+  min-width: 0;
 }
 .stepper-world-canvas-placeholder {
   flex: 1 1 auto;
@@ -1328,11 +1335,13 @@
 }
 
 .stepper-world-canvas {
-  flex: 1 1 auto;
-  min-height: 0;
+  /* Square canvas that fills the column up to the available vertical space.
+     `width: min(100%, calc(100vh − 180px))` makes it as large as possible
+     without overflowing past the modal header + footer + panel title.
+     Combined with `aspect-ratio: 1` it stays a perfect square. */
+  flex: 0 0 auto;
   aspect-ratio: 1;
-  max-width: 600px;
-  align-self: center;
+  width: min(100%, calc(100vh - 180px));
   background: #050816;
   border: 1px solid rgba(148, 163, 184, 0.3);
   display: block;

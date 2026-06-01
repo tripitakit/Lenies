@@ -122,7 +122,7 @@ abstraction. Factor it into your energy budget.
 
 The call stack has a maximum depth of 32 entries (`@call_stack_max` in `state.ex`). When a 33rd
 entry is pushed, `push_call` keeps the 32 most recent entries and silently **drops the oldest**.
-This is a FIFO drop: the entry at the tail of the list (the oldest return address) is discarded.
+The entry at the tail of the list (the oldest return address) is the one discarded.
 
 ```elixir
 # state.ex — push_call implementation
@@ -179,12 +179,12 @@ distinct patterns to avoid false matches.
 For procedures, add a **conceptual name in a comment**:
 
 ```elixir
-# EAT_MOVE anchor [1,1,1,1]
-:nop_1, :nop_1, :nop_1, :nop_1,
+# EAT_MOVE anchor [1,1,1,0]
+:nop_1, :nop_1, :nop_1, :nop_0,
 ```
 
-The pattern `[1,1,1,1]` is the anchor. `EAT_MOVE` is the human name. When a `call_t` has a
-template `[0,0,0,0]`, its complement is `[1,1,1,1]`, which is exactly this anchor. The comment
+The pattern `[1,1,1,0]` is the anchor. `EAT_MOVE` is the human name. When a `call_t` has a
+template `[0,0,0,1]`, its complement is `[1,1,1,0]`, which is exactly this anchor. The comment
 makes that connection explicit without inventing any VM mechanism.
 
 Keep a short index at the top of your codeome comments listing each anchor and its role:
@@ -193,7 +193,7 @@ Keep a short index at the top of your codeome comments listing each anchor and i
 # Anchor map:
 #   [0,0,0,0] — LOOP_HEAD  (target of jmp_t with template [1,1,1,1])
 #   [1,0,0,1] — TURN       (target of jz_t  with template [0,1,1,0])
-#   [1,1,1,1] — EAT_MOVE   (target of call_t with template [0,0,0,0])
+#   [1,1,1,0] — EAT_MOVE   (target of call_t with template [0,0,0,1])
 ```
 
 ---
@@ -217,17 +217,27 @@ We have three distinct anchor patterns:
 |-------------|-------------|---------------------|
 | `LOOP_HEAD` | `[0,0,0,0]` | `jmp_t [1,1,1,1]`   |
 | `TURN`      | `[1,0,0,1]` | `jz_t  [0,1,1,0]`   |
-| `EAT_MOVE`  | `[1,1,1,1]` | `call_t [0,0,0,0]`  |
+| `EAT_MOVE`  | `[1,1,1,0]` | `call_t [0,0,0,1]`  |
 
-Notice: `LOOP_HEAD` is `[0,0,0,0]` and the `call_t` template is also `[0,0,0,0]`. These look
-identical, but there is no conflict. Opcodes **search for the complement of their template**:
+Opcodes **search for the complement of their template**, so each opcode is looking for a different
+bit-pattern:
 
-- `jmp_t [1,1,1,1]` searches for the complement `[0,0,0,0]` — it finds `LOOP_HEAD`. Good.
-- `call_t [0,0,0,0]` searches for the complement `[1,1,1,1]` — it finds `EAT_MOVE`. Good.
+- `jmp_t [1,1,1,1]` searches for the complement `[0,0,0,0]` — it should find `LOOP_HEAD`.
+- `jz_t  [0,1,1,0]` searches for the complement `[1,0,0,1]` — it should find `TURN`.
+- `call_t [0,0,0,1]` searches for the complement `[1,1,1,0]` — it should find `EAT_MOVE`.
 
-The two all-zero sequences serve different opcode roles and target different anchors. Templates and
-anchors live in complementary bit-space; you never mix them up as long as you remember that a
-template is always inverted before it is matched.
+There is a subtlety that is easy to miss: **a template is itself a run of nop-cells sitting in the
+codeome**, so the complement search can land on another opcode's template, not just on an anchor.
+The search is forward-first and stops at the *first* matching run, so you must keep every template
+distinct from every complement that some other opcode is hunting for. Concretely, the `jmp_t`
+templates are `[1,1,1,1]` — if we had chosen `EAT_MOVE = [1,1,1,1]` (so `call_t` searched for
+`[1,1,1,1]`), then `call_t` would have matched the nearest `jmp_t` template instead of the real
+`EAT_MOVE` anchor. Choosing `EAT_MOVE = [1,1,1,0]` keeps the `call_t` complement (`[1,1,1,0]`)
+clear of every template in the codeome, so the only run it can match is the anchor we intended.
+
+The lesson: anchors and templates all live in the same nop bit-space. Pick anchor patterns whose
+complements do not coincide with any template you use elsewhere, and separate adjacent groups with a
+non-nop cell so two groups never merge into one long run.
 
 ### 6.2  Full codeome
 
@@ -236,7 +246,7 @@ template is always inverted before it is matched.
   # ── Anchor map: ────────────────────────────────────────────
   #   [0,0,0,0] LOOP_HEAD  ← jmp_t template [1,1,1,1]
   #   [1,0,0,1] TURN       ← jz_t  template [0,1,1,0]
-  #   [1,1,1,1] EAT_MOVE   ← call_t template [0,0,0,0]
+  #   [1,1,1,0] EAT_MOVE   ← call_t template [0,0,0,1]
   #
   # ── 0..3   LOOP_HEAD anchor [0,0,0,0] ────────────────────
   :nop_0, :nop_0, :nop_0, :nop_0,
@@ -244,8 +254,8 @@ template is always inverted before it is matched.
   :sense_front,
   # ── 5..9   jz_t to TURN [1,0,0,1] — template [0,1,1,0] ─
   :jz_t, :nop_0, :nop_1, :nop_1, :nop_0,
-  # ── 10..14 call_t to EAT_MOVE [1,1,1,1] — template [0,0,0,0]
-  :call_t, :nop_0, :nop_0, :nop_0, :nop_0,
+  # ── 10..14 call_t to EAT_MOVE [1,1,1,0] — template [0,0,0,1]
+  :call_t, :nop_0, :nop_0, :nop_0, :nop_1,
   # ── 15..19 jmp_t back to LOOP_HEAD — template [1,1,1,1] ─
   :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
   # ── 20     separator (prevents template bleed) ───────────
@@ -254,14 +264,14 @@ template is always inverted before it is matched.
   :nop_1, :nop_0, :nop_0, :nop_1,
   # ── 25     turn right ────────────────────────────────────
   :turn_right,
-  # ── 26..30 call_t to EAT_MOVE — template [0,0,0,0] ──────
-  :call_t, :nop_0, :nop_0, :nop_0, :nop_0,
+  # ── 26..30 call_t to EAT_MOVE — template [0,0,0,1] ──────
+  :call_t, :nop_0, :nop_0, :nop_0, :nop_1,
   # ── 31..35 jmp_t back to LOOP_HEAD — template [1,1,1,1] ─
   :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
   # ── 36     separator ─────────────────────────────────────
   :push0,
-  # ── 37..40 EAT_MOVE anchor [1,1,1,1] ─────────────────────
-  :nop_1, :nop_1, :nop_1, :nop_1,
+  # ── 37..40 EAT_MOVE anchor [1,1,1,0] ─────────────────────
+  :nop_1, :nop_1, :nop_1, :nop_0,
   # ── 41     eat ───────────────────────────────────────────
   :eat,
   # ── 42     move ──────────────────────────────────────────
@@ -307,10 +317,10 @@ tick | ip | opcode         | call stack | data stack | notes
   6  |  5 | jz_t           | []         | [1]        | template [0,1,1,0] → T=4
      |    |                |            |            | top=1 (non-zero) → no jump
      |    |                |            |            | ip ← 5+1+4=10; costs 0.40
-  7  | 10 | call_t         | [15]       | [1]        | template [0,0,0,0] → T=4
+  7  | 10 | call_t         | [15]       | [1]        | template [0,0,0,1] → T=4
      |    |                |            |            | return_ip = 10+1+4 = 15
      |    |                |            |            | push 15 onto call stack
-     |    |                |            |            | search complement [1,1,1,1]
+     |    |                |            |            | search complement [1,1,1,0]
      |    |                |            |            | found at pos 37; target = 37+4 = 41
      |    |                |            |            | ip ← 41; costs 0.40
   8  | 41 | eat            | [15]       | [1]        | costs 2.0

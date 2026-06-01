@@ -14,7 +14,14 @@ const StepperCanvas = {
       const cellPxY = rect.height / payload.h;
       const x = Math.max(0, Math.min(payload.w - 1, Math.floor((e.clientX - rect.left) / cellPxX)));
       const y = Math.max(0, Math.min(payload.h - 1, Math.floor((e.clientY - rect.top) / cellPxY)));
-      this.pushEventTo(this.el.closest("[data-stepper-modal]"), "canvas_click", {x, y});
+      // Target the LiveComponent by its DOM id (selector form). Passing the
+      // raw element to pushEventTo is unreliable across LV versions when the
+      // hook lives in a `phx-update="ignore"` subtree — the selector lookup
+      // is the supported path.
+      const modal = this.el.closest("[data-stepper-modal]");
+      if (modal && modal.id) {
+        this.pushEventTo("#" + modal.id, "canvas_click", {x, y});
+      }
     });
 
     this.render();
