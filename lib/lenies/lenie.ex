@@ -380,7 +380,13 @@ defmodule Lenies.Lenie do
         # — without the opcodes, the World can only fall back to the
         # node-wide `:species_codeomes` cache, which is empty after a node
         # restart.
-        codeome: state.codeome,
+        #
+        # Stored as a plain `[opcode]` list — NOT the `%Lenies.Codeome{}`
+        # struct — so the snapshot record stays decoupled from the struct
+        # shape and `codeome_from_snap/1` on the restore side can match
+        # on `is_list` without knowing the Codeome module's internal
+        # tuple representation.
+        codeome: Codeome.to_list(state.codeome),
         codeome_hash: Lenies.Codeome.hash(state.codeome),
         lineage: state.lineage,
         seed_origin: state.seed_origin,

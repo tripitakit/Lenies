@@ -1066,9 +1066,13 @@ defmodule Lenies.World do
         :skip
 
       codeome ->
+        # codeome_from_snap returns a plain [opcode] list; Lenie.init expects
+        # a %Lenies.Codeome{} struct (do_spawn_lenie's normal flow passes one
+        # via Worlds.spawn_lenie/3, and Lenie.init then calls Codeome.hash/1
+        # which only accepts the struct). Wrap before passing.
         child_opts = [
           id: snap.id,
-          codeome: codeome,
+          codeome: Lenies.Codeome.from_list(codeome),
           energy: Map.get(snap, :energy, 500.0) * 1.0,
           pos: Map.get(snap, :pos, {0, 0}),
           dir: Map.get(snap, :dir, :n),
@@ -1101,25 +1105,41 @@ defmodule Lenies.World do
   # New-format snapshots (post-2026-06-01) persist the full opcode list
   # under :codeome. Older snapshots only have :codeome_hash — for those
   # we fall back to the node-wide :species_codeomes cache (populated by
-  # Lenie.init/1 across every Lenie ever spawned on this node). Cache
-  # miss (e.g. fresh node restart with no prior Lenies of that species)
-  # returns nil, and the caller skips the entry with a warning.
+  # Lenie.init/1 across every Lenie ever spawned on this node, plus by
+  # the snapshot sidecar at restore time). Cache miss (e.g. fresh node
+  # restart with no prior Lenies of that species AND no sidecar) returns
+  # nil, and the caller skips the entry with a warning.
+  #
+  # Accepts both `[opcode]` (current shape, written by lenie.ex
+  # `maybe_write_snapshot/1`) and `%Lenies.Codeome{}` (legacy shape
+  # written by a brief window of snapshots saved between 164cf30 and
+  # the fix that flattens to a list). Both decode to the same list.
   defp codeome_from_snap(snap) do
     case Map.get(snap, :codeome) do
       list when is_list(list) and list != [] ->
         list
 
-      _ ->
-        case Map.get(snap, :codeome_hash) do
-          hash when is_binary(hash) ->
-            case :ets.lookup(:species_codeomes, hash) do
-              [{^hash, opcodes}] when is_list(opcodes) -> opcodes
-              _ -> nil
-            end
-
-          _ ->
-            nil
+      %Lenies.Codeome{} = c ->
+        case Lenies.Codeome.to_list(c) do
+          [] -> codeome_from_hash(snap)
+          list -> list
         end
+
+      _ ->
+        codeome_from_hash(snap)
+    end
+  end
+
+  defp codeome_from_hash(snap) do
+    case Map.get(snap, :codeome_hash) do
+      hash when is_binary(hash) ->
+        case :ets.lookup(:species_codeomes, hash) do
+          [{^hash, opcodes}] when is_list(opcodes) -> opcodes
+          _ -> nil
+        end
+
+      _ ->
+        nil
     end
   end
 end
