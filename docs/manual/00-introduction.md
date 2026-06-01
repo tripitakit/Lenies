@@ -69,7 +69,7 @@ fingerprint that lets the world track lineages across time.
 The 38 opcodes are grouped into categories you will learn gradually:
 template/nop bits, stack manipulation, arithmetic, control flow, sensing,
 movement, eating, predation, self-inspection, replication, memory slots,
-and horizontal transfer (plasmid conjugation, Chapter 11).
+and horizontal transfer (plasmid conjugation, Chapter 10).
 Chapter 2 ([02-opcode-reference.md](02-opcode-reference.md)) is the complete
 reference; for now, just know the whitelist exists and any unknown atom is
 silently treated as a no-op.
@@ -175,10 +175,12 @@ demonstrates it:
 - **Chapter 8** — Energy economy: the maths behind break-even replication,
   and how to dimension your forage cycles.
 - **Chapter 9** — Annotated dissection of the canonical `MinimalReplicator`
-  (121 opcodes, hand-tuned for sustainable populations) and of `Carnivore`,
+  (123 opcodes, hand-tuned for sustainable populations) and of `Carnivore`,
   which adds predation to the same body plan.
-- **Chapter 10** — A cookbook of six recurring idioms you can copy and
-  adapt.
+- **Chapter 10** — Conjugation and plasmids: horizontal transfer of code
+  between living Lenies, the one form of inheritance that does not require
+  replication.
+- **Chapter 11** — A cookbook of recurring idioms you can copy and adapt.
 
 If you are in a hurry, chapters 3 through 7 are the essential path. The rest
 are reference and enrichment.
