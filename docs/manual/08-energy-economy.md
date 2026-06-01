@@ -54,8 +54,10 @@ Each iteration executes the COPY_LOOP_HEAD anchor (4 nops, 0.4) plus:
 
 Full copy loop: `6.4 × 121 = 774.4 energy`
 
-The moduledoc quotes "~6/iter" — that figure omits the 0.4 anchor-nop overhead per iteration.
-The precise number from `costs.ex` is 6.4.
+The moduledoc quotes "~6.8/iter" — that approximate figure is for the full 123-opcode
+plasmid-carrying codeome (which adds the in-forage `:conjugate, :drop` pair, covered in
+Chapter 10). The precise per-iteration copy cost from `costs.ex` for the 121-opcode
+plasmid-free replicator analysed here is 6.4.
 
 ### Divide (pos 46)
 
@@ -68,13 +70,13 @@ divide  10.0 energy
 ```
 LOOP_HEAD nops         0.40
 init block             0.90
-allocate block        11.65
+allocate block        11.05
 jz_t check             0.40
 copy counter init      0.70
 copy loop (121 iters) 774.40
 divide                10.00
                       ──────
-                      798.45 energy
+                      797.85 energy
 ```
 
 This is the "replication cycle cost" — the energy spent before the parent and child separate.
@@ -110,7 +112,7 @@ Forage total (init + loop): `2.8 + 960.0 = 962.8 energy`
 ```
 LOOP_HEAD nops              0.40
 Init block                  0.90
-Allocate(121)              11.65
+Allocate(121)              11.05
 jz_t (alloc check)          0.40
 Copy counter init            0.70
 Copy loop (121 × 6.4)      774.40
@@ -160,14 +162,16 @@ With K = 64, break-even rises to ~0.87 — viable only in a very well-fed world.
 the surplus grows but each cycle takes twice as long in wall-clock time and mutation accumulates
 faster per unit time. K = 128 is a deliberate sweet spot.
 
-The moduledoc states `Forage per ciclo: … 8.6/iter`. The precise figure from `costs.ex` is
-7.5/iter. The moduledoc rounds slightly; use 7.5 in your own calculations.
+The moduledoc states `Forage per cycle: … ≈ 13.4/iter`, but that figure includes the in-forage
+`:conjugate, :drop` pair of the full plasmid-carrying codeome (Chapter 10). The precise figure
+from `costs.ex` for the plasmid-free forage body analysed here is 7.5/iter; use 7.5 in your own
+calculations.
 
 ---
 
 ## 8.5 Steady-state energy formula
 
-At `:divide`, energy is split evenly. Let C = cost through divide (798.45) and F = net forage
+At `:divide`, energy is split evenly. Let C = cost through divide (797.85) and F = net forage
 gain after divide = `K × eat_amount × hit_rate − forage_and_turn_cost`. The recurrence is:
 
 ```
@@ -187,9 +191,11 @@ F = 128 × 20 − 966 = 2560 − 966 = 1594
 E_steady = 2 × 1594 − 798 ≈ 2390 energy
 ```
 
-The moduledoc quotes E_steady ≈ 2160, using rounded per-opcode figures ("~6/iter" for copy,
-"8.6/iter" for forage). The precise figures from `costs.ex` give ≈ 2390. Both agree on the
-shape: E_steady rises with forage net gain and falls with replication cost.
+The moduledoc gives a different steady-state estimate (≈ +805 surplus per generation) because it
+models the full 123-opcode plasmid-carrying codeome with its extra `:conjugate` costs and a lower
+per-iteration net gain. The precise figures from `costs.ex` for the plasmid-free 121-opcode
+replicator analysed here give E_steady ≈ 2390. Both agree on the shape: E_steady rises with
+forage net gain and falls with replication cost.
 
 ---
 
@@ -216,7 +222,7 @@ total:          ≈ 0.73 mutations per replication
 Roughly 1 in every 1.4 replications introduces at least one mutation. Most are silent: anchor
 nops, dead-code separators (pos 67, pos 120), or substitutions that do not change data flow.
 A few are fatal — corrupting `:allocate` at pos 9, `:divide` at pos 46, or `:write_child` at
-pos 26 breaks the replication machinery entirely. Those lineages forage forever and never divide.
+pos 28 breaks the replication machinery entirely. Those lineages forage forever and never divide.
 
 **Length vs. mutation robustness:** shorter codeomes see fewer mutations per generation but have
 less redundancy, so a higher fraction of mutations are fatal. Longer codeomes accumulate more

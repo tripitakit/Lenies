@@ -46,6 +46,7 @@ instructions in the top-level project README at
 - [Chapter 10 — Conjugation and Plasmids](10-conjugation-and-plasmids.md) — horizontal gene transfer; writing your own conjugable plasmid
 - [Chapter 11 — Cookbook](11-cookbook.md) — consolidated recipe book: constants, control flow, loops, slots, stack manipulation, self-inspection, anchor hygiene
 - [Appendix: LLM Knowledge Base](LLM-APPENDIX.md) — single-file reference for AI coding agents writing Lenies codeomes
+- [Appendix: Stack Machines & Stack-Based Languages](A-stack-machines.md) — the wider family Lenies belongs to, and where it breaks ranks
 
 ---
 

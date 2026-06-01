@@ -60,11 +60,12 @@ energy is 500 (editable in the editor spawn form).
 5. On miss (`:not_found`) or empty template (`t_len == 0`): `IP := ip + 1 + t_len`
    — execution falls through past the jump's own template.
 
-**World actions.** Five opcodes interact with the world cell ahead or with the
-Lenie's own slot. Each one returns `{:wait_world, …}`; the Lenie process must
-then call the World process to resolve the action and get a result. From the
-codeome author's perspective, these read as ordinary opcodes; they just take
-extra real-world time to resolve.
+**World actions.** Nine opcodes interact with the world cell ahead (or with a
+neighbor): `:sense_front`, `:move`, `:eat`, `:attack`, `:defend`, `:allocate`,
+`:write_child`, `:divide`, `:conjugate`. Each one returns `{:wait_world, …}`;
+the Lenie process must then call the World process to resolve the action and
+get a result. From the codeome author's perspective, these read as ordinary
+opcodes; they just take extra real-world time to resolve.
 
 **`:read_self`.** Reads the codeome by index: pops `addr` (top), pushes the
 **opcode integer** (NOT the atom name) at codeome position `addr mod size`,
@@ -114,7 +115,7 @@ The 38 opcodes are indexed 0..37 in the encoding map. Any integer outside
 | 24 | `:turn_right` | 0.5 | `( -- )` | Clockwise: n→e→s→w→n |
 | 25 | `:eat` | 2.0 | `( -- )` | Consume `eat_amount` (default 20) from cell |
 | 26 | `:attack` | 5.0 | `( -- )` | Damage Lenie in front cell (deals 10, costs 5) |
-| 27 | `:defend` | 2.0 | `( -- )` | Activate defense for `defense_window_ticks=5`; attackers lose 5 |
+| 27 | `:defend` | 2.0 | `( -- )` | Activate defense for `defense_window_ticks=5`; incoming attacks deal half damage (10→5) and the attacker pays an extra `defense_attacker_penalty=5` |
 | 28 | `:get_ip` | 0.3 | `( -- ip )` | Current instruction pointer |
 | 29 | `:get_size` | 0.3 | `( -- n )` | Codeome size (cheaper than `:sense_size`) |
 | 30 | `:read_self` | 0.3 | `( addr -- opcode_int )` | Returns the INTEGER encoding (per this table), not the atom |
@@ -829,8 +830,9 @@ replication. Steady state ≈ +805 energy per generation cycle.
 
 2. **Operand order for `:store`.** Slot index is TOP. To store `V` into
    slot `S`:
-   - WRONG: `push S, push V, store` → stores `S` into slot `V` (and crashes
-     in the editor if `V` is bizarre; otherwise silently corrupts data)
+   - WRONG: `push S, push V, store` → stores `S` into slot `V mod 4`
+     (never crashes — the slot index wraps mod 4 — but it silently
+     corrupts data)
    - RIGHT: `push V, push S, store`
 
 3. **Operand order for `:write_child`.** `opcode_int` is TOP,
@@ -881,8 +883,12 @@ replication. Steady state ≈ +805 energy per generation cycle.
 10. **Atom typos.** Use `:nop_0` (with underscore) NOT `:nop0`. Use
     `:push0` (no underscore) NOT `:push_0`. Use `:sense_front` not
     `:senseFront` or `:sense-front`. The Elixir parser will accept
-    typos as valid atoms but `Codeome.from_list/1` will raise on any
-    atom not in the 38-opcode whitelist.
+    typos as valid atoms, and `Codeome.from_list/1` does NOT validate them
+    — it stores whatever you give it. Validation happens at the editor
+    layer (via `Codeome.Opcodes.known?/1`), which rejects any atom not in
+    the 38-opcode whitelist before the codeome is built. (At execution
+    time an unrecognized opcode is treated as `:nop_0`, so a typo silently
+    becomes a no-op rather than crashing.)
 
 11. **Pushing non-integers.** All stack values are 64-bit integers. There
     is no `:push_float`. To push a constant `N`:
@@ -919,8 +925,10 @@ replication. Steady state ≈ +805 energy per generation cycle.
 Before outputting a codeome, mentally run through this list:
 
 1. **All opcode atoms are in the 38-opcode whitelist (no typos).** Use
-   the table in §2 as the canonical reference. `Codeome.from_list/1`
-   raises `KeyError` on any atom outside the whitelist.
+   the table in §2 as the canonical reference. The editor rejects any
+   atom outside the whitelist (via `Codeome.Opcodes.known?/1`) before
+   building the codeome; `Codeome.from_list/1` itself does not validate,
+   and any unrecognized opcode that slips through executes as `:nop_0`.
 
 2. **Codeome length is in `[5, 1000]`.** Count the opcodes in your list
    (including all nops and separators). Below 5 or above 1000: rejected
@@ -983,7 +991,9 @@ that the user can paste into the editor by hand.
 
 If you have access to the Lenies source, verify your codeome by:
 
-- Calling `Lenies.Codeome.from_list(your_atoms)` (raises on unknown atoms).
+- Calling `Lenies.Codeome.from_list(your_atoms)` to build the struct, and
+  checking each atom with `Lenies.Codeome.Opcodes.known?/1` (the editor
+  uses this to reject unknown atoms; `from_list/1` itself does not validate).
 - Checking length is in `[5, 1000]` and non-nop count `>= 10`.
 - Optionally simulating ticks via `Lenies.Interpreter.step/2`.
 

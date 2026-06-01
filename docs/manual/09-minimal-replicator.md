@@ -140,7 +140,7 @@ write-child idiom. Cross-reference: chapter 07
 ```elixir
 # ── pos 30..35: increment counter slot[1] += 1 ───────────────────────
 :push1, :load, :push1, :add, :push1, :store,
-# ── pos 36..40: loop condition (N - counter != 0?) ───────────────────
+# ── pos 36..40: loop condition (N - (counter+1) != 0?) ───────────────
 :push0, :load, :push1, :load, :sub,
 # ── pos 41..45: jnz_t → back to COPY_LOOP_HEAD if not done ───────────
 :jnz_t, :nop_0, :nop_1, :nop_1, :nop_0,
@@ -170,7 +170,7 @@ Cross-reference: chapter 07 ([07-replication.md](07-replication.md)).
 
 ```elixir
 # ── pos 47..50: ABORT_TARGET anchor [n1, n1, n0, n0] ─────────────────
-# Landing pad for jz_t (allocate failed) and fall-through after divide.
+# Landing pad for both jz_t (allocate failed) and fall-through after divide.
 :nop_1, :nop_1, :nop_0, :nop_0,
 ```
 
@@ -306,7 +306,7 @@ non-overlapping lifetimes in one slot. Cross-reference: chapter 05
 ```
 
 Top of the forage loop. The alternating `0,1,0,1` pattern is unique among
-all six anchors. Jumped back to from pos 110–114 with complement template
+all six anchors. Jumped back to from pos 112–116 with complement template
 `[nop_1, nop_0, nop_1, nop_0]`.
 Cross-reference: chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.md)).
 
@@ -329,7 +329,7 @@ forward; blocked → no-op. Cross-reference: chapter 03
 ### pos 102..103 — try to infect a neighbour with a plasmid
 
 ```elixir
-# ── pos 102..103: try to spread (conjugate); discard the success flag ──
+# ── pos 102..103: try to infect a neighbor; drop the result ─────────
 :conjugate, :drop,
 ```
 
@@ -355,8 +355,8 @@ plasmid_size` surcharge applied by the world only on success (so a
 no-target attempt costs exactly 4.0; transferring the 32-opcode Twitch
 plasmid costs `4.0 + 1.6 = 5.6`). A plasmid-free carrier still pays the
 4.0 base every iteration — a small but real "vaccination" tax baked into
-the reference codeome. Cross-reference: chapter 11
-([11-plasmids-and-conjugation.md](11-plasmids-and-conjugation.md)) for
+the reference codeome. Cross-reference: chapter 10
+([10-conjugation-and-plasmids.md](10-conjugation-and-plasmids.md)) for
 the full plasmid lifecycle, the trailing `:push0` separator pattern, and
 the energy accounting that makes this every-iteration spam sustainable.
 
@@ -382,7 +382,7 @@ chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.md)).
 ### pos 117..121 — jmp_t back to LOOP_HEAD
 
 ```elixir
-# ── pos 117..121: jmp_t → back to LOOP_HEAD to restart replication ───
+# ── pos 117..121: jmp_t → back to LOOP_HEAD to retry replication ─────
 :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
 ```
 
@@ -440,18 +440,28 @@ Full derivation in chapter 08 ([08-energy-economy.md](08-energy-economy.md)).
 | Copy loop cost (≈ 6 energy/opcode × 123) | ≈ 738 |
 | Allocate + setup + divide overhead | ≈ 33 |
 | **Total per-cycle replication cost** | **≈ 759** |
-| Forage body cost per iteration | ≈ 8.6 energy |
+| Plasmid-free forage body per iteration (sense+drop+eat+move + counter + branch) | 7.5 energy |
+| In-forage `:conjugate, :drop` per iteration (4.0 base + 0.1) | + 4.1 energy |
+| **Forage body cost per iteration (with the in-loop `:conjugate`)** | **= 11.6 energy** |
 | Forage gain per iteration at 100% food hit rate | 20 energy |
-| Net gain per iteration at 100% hit rate | ≈ +11.4 |
-| K = 128 iterations × net gain | ≈ +1459 per cycle |
+| Net gain per iteration at 100% hit rate | ≈ +8.4 |
+| K = 128 iterations × net gain | ≈ +1075 per cycle |
 | Per-cycle gain at 100% hit rate (128 × 20) | 2560 |
 | Per-cycle gain at 50% hit rate (128 × 10) | 1280 |
-| Break-even hit rate | **≈ 0.69** |
-| Steady-state parent energy | **≈ 2160** |
+| Break-even hit rate | **≈ 0.88** |
+| Steady-state parent energy | **≈ 1391** |
 
-After `:divide` energy is halved; forage adds ~1459. Fixed point of
-`E_new = E/2 + 1080` is `E = 2160`. Break-even at 0.69 — replication
-sustained even when 31% of cells are empty.
+The shipped codeome runs `:conjugate, :drop` inside the forage loop (pos
+102–103), so its per-iteration cost is the **7.5 plasmid-free body plus the
+4.1 conjugate pair = 11.6** — every iteration pays the flat 4.0 `:conjugate`
+base even with no plasmid to spread. Chapter 08 derives the 7.5 plasmid-free
+baseline in full; this chapter adds the in-loop conjugate that the real
+codeome carries.
+
+After `:divide` energy is halved; forage adds ~1075. Fixed point of
+`E_new = E/2 + 696` is `E ≈ 1391`. Break-even rises to ~0.88 (vs the 0.69 of
+the plasmid-free body in chapter 08) — the every-iteration conjugate tax
+narrows the sustainable window, the price of densely spreading plasmids.
 
 ---
 
@@ -538,10 +548,13 @@ anchors, ring-wrap separators, copy loops, attack injection — has appeared in
 the context of a real, running, tuned codeome. The arc is complete.
 
 The three specialized shipped seeds (Defender, Hunter, Forager) demonstrate
-how these patterns combine into distinctive behaviors: K-tuning for clustering,
+how these patterns combine into distinctive behaviours: K-tuning for clustering,
 slot-parity for deterministic alternation, sense+branch for prey detection
-with lock-on. See the README's "Built-in seeds" section for short behavioral
+with lock-on. See the README's "Built-in seeds" section for short behavioural
 descriptions, and `lib/lenies/codeomes/{defender,hunter,forager}.ex` for the
 line-by-line source comments.
 
-→ Next: Chapter 10 collects the recurring idioms as a quick-reference cookbook. ([10-cookbook.md](10-cookbook.md))
+→ Next: Chapter 10 covers conjugation and plasmids in full
+([10-conjugation-and-plasmids.md](10-conjugation-and-plasmids.md)); Chapter 11
+collects the recurring idioms as a quick-reference cookbook
+([11-cookbook.md](11-cookbook.md)).

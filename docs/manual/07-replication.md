@@ -80,7 +80,8 @@ The World can reject the request for several reasons:
 - The front cell is already occupied by another lenie.
 - The front cell is off the grid edge.
 - This parent already has a pending allocation (only one pending child per parent).
-- The requested size is zero or negative.
+- The requested size is outside the codeome length bounds (`{5, 1000}` by default) — sizes
+  below 5 or above 1000 are rejected as `:invalid_size`.
 
 In all failure cases the World pushes `0`. A well-written replicator checks the return value
 and skips the copy loop if allocation failed. The mini-replicator in section 7.7 deliberately
@@ -104,7 +105,7 @@ The World:
 
 1. Computes the effective address as `addr mod N` (where N is the reserved buffer size),
    so you never need to bounds-check manually.
-2. Decodes `op_int` via `Lenies.Codeome.Opcodes.decode/1`. Integers outside `0..35` decode
+2. Decodes `op_int` via `Lenies.Codeome.Opcodes.decode/1`. Integers outside `0..37` decode
    to `:nop_0` defensively.
 3. Applies probabilistic copy errors before writing: substitution (replace with a random
    opcode), insertion (shift subsequent opcodes right), or deletion (shift left). Rates are
@@ -546,35 +547,35 @@ Both separators are `:push0` and are never executed (control flow always jumps p
   :dup, :add,
   :dup, :add,
 
-  # ── pos 81..82  store 64 in slot[0] ─────────────────────────────────────
+  # ── pos 82..83  store 64 in slot[0] ─────────────────────────────────────
   :push0, :store,
 
-  # ── pos 83..86  FORAGE_LOOP anchor [1,1,0,1] ────────────────────────────
+  # ── pos 84..87  FORAGE_LOOP anchor [1,1,0,1] ────────────────────────────
   :nop_1, :nop_1, :nop_0, :nop_1,
 
-  # ── pos 87..90  forage body: sense, drop, eat, move ──────────────────────
+  # ── pos 88..91  forage body: sense, drop, eat, move ──────────────────────
   :sense_front, :drop, :eat, :move,
 
-  # ── pos 91..96  slot[0] -= 1 ─────────────────────────────────────────────
+  # ── pos 92..97  slot[0] -= 1 ─────────────────────────────────────────────
   :push0, :load, :push1, :sub, :push0, :store,
 
-  # ── pos 97..98  load counter for jnz_t check ────────────────────────────
+  # ── pos 98..99  load counter for jnz_t check ────────────────────────────
   :push0, :load,
 
-  # ── pos 99..103 jnz_t → FORAGE_LOOP while counter != 0 ──────────────────
+  # ── pos 100..104 jnz_t → FORAGE_LOOP while counter != 0 ─────────────────
   :jnz_t, :nop_0, :nop_0, :nop_1, :nop_0,
 
-  # ── pos 104..108 jmp_t → LOOP_HEAD for next replication ──────────────────
+  # ── pos 105..109 jmp_t → LOOP_HEAD for next replication ──────────────────
   :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
 
-  # ── pos 109     separator (dead code) ────────────────────────────────────
+  # ── pos 110     separator (dead code) ────────────────────────────────────
   # Prevents template-extractor from reading jmp_t template + LOOP_HEAD anchor
   # through the ring wrap as a single 8-nop run.
   :push0
 ]
 ```
 
-Total length: **110 opcodes**.
+Total length: **111 opcodes**.
 
 ### Walk-through of the sustainable replicator
 
@@ -599,12 +600,12 @@ The random turn sidesteps this:
 This is the same random-turn pattern from Chapter 5. If you built the Forager, this is
 already familiar.
 
-**Build K=64 (pos 69–82):** `push1` puts 1 on the stack. Then six rounds of `dup; add`
-double it: 2, 4, 8, 16, 32, 64. `push0; store` saves 64 in `slot[0]`, overwriting the N
-that was stored there during the replication phase. The two uses of `slot[0]` do not
-overlap: by the time we reach this code, N is no longer needed.
+**Build K=64 (pos 69–83):** `push1` puts 1 on the stack (pos 69). Then six rounds of
+`dup; add` (pos 70–81) double it: 2, 4, 8, 16, 32, 64. `push0; store` (pos 82–83) saves 64
+in `slot[0]`, overwriting the N that was stored there during the replication phase. The two
+uses of `slot[0]` do not overlap: by the time we reach this code, N is no longer needed.
 
-**FORAGE_LOOP (pos 83–103):** The body runs 64 times:
+**FORAGE_LOOP (pos 84–104):** The body runs 64 times:
 
 1. `sense_front` pushes a value describing the cell ahead; `:drop` discards it (we eat
    regardless of what is there).
@@ -617,18 +618,18 @@ overlap: by the time we reach this code, N is no longer needed.
 
 After 64 iterations the counter reaches 0 and `jnz_t` does not jump.
 
-**Return to LOOP_HEAD (pos 104–109):** `jmp_t` with template `[0,0,0,0]` searches for the
-complement `[1,1,1,1]` — which is the LOOP_HEAD anchor at pos 0. The parent wraps around
-and starts the next replication cycle. The separator at pos 109 ensures the template
-extractor reads exactly 4 nops from the template and does not bleed into the anchor through
-the ring wrap.
+**Return to LOOP_HEAD (pos 105–110):** `jmp_t` with template `[0,0,0,0]` searches for the
+complement `[1,1,1,1]` — which is the LOOP_HEAD anchor at pos 0. The match lands at pos 4
+(just past the 4-nop anchor), where `get_size` begins the next replication cycle. The
+separator at pos 110 ensures the template extractor reads exactly 4 nops from the template
+and does not bleed into the anchor through the ring wrap.
 
 ---
 
 ## 7.10  Why the forage cycle
 
 Without forage, the parent dies after one division. Divide costs 10.0, plus the entire copy
-loop (~N × 1.0 + setup ≈ N + 20). For a 110-op replicator that is about 130 energy per
+loop (~N × 1.0 + setup ≈ N + 20). For a 111-op replicator that is about 130 energy per
 replication — all spent before the child is even born. After the split, each lenie has
 roughly half of whatever was left, and neither has enough energy to replicate again.
 
@@ -663,7 +664,7 @@ The world returns to silence. This is the expected outcome.
 ### Sustainable replicator
 
 1. Open the Codeome Editor.
-2. Enter the 110-opcode list from section 7.9.
+2. Enter the 111-opcode list from section 7.9.
 3. Save as `sustainable-replicator-v1`.
 4. Spawn one instance with 10 000 energy on a default world.
 

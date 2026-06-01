@@ -73,7 +73,7 @@ repetitions of `:dup + :add`).
 
 **Discussion:** For non-power-of-2 constants, chain additions after the
 doubling.  To build 5: `:push1, :dup, :add` (→ 2), then `:push1, :add`
-(→ 3), `:push1, :add` (→ 4), `:push1, :add` (→ 5), at total cost 0.80.
+(→ 3), `:push1, :add` (→ 4), `:push1, :add` (→ 5), at total cost 1.30.
 The single most common mistake is omitting the leading `:push1` and
 opening with `:dup, :add`, which merely doubles whatever was already on
 top of the stack — a lurking bug that only surfaces when that
@@ -251,7 +251,10 @@ cell becomes empty, or a sensor crosses a threshold.
 
  # ── sense; if non-zero, loop back ───────────────────────────────
  :sense_front,
- :jnz_t, :nop_1, :nop_1, :nop_1, :nop_1]   # template → anchor [0,0,0,0]
+ :jnz_t, :nop_1, :nop_1, :nop_1, :nop_1,   # template → anchor [0,0,0,0]
+ :push0]                                    # separator: stops the greedy
+                                            # template read from wrapping
+                                            # into the head anchor
 ```
 
 **Trace** (cell occupied, k = 5):
@@ -259,11 +262,18 @@ cell becomes empty, or a sensor crosses a threshold.
 ```
 sense_front      →   [5]
 jnz_t [1,1,1,1]   tests 5 ≠ 0 → jump fires; pops 5
-                  searches anchor [0,0,0,0] backward → lands after the nops
+                  searches for anchor [0,0,0,0] → lands after the nops
 ```
 
 **Cost per spin iteration:** `4 × nop_0 (0.40) + sense_front (0.50) +
 jnz_t[4] (0.40) = 1.30` energy.
+
+The trailing `:push0` is a separator (section 8.1): because the
+`:jnz_t` template is the last thing in the codeome, without it the
+greedy template read would wrap past the end and swallow the four
+`:nop_0` of the head anchor, producing an 8-bit template that matches
+nothing.  The separator stops the read at four bits.  It executes only
+once, on loop exit, so it is not part of the per-spin cost below.
 
 **Beware:** this is a busy loop.  On an empty grid with a stable
 obstruction in front, this drains energy at roughly 1.3 per iteration
@@ -720,7 +730,8 @@ size`), so out-of-range arithmetic is safe.
 **Code (read opcode at position 5):**
 
 ```elixir
-[:push1, :dup, :add, :push1, :add,   # → [5]   (4 via doubling, then +1)
+[:push1, :dup, :add, :dup, :add,     # → [4]   (1 → 2 → 4 via doubling)
+ :push1, :add,                        # → [5]   (+1)
  :read_self]                          # → [op_int_at_pos_5]
 ```
 
@@ -905,7 +916,7 @@ silent correctness bug.  Any non-nop opcode breaks the greedy read;
 `:push0` is preferred because it costs only 0.10 and produces a 0 that
 is harmless in dead-code positions.  If the extra stack value matters,
 append `:drop`.  The MinimalReplicator (chapter 9) contains two
-separators — at positions 67 and 120 — for exactly this reason.
+separators — at positions 67 and 122 — for exactly this reason.
 
 ---
 

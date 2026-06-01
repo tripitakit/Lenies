@@ -389,7 +389,7 @@ copied, never executed.
 - **Carry/copy tax.** A plasmid lengthens the host's codeome, so each
   replication copies more opcodes (the copy loop costs roughly 6.8 energy per
   opcode), and `divide` charges an extra `0.5 × plasmid_size` for the plasmid
-  itself. A 31-opcode plasmid adds ~15 energy per generation plus the copy cost.
+  itself. The 32-opcode Twitch plasmid adds 16 energy per generation (0.5 × 32) plus the copy cost.
   Budget for it (Chapter 8).
 - **Per-step cost.** Twitch adds ~1.8 energy to each forage step (the random
   bit, the branch, the turn, the bounce); Sprint adds ~4.4 (an extra move and
@@ -429,7 +429,7 @@ copied, never executed.
    Replicator (spawn the built-in seed first, pause, then spawn yours adjacent —
    or spawn several of each and let them mingle).
 6. Resume and watch the conjugation log. When your seed conjugates the plain
-   replicator, the recipient's codeome grows by ten opcodes and it begins
+   replicator, the recipient's codeome grows by eleven opcodes and it begins
    veering — you will see a previously straight-walking Lenie start curving.
 7. Now swap `turn_left` for the Twitch random-turn block (§4) and observe the
    difference in how long the converted hosts survive.
