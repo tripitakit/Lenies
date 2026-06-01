@@ -65,6 +65,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:editing_index, nil)
       |> assign(:inline_edit_error, nil)
       |> assign(:jump_targets, LeniesWeb.JumpTargets.targets(buffer))
+      |> assign(:show_stepper, false)
 
     {:ok, socket}
   end
@@ -582,10 +583,18 @@ defmodule LeniesWeb.EditorLive do
     {:noreply, assign(socket, editing_index: nil, inline_edit_error: nil)}
   end
 
+  def handle_event("open_stepper", _params, socket) do
+    {:noreply, assign(socket, :show_stepper, true)}
+  end
+
   @impl true
   def handle_info(:sandboxes_manager_up, socket) do
     :ok = Lenies.Sandboxes.attach(socket.assigns.current_scope.user.id)
     {:noreply, socket}
+  end
+
+  def handle_info(:close_stepper, socket) do
+    {:noreply, assign(socket, :show_stepper, false)}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
@@ -630,6 +639,16 @@ defmodule LeniesWeb.EditorLive do
         <%= if @dirty do %>
           <span class="text-amber-300 text-[10px]">●dirty</span>
         <% end %>
+
+        <button
+          type="button"
+          phx-click="open_stepper"
+          disabled={@buffer == []}
+          class="text-xs px-2 py-0.5 border border-amber-500/60 text-amber-200 disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Open codeome stepper (debug)"
+        >
+          🐞 Debug
+        </button>
 
         <button
           type="button"
@@ -1070,6 +1089,14 @@ defmodule LeniesWeb.EditorLive do
           </div>
         </section>
       </div>
+
+      <%= if @show_stepper do %>
+        <.live_component
+          module={LeniesWeb.StepperLive}
+          id="stepper-modal"
+          codeome={LeniesWeb.CodeomeBuffer.to_codeome(@buffer)}
+        />
+      <% end %>
     </div>
     """
   end
