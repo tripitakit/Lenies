@@ -9,7 +9,7 @@ directly to `Lenies.Interpreter.State` and `Lenies.Interpreter`.
 
 ## 1. The Execution State
 
-The full runtime state of one Lenie is a struct with eight fields.
+The full runtime state of one Lenie is a struct with nine fields.
 
 | Field        | Type                             | Meaning                                                     |
 | ------------ | -------------------------------- | ----------------------------------------------------------- |
@@ -21,11 +21,12 @@ The full runtime state of one Lenie is a struct with eight fields.
 | `age`        | non-neg integer                  | Incremented once per K-instruction batch (metabolic tick)   |
 | `pos`        | `{x, y}`                         | Grid coordinates (both non-neg integers)                    |
 | `call_stack` | list of non-neg integers, max 32 | Return IPs saved by `call_t`; consumed by `ret`             |
+| `plasmids`   | list of `%Plasmid{}`, MVP holds 0–1 | Carried plasmids; mutated by `make_plasmid`/`conjugate`; see Chapter 10 |
 
 ### `ip` — instruction pointer
 
 `ip` is an index into the codeome. After every opcode the interpreter calls
-`State.advance_ip/3`, which computes `rem(ip + delta, codeome_size)`. The
+`State.advance_ip/3`, which computes `Integer.mod(ip + delta, codeome_size)`. The
 result is always non-negative, so the codeome is a ring: execution never
 falls off the end.
 
@@ -97,6 +98,13 @@ A list of IPs, capped at 32 entries. `call_t` pushes the return IP onto this
 list (dropping the oldest if the cap is reached). `ret` pops it. An empty
 `call_stack` on `ret` causes a fall-through rather than a crash.
 
+### `plasmids` — carried plasmids
+
+A list of `%Plasmid{}` structs (empty by default; the MVP carries 0 or 1).
+It is mutated by `make_plasmid` and `conjugate`. The plasmid mechanics —
+horizontal gene transfer between Lenies — are covered in Chapter 10; this
+chapter is concerned only with the VM core.
+
 ---
 
 ## 2. The Codeome as a Ring
@@ -107,10 +115,10 @@ wraps modulo the codeome size, making it a closed ring.
 ```
   codeome of size 12, ip = 3
   ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐
-     0     1    2     3     4     5     6     7     8     9    10    11
+  │  0 │  1 │  2 │  3 │  4 │  5 │  6 │  7 │  8 │  9 │ 10 │ 11 │
   └────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┘
-                      ▲
-                      ip
+                    ▲
+                    ip
   execution continues:  4 → 5 → 6 → … → 11 → 0 → 1 → 2 → 3 → …
 ```
 
@@ -177,7 +185,7 @@ the reply.
 | Outcome       | When                                     | Examples                                                                              |
 | ------------- | ---------------------------------------- | ------------------------------------------------------------------------------------- |
 | `:cont`       | Ordinary opcode finished successfully    | `push0`, `push1`, `add`, `swap`, `jmp_t`, `sense_self`                                |
-| `:wait_world` | Opcode needs to call the World GenServer | `move`, `eat`, `sense_front`, `attack`, `defend`, `allocate`, `write_child`, `divide` |
+| `:wait_world` | Opcode needs to call the World GenServer | `move`, `eat`, `sense_front`, `attack`, `defend`, `allocate`, `write_child`, `divide`, `conjugate` |
 | `:halt`       | Lenie is dead                            | starvation (`energy <= 0`), empty codeome                                             |
 
 `:wait_world` carries an action term that describes what the Lenie wants to
@@ -234,10 +242,11 @@ push opcodes: `push0`, `push1`, and `pushN` — there is no `push5` or
 bottom to top — the top of the stack is at the top of the box.
 
 ```
-  │   │   │ 0 │   │ 1 │   │ 0 │   │ 1 │
-  │   │   │   │   │ 0 │   │ 1 │   │   │
-  └───┘  └───┘   └───┘  └───┘   └───┘
-  start   push0   push1    swap    drop
+  start    push0    push1    swap     drop
+  ┌───┐    ┌───┐    ┌───┐    ┌───┐    ┌───┐
+  │   │    │   │    │ 1 │    │ 0 │    │   │
+  │   │    │ 0 │    │ 0 │    │ 1 │    │ 1 │
+  └───┘    └───┘    └───┘    └───┘    └───┘
 ```
 
 Stack effects in `( before -- after )` notation:
