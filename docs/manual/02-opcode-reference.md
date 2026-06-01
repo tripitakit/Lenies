@@ -19,7 +19,7 @@ An empty stack is safe: popping it returns `0` without crashing.
 
 ---
 
-## 2. The 10 Categories
+## 2. The 13 Categories
 
 | Category | Count | Purpose |
 |---|---|---|
@@ -39,7 +39,7 @@ An empty stack is safe: popping it returns `0` without crashing.
 
 **Total: 38 opcodes.** Verified against `@opcodes` in `opcodes.ex`. The two
 horizontal-transfer opcodes (`make_plasmid`, `conjugate`) are covered in depth
-in [Chapter 11](11-conjugation-and-plasmids.md).
+in [Chapter 10](10-conjugation-and-plasmids.md).
 
 ---
 
@@ -89,7 +89,7 @@ template sequence. Together these two opcodes are the only valid template bits.
 **Cost:** `0.1`
 **Description:** Pushes a uniformly distributed random integer in 0..255. A
 50/50 coin flip idiom: `pushN; push1; push1; add; mod` computes `r mod 2`.
-See [05-replication-patterns.md](05-replication-patterns.md).
+See [07-replication.md](07-replication.md).
 
 ### `dup`
 
@@ -382,7 +382,7 @@ toroidal wrap, like every codeome read) and **appends** it to this creature's
 *plasmid buffer* (multiple plasmids can be carried simultaneously). `length` must be in `[1, 64]`; an invalid
 length pushes `0` and leaves the buffer untouched. On success pushes `1`. The
 plasmid buffer is not executed — it is the payload that `conjugate` transfers.
-Pure VM operation (no world round-trip). See Chapter 11.
+Pure VM operation (no world round-trip). See Chapter 10.
 
 ### `conjugate`
 
@@ -393,7 +393,7 @@ codeome and become its plasmid buffer too (so it can re-conjugate). Pushes `1`
 on success, `0` if there is no plasmid, no Lenie ahead, the recipient is full
 (would exceed the codeome length bound), or the recipient is busy. The transfer
 uses a short timeout and is deadlock-safe; re-sending the same plasmid to an
-already-carrying recipient is a no-op. See Chapter 11.
+already-carrying recipient is a no-op. See Chapter 10.
 
 ---
 
