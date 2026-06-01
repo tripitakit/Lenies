@@ -15,10 +15,6 @@ const StepperCanvas = {
       const x = Math.max(0, Math.min(payload.w - 1, Math.floor((e.clientX - rect.left) / cellPxX)));
       const y = Math.max(0, Math.min(payload.h - 1, Math.floor((e.clientY - rect.top) / cellPxY)));
 
-      // Diagnostic — easy to inspect in DevTools console while iterating.
-      // Remove once the canvas-click path is verified end-to-end.
-      console.log("[stepper] canvas click", {x, y});
-
       // pushEvent goes to the parent LiveView (EditorLive), which then
       // forwards via send_update to the StepperLive LiveComponent. This
       // is more reliable than pushEventTo with a component selector when

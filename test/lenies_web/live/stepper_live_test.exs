@@ -90,7 +90,7 @@ defmodule LeniesWeb.StepperLiveTest do
 
     html =
       view
-      |> element("select[phx-change='select_seed']")
+      |> element("form[phx-change='select_seed']")
       |> render_change(%{"value" => "builtin:minimal_replicator"})
 
     assert html =~ "click on the canvas"
@@ -102,12 +102,12 @@ defmodule LeniesWeb.StepperLiveTest do
     view |> element("button", "🐞 Debug") |> render_click()
 
     view
-    |> element("select[phx-change='select_seed']")
+    |> element("form[phx-change='select_seed']")
     |> render_change(%{"value" => "builtin:minimal_replicator"})
 
     html =
       view
-      |> element("select[phx-change='select_seed']")
+      |> element("form[phx-change='select_seed']")
       |> render_change(%{"value" => ""})
 
     refute html =~ "click on the canvas"

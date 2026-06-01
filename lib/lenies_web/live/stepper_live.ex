@@ -127,9 +127,9 @@ defmodule LeniesWeb.StepperLive do
               </button>
             <% end %>
           </div>
-          <div class="stepper-seed-picker">
+          <form phx-change="select_seed" phx-target={@myself} class="stepper-seed-picker">
             <label class="stepper-seed-label">🎯 Place:</label>
-            <select phx-change="select_seed" phx-target={@myself} class="stepper-seed-select">
+            <select name="value" class="stepper-seed-select">
               <option value="">(none)</option>
               <optgroup label="Built-in">
                 <%= for seed <- Lenies.Seeds.all() do %>
@@ -163,7 +163,7 @@ defmodule LeniesWeb.StepperLive do
             <%= if @session.place_seed_mode do %>
               <span class="stepper-seed-active">click on the canvas</span>
             <% end %>
-          </div>
+          </form>
           <button
             phx-click="close"
             phx-target={@myself}
