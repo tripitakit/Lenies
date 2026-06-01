@@ -145,7 +145,7 @@ Fix: insert any non-nop opcode between the anchor runs to act as a **separator**
 :nop_1, :nop_1, :nop_1, :nop_1, <next_opcode>
 ```
 
-Now the extractor reads `[:nop_0, :nop_0, :nop_0, :nop_0]` (stops at `:push0`), and the search looks for the four-bit complement `[:nop_1, :nop_1, :nop_1, :nop_1]`. This separator idiom appears throughout Lenies programs whenever two nop regions must coexist near each other. It will be covered as a named cookbook pattern in chapter 10.
+Now the extractor reads `[:nop_0, :nop_0, :nop_0, :nop_0]` (stops at `:push0`), and the search looks for the four-bit complement `[:nop_1, :nop_1, :nop_1, :nop_1]`. This separator idiom appears throughout Lenies programs whenever two nop regions must coexist near each other. It will be covered as a named cookbook pattern in chapter 11.
 
 ---
 
@@ -207,9 +207,9 @@ The codeome has two branches and two loop-back jumps. We use 4-bit anchors to ke
   :nop_0, :nop_0, :nop_0, :nop_0,
   # ── 4      sense the front cell; push result onto stack ──────────────
   :sense_front,
-  # ── 5..9   jz_t to TURN [1,1,1,1] (template [0,0,0,0]) ─────────────
+  # ── 5..9   jz_t to TURN [0,1,0,1] (template [1,0,1,0]) ─────────────
   #          jz_t consumes the sense result regardless of branch taken
-  :jz_t, :nop_0, :nop_0, :nop_0, :nop_0,
+  :jz_t, :nop_1, :nop_0, :nop_1, :nop_0,
   # ── 10     eat the cell ───────────────────────────────────────────────
   :eat,
   # ── 11     move forward ───────────────────────────────────────────────
@@ -218,8 +218,8 @@ The codeome has two branches and two loop-back jumps. We use 4-bit anchors to ke
   :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
   # ── 17     separator — terminates extractor before TURN anchor ───────
   :push0,
-  # ── 18..21 TURN anchor [1,1,1,1] ─────────────────────────────────────
-  :nop_1, :nop_1, :nop_1, :nop_1,
+  # ── 18..21 TURN anchor [0,1,0,1] ─────────────────────────────────────
+  :nop_0, :nop_1, :nop_0, :nop_1,
   # ── 22     turn right when there's nothing to eat ─────────────────────
   :turn_right,
   # ── 23..27 jmp_t back to LOOP_HEAD (template [1,1,1,1]) ─────────────
@@ -241,9 +241,9 @@ Four consecutive `:nop_0`. This is the landing pad for both loop-back jumps. Any
 
 Queries the simulation world: what is the resource value of the cell immediately ahead? The result is pushed onto the data stack. A value of 0 means the cell is empty; a positive integer means there is a resource present.
 
-**Positions 5–9: `jz_t :nop_0 :nop_0 :nop_0 :nop_0`**
+**Positions 5–9: `jz_t :nop_1 :nop_0 :nop_1 :nop_0`**
 
-The conditional branch. The template is `[:nop_0, :nop_0, :nop_0, :nop_0]` — four bits. The complement searched for is `[:nop_1, :nop_1, :nop_1, :nop_1]`, which matches the TURN anchor at positions 18–21.
+The conditional branch. The template is `[:nop_1, :nop_0, :nop_1, :nop_0]` — four bits. The complement searched for is `[:nop_0, :nop_1, :nop_0, :nop_1]`, which matches the TURN anchor at positions 18–21. (Note we deliberately use the `[0,1,0,1]` pattern for TURN rather than `[1,1,1,1]`: the loop-back jumps at positions 12 and 23 carry `[1,1,1,1]` templates, and four consecutive `:nop_1` opcodes follow each of them. If the TURN anchor were also `[1,1,1,1]`, the `jz_t` search for `[:nop_1, :nop_1, :nop_1, :nop_1]` would match the loop-back's own trailing nops at positions 13–16 *before* reaching the intended TURN anchor — the duplicate-anchor trap from section 3. Using a distinct pattern avoids the collision.)
 
 - If `sense_front` returned 0 (empty cell): condition is true, jump fires, ip → 22 (`turn_right`). The 0 is popped.
 - If `sense_front` returned positive (resource present): condition is false, jump does not fire, but the value is still popped. Ip falls through to position 10 (`eat`).
@@ -260,11 +260,11 @@ Unconditional loop-back. Template = `[:nop_1, :nop_1, :nop_1, :nop_1]`, compleme
 
 **Position 17: `push0` (separator)**
 
-Without this separator, the extractor at position 12 would read eight consecutive nops — positions 13–16 (`:nop_1` × 4) and then 18–21 (`:nop_1` × 4) — producing an 8-bit template `[1,1,1,1,1,1,1,1]`. That complement `[0,0,0,0,0,0,0,0]` does not exist in the codeome, so the jump would fall through. The `:push0` separator terminates extraction at four bits. It also pushes 0 onto the stack, which `:drop` at position 29 removes — net stack effect is zero.
+Without this separator, the extractor at position 12 would read straight through positions 13–16 (`:nop_1` × 4) and on into the TURN anchor at 18–21 (`:nop_0, :nop_1, :nop_0, :nop_1`), producing an 8-bit template `[1,1,1,1,0,1,0,1]`. That complement `[0,0,0,0,1,0,1,0]` does not exist in the codeome, so the loop-back jump would fall through instead of returning to LOOP_HEAD. The `:push0` separator terminates extraction at four bits, leaving the clean `[1,1,1,1]` loop-back template. It also pushes 0 onto the stack, which `:drop` at position 29 removes — net stack effect is zero.
 
-**Positions 18–21: TURN anchor `[1,1,1,1]`**
+**Positions 18–21: TURN anchor `[0,1,0,1]`**
 
-Four consecutive `:nop_1`. This is the landing pad for the `jz_t` at position 5. When the search for complement `[1,1,1,1]` succeeds, ip lands at position 22 (`turn_right`).
+The pattern `:nop_0, :nop_1, :nop_0, :nop_1`. This is the landing pad for the `jz_t` at position 5. When the search for complement `[0,1,0,1]` succeeds, ip lands at position 22 (`turn_right`).
 
 **Position 22: `turn_right`**
 
@@ -284,10 +284,10 @@ These two opcodes are never executed (the loop-back jumps at 12 and 23 always re
 
 ```
 ip=4   sense_front  → pushes 0          stack: [0]
-ip=5   jz_t [0,0,0,0]
+ip=5   jz_t [1,0,1,0]
        tests top: 0 == 0 → true, will jump
        pops 0 unconditionally            stack: []
-       searches for [1,1,1,1] → found at pos 18
+       searches for [0,1,0,1] → found at pos 18
        ip = (18 + 4) mod size = 22
 ip=22  turn_right   → rotates creature
 ip=23  jmp_t [1,1,1,1]
@@ -300,7 +300,7 @@ ip=4   sense_front  → next cell ahead   (loop repeats)
 
 ```
 ip=4   sense_front  → pushes 15         stack: [15]
-ip=5   jz_t [0,0,0,0]
+ip=5   jz_t [1,0,1,0]
        tests top: 15 == 0 → false, no jump
        pops 15 unconditionally           stack: []
        falls through to ip = (5+1+4) mod size = 10
@@ -346,6 +346,6 @@ Before spawning a Forager variant, run through these:
 
 ## 8 — What's next
 
-`→ Next: Chapter 5 introduces local memory and counter loops. (`[05-memory-and-arithmetic.md](05-memory-and-arithmetic.md)`)`
+→ Next: Chapter 5 introduces local memory and counter loops. ([05-memory-and-arithmetic.md](05-memory-and-arithmetic.md))
 
 The Forager is a good baseline creature. Save your seed now — in later chapters you will extend it step by step into a creature that counts, compares, replicates, and competes.
