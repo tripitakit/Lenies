@@ -136,5 +136,30 @@ defmodule Lenies.SnapshotRespawnTest do
 
     [s] = species
     assert s.population == 5
+
+    # Telemetry must hold a fresh history entry seeded from the
+    # :restored payload, so a paused world post-restore still shows the
+    # correct Population/Resource/Carcass on the dashboard. Without
+    # this, :latest stays nil and the header renders fallback zeros.
+    #
+    # PubSub delivery to Telemetry is async — give it a moment to
+    # process the broadcast. Telemetry runs as a per-world singleton;
+    # we wait via a brief retry loop (cap 200ms).
+    history =
+      Enum.reduce_while(1..20, [], fn _, _ ->
+        case Lenies.Telemetry.history(world_id, :last_n, 1) do
+          [_ | _] = h -> {:halt, h}
+          _ -> Process.sleep(10) ; {:cont, []}
+        end
+      end)
+
+    assert [latest] = history,
+           "Telemetry.history empty after restore — :restored payload didn't seed an entry"
+
+    assert latest.population == 5,
+           "Telemetry latest.population != 5 after restore: #{inspect(latest)}"
+
+    assert latest.tick == 0,
+           "Telemetry latest.tick should be the world's current tick_count (0 for a paused fresh-world test), got: #{inspect(latest.tick)}"
   end
 end

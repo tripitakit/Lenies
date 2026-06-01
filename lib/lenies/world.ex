@@ -171,7 +171,19 @@ defmodule Lenies.World do
 
         {r, c} = sum_cells(state.tables)
         new_state = %{state | total_resource: r, total_carcass: c}
-        broadcast(new_state, "control", {:restored, System.system_time(:millisecond)})
+
+        # Stats payload: gives Telemetry + Dashboards everything they
+        # need to refresh `:latest` without waiting for the next tick.
+        # Solves the "Population stays at 0 after restore" symptom when
+        # the world is paused (no tick) immediately post-restore.
+        stats = %{
+          tick: new_state.tick_count,
+          population: :ets.info(new_state.tables.lenies, :size) || 0,
+          total_resource: r,
+          total_carcass: c
+        }
+
+        broadcast(new_state, "control", {:restored, System.system_time(:millisecond), stats})
         {:reply, :ok, new_state}
 
       {:error, _} = err ->

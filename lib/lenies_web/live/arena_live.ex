@@ -551,6 +551,29 @@ defmodule LeniesWeb.ArenaLive do
     {:noreply, push_event(socket, "render_frame", payload)}
   end
 
+  # Mirrors Sandbox dashboard behaviour: on restore, push the fresh
+  # stats into :latest immediately so a paused world doesn't render
+  # zeros in the header until the next tick.
+  def handle_info({:restored, _ts, stats}, socket) when is_map(stats) do
+    {species, all_species, species_total} = aggregate_with_top(socket.assigns.world_handle, 10)
+    %{sort_by: sort_by, sort_dir: sort_dir} = socket.assigns
+
+    socket =
+      socket
+      |> assign(:latest, %{
+        population: Map.get(stats, :population, 0),
+        total_resource: Map.get(stats, :total_resource, 0),
+        total_carcass: Map.get(stats, :total_carcass, 0)
+      })
+      |> assign(:species, species)
+      |> assign(:species_total, species_total)
+      |> assign(:all_species, all_species)
+      |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
+
+    payload = GridRenderer.encode_payload(socket.assigns.world_handle, socket.assigns.grid)
+    {:noreply, push_event(socket, "render_frame", payload)}
+  end
+
   def handle_info(:arena_manager_up, socket) do
     :ok = Lenies.Arena.attach_viewer()
     {:noreply, socket}

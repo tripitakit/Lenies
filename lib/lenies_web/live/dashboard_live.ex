@@ -585,6 +585,30 @@ defmodule LeniesWeb.DashboardLive do
     {:noreply, push_event(socket, "render_frame", payload)}
   end
 
+  # Snapshot restore: refresh :latest directly from the payload (bypassing
+  # the tick throttle) so the Population / Resource / Carcass header
+  # reflects the restored state immediately — even with the world
+  # paused (no upcoming :tick to drive the normal refresh path).
+  def handle_info({:restored, _ts, stats}, socket) when is_map(stats) do
+    {species, all_species, species_total} = aggregate_with_top(socket.assigns.world_handle, 10)
+    %{sort_by: sort_by, sort_dir: sort_dir} = socket.assigns
+
+    socket =
+      socket
+      |> assign(:latest, %{
+        population: Map.get(stats, :population, 0),
+        total_resource: Map.get(stats, :total_resource, 0),
+        total_carcass: Map.get(stats, :total_carcass, 0)
+      })
+      |> assign(:species, species)
+      |> assign(:species_total, species_total)
+      |> assign(:all_species, all_species)
+      |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
+
+    payload = GridRenderer.encode_payload(socket.assigns.world_handle, socket.assigns.grid)
+    {:noreply, push_event(socket, "render_frame", payload)}
+  end
+
   def handle_info({:inspector_dirty, dirty}, socket) do
     {:noreply, assign(socket, :inspector_dirty, dirty)}
   end

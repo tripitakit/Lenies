@@ -111,6 +111,36 @@ defmodule Lenies.Telemetry do
     {:noreply, %{state | counter: 0}}
   end
 
+  # Snapshot restore: clear the ring buffer (the previous run's history
+  # is no longer the truth) and seed a single fresh entry from the
+  # stats payload, so a paused world post-restore still shows Population
+  # / Resource / Carcass immediately on the dashboard — without this
+  # the dashboard would render fallback zeros until the user resumed
+  # the world and the first real tick fired.
+  def handle_info({:restored, _ts, stats}, state) when is_map(stats) do
+    state = ensure_handle(state)
+    :ets.delete_all_objects(state.handle.tables.history)
+
+    cells_size =
+      case state.handle do
+        %{tables: %{cells: tid}} -> :ets.info(tid, :size) || 0
+        _ -> 0
+      end
+
+    entry = %{
+      tick: Map.get(stats, :tick, 0),
+      population: Map.get(stats, :population, 0),
+      total_resource: Map.get(stats, :total_resource, 0),
+      total_carcass: Map.get(stats, :total_carcass, 0),
+      cells: cells_size,
+      species: species_snapshot(state.handle),
+      timestamp_ms: System.system_time(:millisecond)
+    }
+
+    :ets.insert(state.handle.tables.history, {0, entry})
+    {:noreply, %{state | counter: 1}}
+  end
+
   def handle_info(_msg, state), do: {:noreply, state}
 
   # World may have restarted (tids inside the cached handle are dead): if
