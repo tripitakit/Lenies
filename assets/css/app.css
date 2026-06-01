@@ -1326,3 +1326,15 @@
   font-family: ui-monospace, monospace;
   flex: 0 0 auto;
 }
+
+.stepper-world-canvas {
+  flex: 1 1 auto;
+  min-height: 0;
+  aspect-ratio: 1;
+  max-width: 600px;
+  align-self: center;
+  background: #050816;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  display: block;
+}
+.stepper-world-canvas canvas { display: block; width: 100%; height: 100%; }

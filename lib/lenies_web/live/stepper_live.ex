@@ -28,6 +28,7 @@ defmodule LeniesWeb.StepperLive do
       phx-window-keydown="key"
       phx-target={@myself}
       class="stepper-modal-backdrop"
+      data-stepper-modal="true"
     >
       <div class="stepper-modal" role="dialog" aria-labelledby="stepper-title">
         <header class="stepper-header">
@@ -162,9 +163,13 @@ defmodule LeniesWeb.StepperLive do
 
           <aside class="stepper-world">
             <h3 class="stepper-panel-title">Mini-world 64×64</h3>
-            <div class="stepper-world-canvas-placeholder">
-              [canvas wired in super-task 4]
-            </div>
+            <div
+              id="stepper-canvas"
+              phx-hook="StepperCanvas"
+              phx-update="ignore"
+              class="stepper-world-canvas"
+              data-payload={Jason.encode!(Lenies.Stepper.World.encode_grid_payload(@session.world))}
+            ></div>
           </aside>
         </div>
 
@@ -210,6 +215,10 @@ defmodule LeniesWeb.StepperLive do
 
   def handle_event("close", _params, socket) do
     send(self(), :close_stepper)
+    {:noreply, socket}
+  end
+
+  def handle_event("canvas_click", _params, socket) do
     {:noreply, socket}
   end
 
