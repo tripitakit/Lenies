@@ -45,6 +45,20 @@ defmodule Lenies.Snapshot do
   @optional_tables [:color_overrides]
   @all_tables @required_tables ++ @optional_tables
 
+  # Sidecar file with the codeome cache entries used by the snapshot's Lenies.
+  # Format: Erlang term_to_binary of a list of {codeome_hash, [opcode]} tuples.
+  # Filtered at save time to only hashes referenced by the world's :lenies — so
+  # snapshots don't grow with cache from unrelated worlds.
+  #
+  # Why this file exists: `:species_codeomes` is a node-global in-memory cache
+  # (see Lenies.Application). After a node restart the cache is empty, so
+  # snapshots saved BEFORE the per-Lenie `:codeome` field existed would have
+  # been unrecoverable. Saving the sidecar makes any post-fix snapshot
+  # self-sufficient across restarts even if per-Lenie `:codeome` is ever
+  # dropped from the snap shape, and pre-populates the cache so the species
+  # table can compute size/cost/max_gain on the first render after restore.
+  @species_codeomes_sidecar "species_codeomes.bin"
+
   # \A and \z anchor to the very start/end of the string (unlike ^ and $
   # which PCRE allows to match before a trailing newline), preventing names
   # like "foo\n" from slipping through the validation.
@@ -146,7 +160,13 @@ defmodule Lenies.Snapshot do
     dir = snapshot_dir(handle.id, name)
 
     with :ok <- restore_required(handle, dir) do
-      restore_optional(handle, dir)
+      result = restore_optional(handle, dir)
+      # Pre-populate the node-global :species_codeomes cache from the
+      # sidecar BEFORE the World handler kicks off respawn_lenies — so
+      # the codeome fallback in World.codeome_from_snap/1 can recover
+      # codeomes from the cache for snaps that don't embed :codeome.
+      _ = load_species_codeomes_sidecar(dir)
+      result
     end
   end
 
@@ -205,6 +225,12 @@ defmodule Lenies.Snapshot do
           File.rename!(tmp_path(dir, table), tab_path(dir, table))
         end)
 
+        # Best-effort sidecar: failure to write the codeome cache is not
+        # fatal — restore still works as long as per-Lenie `:codeome` is
+        # embedded in the snap (which Lenie.maybe_write_snapshot/1 does
+        # since 2026-06-01) OR the cache is otherwise populated.
+        _ = save_species_codeomes_sidecar(handle, dir)
+
         :ok
 
       {:error, _} = err ->
@@ -217,6 +243,38 @@ defmodule Lenies.Snapshot do
     e in [File.Error, File.RenameError] ->
       _ = e
       {:error, :io_error}
+  end
+
+  defp save_species_codeomes_sidecar(handle, dir) do
+    if :ets.info(:species_codeomes) != :undefined do
+      hashes =
+        handle.tables.lenies
+        |> :ets.tab2list()
+        |> Enum.flat_map(fn {_id, snap} ->
+          case Map.get(snap, :codeome_hash) do
+            hash when is_binary(hash) -> [hash]
+            _ -> []
+          end
+        end)
+        |> Enum.uniq()
+
+      entries =
+        Enum.flat_map(hashes, fn hash ->
+          case :ets.lookup(:species_codeomes, hash) do
+            [{^hash, opcodes}] when is_list(opcodes) -> [{hash, opcodes}]
+            _ -> []
+          end
+        end)
+
+      path = Path.join(dir, @species_codeomes_sidecar)
+      tmp = path <> ".tmp"
+      File.write!(tmp, :erlang.term_to_binary(entries))
+      File.rename!(tmp, path)
+    end
+
+    :ok
+  rescue
+    _ -> :ok
   end
 
   defp ensure_required_files_exist(dir) do
@@ -268,6 +326,46 @@ defmodule Lenies.Snapshot do
         end
       end
     end)
+
+    :ok
+  end
+
+  defp load_species_codeomes_sidecar(dir) do
+    path = Path.join(dir, @species_codeomes_sidecar)
+
+    if File.exists?(path) and :ets.info(:species_codeomes) != :undefined do
+      case File.read(path) do
+        {:ok, content} ->
+          # `:safe` mode rejects unknown atoms — but opcodes are atoms
+          # already loaded in this BEAM (defined as enum in Disassembler),
+          # so this is fine. Any decoding error from a truncated/malformed
+          # sidecar is caught by the rescue below and the load proceeds
+          # without cache pre-population (best-effort behaviour).
+          try do
+            term = :erlang.binary_to_term(content, [:safe])
+
+            if is_list(term) do
+              Enum.each(term, fn
+                {hash, opcodes} when is_binary(hash) and is_list(opcodes) ->
+                  case :ets.lookup(:species_codeomes, hash) do
+                    [] -> :ets.insert(:species_codeomes, {hash, opcodes})
+                    _ -> :ok
+                  end
+
+                _ ->
+                  :ok
+              end)
+            end
+          rescue
+            _ -> :ok
+          catch
+            _, _ -> :ok
+          end
+
+        _ ->
+          :ok
+      end
+    end
 
     :ok
   end
