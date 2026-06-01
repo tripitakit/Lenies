@@ -429,7 +429,7 @@ copied, never executed.
    Replicator (spawn the built-in seed first, pause, then spawn yours adjacent —
    or spawn several of each and let them mingle).
 6. Resume and watch the conjugation log. When your seed conjugates the plain
-   replicator, the recipient's codeome grows by ten opcodes and it begins
+   replicator, the recipient's codeome grows by eleven opcodes and it begins
    veering — you will see a previously straight-walking Lenie start curving.
 7. Now swap `turn_left` for the Twitch random-turn block (§4) and observe the
    difference in how long the converted hosts survive.
