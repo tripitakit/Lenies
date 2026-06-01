@@ -1260,9 +1260,16 @@
 .stepper-chip {
   border: 1px solid rgba(148, 163, 184, 0.3);
   background: rgba(15, 23, 42, 0.8);
-  padding: 2px 6px;
+  padding: 0 6px;
   font-variant-numeric: tabular-nums;
-  min-height: 18px;
+  /* Fixed height so empty and filled chips have the same vertical
+     footprint — the stack column then stays at a stable height across
+     steps regardless of how many values are pushed. */
+  height: 22px;
+  line-height: 20px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
 }
 .stepper-chip-top { border-color: #22d3ee; }
 /* Empty slot in a fixed-capacity stack — visible chip outline but no
