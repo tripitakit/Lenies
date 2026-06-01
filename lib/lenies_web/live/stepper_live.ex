@@ -211,6 +211,18 @@ defmodule LeniesWeb.StepperLive do
             </section>
 
             <section class="stepper-panel">
+              <h3 class="stepper-panel-title">Slots</h3>
+              <div class="stepper-slots">
+                <%= for i <- 0..3 do %>
+                  <div class="stepper-slot">
+                    <div class="stepper-slot-value">{@session.interp.slots[i]}</div>
+                    <div class="stepper-slot-label">s{i}</div>
+                  </div>
+                <% end %>
+              </div>
+            </section>
+
+            <section class="stepper-panel">
               <h3 class="stepper-panel-title">Stack (top↑)</h3>
               <ol class="stepper-stack">
                 <%= for {v, idx} <- Enum.with_index(Enum.reverse(@session.interp.stack)) do %>
@@ -226,18 +238,6 @@ defmodule LeniesWeb.StepperLive do
                 <% end %>
               </ol>
               <div class="stepper-depth">depth: {length(@session.interp.stack)}</div>
-            </section>
-
-            <section class="stepper-panel">
-              <h3 class="stepper-panel-title">Slots</h3>
-              <div class="stepper-slots">
-                <%= for i <- 0..3 do %>
-                  <div class="stepper-slot">
-                    <div class="stepper-slot-value">{@session.interp.slots[i]}</div>
-                    <div class="stepper-slot-label">s{i}</div>
-                  </div>
-                <% end %>
-              </div>
             </section>
 
             <section class="stepper-panel">
