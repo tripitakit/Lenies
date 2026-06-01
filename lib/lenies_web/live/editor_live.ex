@@ -17,6 +17,8 @@ defmodule LeniesWeb.EditorLive do
   alias LeniesWeb.EditorHistory
   alias LeniesWeb.EditorCaret
 
+  require Logger
+
   @default_chapter "02-opcode-reference.md"
 
   @impl true
@@ -59,6 +61,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:history, EditorHistory.new(100))
       |> assign(:snippets, Lenies.Snippets.Store.all())
       |> assign(:show_snippet_form, false)
+      |> assign(:snippet_form_error, nil)
       |> assign(:editing_index, nil)
       |> assign(:inline_edit_error, nil)
       |> assign(:jump_targets, LeniesWeb.JumpTargets.targets(buffer))
@@ -468,11 +471,11 @@ defmodule LeniesWeb.EditorLive do
   end
 
   def handle_event("open_snippet_form", _params, socket) do
-    {:noreply, assign(socket, show_snippet_form: true)}
+    {:noreply, assign(socket, show_snippet_form: true, snippet_form_error: nil)}
   end
 
   def handle_event("cancel_snippet_form", _params, socket) do
-    {:noreply, assign(socket, show_snippet_form: false)}
+    {:noreply, assign(socket, show_snippet_form: false, snippet_form_error: nil)}
   end
 
   def handle_event("submit_snippet", %{"snippet_name" => name}, socket) do
@@ -483,16 +486,43 @@ defmodule LeniesWeb.EditorLive do
       {:noreply,
        socket
        |> assign(:snippets, Lenies.Snippets.Store.all())
-       |> assign(:show_snippet_form, false)}
+       |> assign(:show_snippet_form, false)
+       |> assign(:snippet_form_error, nil)}
     else
-      # No selection: nothing to save, close the form.
+      # No range selected (caret == anchor, or no anchor set). Keep the form
+      # open with an inline message so the user knows what's missing — the
+      # previous "silently close" behaviour was indistinguishable from a
+      # successful save UI-wise.
       nil ->
-        {:noreply, assign(socket, :show_snippet_form, false)}
+        {:noreply,
+         assign(
+           socket,
+           :snippet_form_error,
+           "Select a range of opcodes in the buffer first, then click ✓."
+         )}
 
-      # Store rejected the save (e.g. empty/invalid name): keep the form open
-      # so the user can correct it, mirroring submit_save_seed's error handling.
-      {:error, _reason} ->
-        {:noreply, socket}
+      # Store rejected the save: surface the specific reason so the user
+      # can act on it (the previous silent {:noreply, socket} gave zero
+      # feedback — exactly the bug we're fixing here).
+      {:error, reason} ->
+        Logger.warning("submit_snippet rejected by Store.save: #{inspect(reason)}")
+
+        msg =
+          case reason do
+            :invalid_name ->
+              "Snippet name must contain at least one letter or digit."
+
+            :invalid_opcodes ->
+              "Selected range has no valid opcodes — pick a non-empty range of real opcodes."
+
+            :io_error ->
+              "Failed to write snippet to disk — check the server log."
+
+            other ->
+              "Couldn't save snippet (#{inspect(other)})."
+          end
+
+        {:noreply, assign(socket, :snippet_form_error, msg)}
     end
   end
 
@@ -784,6 +814,11 @@ defmodule LeniesWeb.EditorLive do
                 >
                   ⨯
                 </button>
+                <%= if @snippet_form_error do %>
+                  <span class="text-red-400 text-[11px] mt-1 block" role="alert">
+                    {@snippet_form_error}
+                  </span>
+                <% end %>
               </form>
             <% end %>
             <%= if @snippets == [] do %>
