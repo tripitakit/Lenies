@@ -11,6 +11,28 @@ defmodule LeniesWeb.StepperLive do
   alias Lenies.Stepper
 
   @impl true
+  def update(%{tick: true}, socket) do
+    session = socket.assigns.session
+
+    if session.status == :running do
+      {:ok, new_session} = Lenies.Stepper.step(session)
+
+      cond do
+        new_session.status == :halted ->
+          {:ok, assign(socket, :session, new_session)}
+
+        MapSet.member?(new_session.breakpoints, new_session.interp.ip) ->
+          {:ok, assign(socket, :session, %{new_session | status: :breakpoint_hit})}
+
+        true ->
+          send(self(), {:stepper_tick, socket.assigns.id})
+          {:ok, assign(socket, :session, new_session)}
+      end
+    else
+      {:ok, socket}
+    end
+  end
+
   def update(%{codeome: codeome} = assigns, socket) do
     session = Map.get(socket.assigns, :session) || Stepper.start_session(codeome, [])
 
@@ -59,9 +81,15 @@ defmodule LeniesWeb.StepperLive do
             >
               ▶ Step
             </button>
-            <button phx-click="run" phx-target={@myself} class="stepper-btn" title="Run (F5)">
-              ▶▶ Run
-            </button>
+            <%= if @session.status == :running do %>
+              <button phx-click="pause" phx-target={@myself} class="stepper-btn" title="Pause (F5)">
+                ⏸ Pause
+              </button>
+            <% else %>
+              <button phx-click="run" phx-target={@myself} class="stepper-btn" title="Run (F5)">
+                ▶▶ Run
+              </button>
+            <% end %>
           </div>
           <div class="stepper-seed-picker">
             <label class="stepper-seed-label">🎯 Place:</label>
@@ -109,6 +137,22 @@ defmodule LeniesWeb.StepperLive do
             ✕
           </button>
         </header>
+
+        <%= cond do %>
+          <% @session.status == :halted -> %>
+            <div class="stepper-status-banner stepper-status-banner-halted">
+              Halted: {@session.halt_reason}
+            </div>
+          <% @session.status == :breakpoint_hit -> %>
+            <div class="stepper-status-banner stepper-status-banner-breakpoint">
+              Stopped at breakpoint @ ip {@session.interp.ip}
+            </div>
+          <% @session.status == :safety_cap_reached -> %>
+            <div class="stepper-status-banner stepper-status-banner-safety">
+              Safety cap (10k steps) — paused
+            </div>
+          <% true -> %>
+        <% end %>
 
         <div class="stepper-body">
           <aside class="stepper-inspector">
@@ -236,7 +280,13 @@ defmodule LeniesWeb.StepperLive do
   end
 
   def handle_event("run", _params, socket) do
-    {:ok, new_session} = Stepper.run(socket.assigns.session, max_steps: 1_000)
+    new_session = %{socket.assigns.session | status: :running}
+    send(self(), {:stepper_tick, socket.assigns.id})
+    {:noreply, assign(socket, :session, new_session)}
+  end
+
+  def handle_event("pause", _params, socket) do
+    new_session = %{socket.assigns.session | status: :paused}
     {:noreply, assign(socket, :session, new_session)}
   end
 
@@ -300,13 +350,37 @@ defmodule LeniesWeb.StepperLive do
 
   def handle_event("key", %{"key" => key}, socket) do
     case key do
-      "F10" -> handle_event("step", %{}, socket)
-      "F11" -> handle_event("step_back", %{}, socket)
-      "F5" -> handle_event("run", %{}, socket)
-      "r" -> handle_event("reset", %{}, socket)
-      "R" -> handle_event("reset", %{}, socket)
-      "Escape" -> handle_event("close", %{}, socket)
-      _ -> {:noreply, socket}
+      "F10" ->
+        handle_event("step", %{}, socket)
+
+      "F11" ->
+        handle_event("step_back", %{}, socket)
+
+      "F5" ->
+        if socket.assigns.session.status == :running do
+          handle_event("pause", %{}, socket)
+        else
+          handle_event("run", %{}, socket)
+        end
+
+      "r" ->
+        handle_event("reset", %{}, socket)
+
+      "R" ->
+        handle_event("reset", %{}, socket)
+
+      "Escape" ->
+        handle_event("close", %{}, socket)
+
+      " " ->
+        if socket.assigns.session.status == :running do
+          handle_event("pause", %{}, socket)
+        else
+          handle_event("run", %{}, socket)
+        end
+
+      _ ->
+        {:noreply, socket}
     end
   end
 

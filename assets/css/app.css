@@ -1359,3 +1359,13 @@
   color: #fbbf24;
   font-style: italic;
 }
+
+.stepper-status-banner {
+  padding: 4px 12px;
+  font-size: 12px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+.stepper-status-banner-halted { background: rgba(127, 29, 29, 0.4); color: #fecaca; }
+.stepper-status-banner-breakpoint { background: rgba(120, 53, 15, 0.4); color: #fde68a; }
+.stepper-status-banner-safety { background: rgba(127, 29, 29, 0.4); color: #fecaca; }

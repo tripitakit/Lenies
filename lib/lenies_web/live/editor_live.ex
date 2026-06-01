@@ -597,6 +597,11 @@ defmodule LeniesWeb.EditorLive do
     {:noreply, assign(socket, :show_stepper, false)}
   end
 
+  def handle_info({:stepper_tick, component_id}, socket) do
+    send_update(LeniesWeb.StepperLive, id: component_id, tick: true)
+    {:noreply, socket}
+  end
+
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   @impl true
