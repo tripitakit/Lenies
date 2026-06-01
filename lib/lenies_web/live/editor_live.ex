@@ -587,6 +587,16 @@ defmodule LeniesWeb.EditorLive do
     {:noreply, assign(socket, :show_stepper, true)}
   end
 
+  # The mini-world canvas hook (StepperCanvas) lives inside a
+  # `phx-update="ignore"` subtree, so `pushEventTo` with a component
+  # selector hit corner-cases on event routing. Hook now uses plain
+  # `pushEvent` to the parent LiveView (this one); we forward to the
+  # LiveComponent via `send_update`.
+  def handle_event("stepper:canvas_click", %{"x" => x, "y" => y}, socket) do
+    send_update(LeniesWeb.StepperLive, id: "stepper-modal", canvas_click: %{x: x, y: y})
+    {:noreply, socket}
+  end
+
   @impl true
   def handle_info(:sandboxes_manager_up, socket) do
     :ok = Lenies.Sandboxes.attach(socket.assigns.current_scope.user.id)

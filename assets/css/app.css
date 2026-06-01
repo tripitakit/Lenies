@@ -1348,6 +1348,12 @@
 }
 .stepper-world-canvas canvas { display: block; width: 100%; height: 100%; }
 
+/* Visual feedback when the user is in place-seed mode: crosshair cursor
+   + amber border so it's obvious where the click will land. */
+.stepper-world-canvas-arm { border-color: #fbbf24; box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.4) inset; }
+.stepper-world-canvas-arm canvas { cursor: crosshair; }
+.stepper-place-hint { color: #fbbf24; font-size: 10px; margin-left: 6px; }
+
 .stepper-seed-picker {
   display: flex;
   align-items: center;

@@ -40,6 +40,35 @@ defmodule LeniesWeb.StepperLive do
     end
   end
 
+  # Canvas-click forwarded from the parent LiveView. See the matching
+  # `handle_event("stepper:canvas_click", ...)` in EditorLive — the hook
+  # is inside a `phx-update="ignore"` subtree so `pushEvent` (parent) +
+  # send_update is the reliable path.
+  def update(%{canvas_click: %{x: x, y: y}}, socket) do
+    session = socket.assigns.session
+
+    case session.place_seed_mode do
+      nil ->
+        {:ok, socket}
+
+      %{seed_id: seed_ref} ->
+        case resolve_seed(seed_ref, socket.assigns.current_user) do
+          nil ->
+            {:ok, socket}
+
+          seed_map ->
+            case Stepper.place_seed(session, seed_map, {x, y}) do
+              {:ok, new_session} ->
+                final = Stepper.set_place_seed_mode(new_session, nil)
+                {:ok, assign(socket, :session, final)}
+
+              {:error, _reason} ->
+                {:ok, socket}
+            end
+        end
+    end
+  end
+
   def update(%{codeome: codeome} = assigns, socket) do
     session = Map.get(socket.assigns, :session) || Stepper.start_session(codeome, [])
 
@@ -251,12 +280,17 @@ defmodule LeniesWeb.StepperLive do
           </section>
 
           <aside class="stepper-world">
-            <h3 class="stepper-panel-title">Mini-world 64×64</h3>
+            <h3 class="stepper-panel-title">
+              Mini-world 64×64
+              <%= if @session.place_seed_mode do %>
+                <span class="stepper-place-hint">— click to place</span>
+              <% end %>
+            </h3>
             <div
               id="stepper-canvas"
               phx-hook="StepperCanvas"
               phx-update="ignore"
-              class="stepper-world-canvas"
+              class={["stepper-world-canvas", @session.place_seed_mode && "stepper-world-canvas-arm"]}
               data-payload={Jason.encode!(Lenies.Stepper.World.encode_grid_payload(@session.world))}
             ></div>
           </aside>

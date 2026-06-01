@@ -14,14 +14,16 @@ const StepperCanvas = {
       const cellPxY = rect.height / payload.h;
       const x = Math.max(0, Math.min(payload.w - 1, Math.floor((e.clientX - rect.left) / cellPxX)));
       const y = Math.max(0, Math.min(payload.h - 1, Math.floor((e.clientY - rect.top) / cellPxY)));
-      // Target the LiveComponent by its DOM id (selector form). Passing the
-      // raw element to pushEventTo is unreliable across LV versions when the
-      // hook lives in a `phx-update="ignore"` subtree — the selector lookup
-      // is the supported path.
-      const modal = this.el.closest("[data-stepper-modal]");
-      if (modal && modal.id) {
-        this.pushEventTo("#" + modal.id, "canvas_click", {x, y});
-      }
+
+      // Diagnostic — easy to inspect in DevTools console while iterating.
+      // Remove once the canvas-click path is verified end-to-end.
+      console.log("[stepper] canvas click", {x, y});
+
+      // pushEvent goes to the parent LiveView (EditorLive), which then
+      // forwards via send_update to the StepperLive LiveComponent. This
+      // is more reliable than pushEventTo with a component selector when
+      // the hook is inside a `phx-update="ignore"` subtree.
+      this.pushEvent("stepper:canvas_click", {x, y});
     });
 
     this.render();
