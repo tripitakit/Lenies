@@ -389,7 +389,7 @@ copied, never executed.
 - **Carry/copy tax.** A plasmid lengthens the host's codeome, so each
   replication copies more opcodes (the copy loop costs roughly 6.8 energy per
   opcode), and `divide` charges an extra `0.5 × plasmid_size` for the plasmid
-  itself. A 31-opcode plasmid adds ~15 energy per generation plus the copy cost.
+  itself. The 32-opcode Twitch plasmid adds 16 energy per generation (0.5 × 32) plus the copy cost.
   Budget for it (Chapter 8).
 - **Per-step cost.** Twitch adds ~1.8 energy to each forage step (the random
   bit, the branch, the turn, the bounce); Sprint adds ~4.4 (an extra move and
