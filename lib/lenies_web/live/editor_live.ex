@@ -1095,6 +1095,7 @@ defmodule LeniesWeb.EditorLive do
           module={LeniesWeb.StepperLive}
           id="stepper-modal"
           codeome={LeniesWeb.CodeomeBuffer.to_codeome(@buffer)}
+          current_user={@current_scope && @current_scope.user}
         />
       <% end %>
     </div>

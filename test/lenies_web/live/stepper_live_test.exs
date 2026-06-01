@@ -82,4 +82,34 @@ defmodule LeniesWeb.StepperLiveTest do
     html = render(view)
     refute html =~ "Codeome Stepper"
   end
+
+  test "selecting a built-in seed enters place-seed mode", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+    populate_buffer(view)
+    view |> element("button", "🐞 Debug") |> render_click()
+
+    html =
+      view
+      |> element("select[phx-change='select_seed']")
+      |> render_change(%{"value" => "builtin:minimal_replicator"})
+
+    assert html =~ "click on the canvas"
+  end
+
+  test "selecting (none) exits place-seed mode", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+    populate_buffer(view)
+    view |> element("button", "🐞 Debug") |> render_click()
+
+    view
+    |> element("select[phx-change='select_seed']")
+    |> render_change(%{"value" => "builtin:minimal_replicator"})
+
+    html =
+      view
+      |> element("select[phx-change='select_seed']")
+      |> render_change(%{"value" => ""})
+
+    refute html =~ "click on the canvas"
+  end
 end

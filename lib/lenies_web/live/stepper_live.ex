@@ -17,7 +17,8 @@ defmodule LeniesWeb.StepperLive do
     {:ok,
      socket
      |> assign(assigns)
-     |> assign(:session, session)}
+     |> assign(:session, session)
+     |> assign_new(:current_user, fn -> nil end)}
   end
 
   @impl true
@@ -61,6 +62,43 @@ defmodule LeniesWeb.StepperLive do
             <button phx-click="run" phx-target={@myself} class="stepper-btn" title="Run (F5)">
               ▶▶ Run
             </button>
+          </div>
+          <div class="stepper-seed-picker">
+            <label class="stepper-seed-label">🎯 Place:</label>
+            <select phx-change="select_seed" phx-target={@myself} class="stepper-seed-select">
+              <option value="">(none)</option>
+              <optgroup label="Built-in">
+                <%= for seed <- Lenies.Seeds.all() do %>
+                  <option
+                    value={"builtin:" <> Atom.to_string(seed.id)}
+                    selected={
+                      @session.place_seed_mode &&
+                        @session.place_seed_mode.seed_id == {:builtin, seed.id}
+                    }
+                  >
+                    {seed.name}
+                  </option>
+                <% end %>
+              </optgroup>
+              <%= if @current_user do %>
+                <optgroup label="My collection">
+                  <%= for c <- Lenies.Collection.list_codeomes(@current_user) do %>
+                    <option
+                      value={"collection:" <> Integer.to_string(c.id)}
+                      selected={
+                        @session.place_seed_mode &&
+                          @session.place_seed_mode.seed_id == {:collection, c.id}
+                      }
+                    >
+                      {c.name}
+                    </option>
+                  <% end %>
+                </optgroup>
+              <% end %>
+            </select>
+            <%= if @session.place_seed_mode do %>
+              <span class="stepper-seed-active">click on the canvas</span>
+            <% end %>
           </div>
           <button
             phx-click="close"
@@ -218,8 +256,46 @@ defmodule LeniesWeb.StepperLive do
     {:noreply, socket}
   end
 
-  def handle_event("canvas_click", _params, socket) do
-    {:noreply, socket}
+  def handle_event("select_seed", %{"value" => ""}, socket) do
+    {:noreply, assign(socket, :session, Stepper.set_place_seed_mode(socket.assigns.session, nil))}
+  end
+
+  def handle_event("select_seed", %{"value" => "builtin:" <> id_str}, socket) do
+    seed_id = {:builtin, String.to_atom(id_str)}
+
+    {:noreply,
+     assign(socket, :session, Stepper.set_place_seed_mode(socket.assigns.session, seed_id))}
+  end
+
+  def handle_event("select_seed", %{"value" => "collection:" <> id}, socket) do
+    seed_id = {:collection, parse_int(id)}
+
+    {:noreply,
+     assign(socket, :session, Stepper.set_place_seed_mode(socket.assigns.session, seed_id))}
+  end
+
+  def handle_event("canvas_click", %{"x" => x, "y" => y}, socket) do
+    case socket.assigns.session.place_seed_mode do
+      nil ->
+        {:noreply, socket}
+
+      %{seed_id: seed_ref} ->
+        case resolve_seed(seed_ref, socket.assigns.current_user) do
+          nil ->
+            {:noreply, socket}
+
+          seed_map ->
+            case Stepper.place_seed(socket.assigns.session, seed_map, {x, y}) do
+              {:ok, new_session} ->
+                # Auto-exit place-seed mode after a successful drop.
+                final_session = Stepper.set_place_seed_mode(new_session, nil)
+                {:noreply, assign(socket, :session, final_session)}
+
+              {:error, _reason} ->
+                {:noreply, socket}
+            end
+        end
+    end
   end
 
   def handle_event("key", %{"key" => key}, socket) do
@@ -233,6 +309,46 @@ defmodule LeniesWeb.StepperLive do
       _ -> {:noreply, socket}
     end
   end
+
+  defp resolve_seed({:builtin, id}, _user) do
+    case Enum.find(Lenies.Seeds.all(), &(&1.id == id)) do
+      nil ->
+        nil
+
+      seed ->
+        plasmids =
+          case Map.get(seed, :plasmid) do
+            nil -> []
+            [] -> []
+            ops when is_list(ops) -> [ops]
+          end
+
+        %{codeome: seed.codeome, plasmids: plasmids}
+    end
+  end
+
+  defp resolve_seed({:collection, _id}, nil), do: nil
+
+  defp resolve_seed({:collection, id}, user) do
+    case Lenies.Collection.get_codeome(user, id) do
+      nil ->
+        nil
+
+      %Lenies.Collection.Codeome{} = c ->
+        opcodes = Lenies.Collection.to_opcode_atoms(c)
+        %{codeome: Lenies.Codeome.from_list(opcodes), plasmids: []}
+    end
+  end
+
+  defp parse_int(s) when is_binary(s) do
+    case Integer.parse(s) do
+      {n, ""} -> n
+      _ -> nil
+    end
+  end
+
+  defp parse_int(n) when is_integer(n), do: n
+  defp parse_int(_), do: nil
 
   defp status_label(:ready), do: "ready"
   defp status_label(:running), do: "running"
