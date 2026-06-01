@@ -949,11 +949,10 @@
 .lenies-dashboard .editor-grid {
   display: grid;
   /* Manual is capped at 50% of the grid container so it never dominates
-     the editor on wide viewports; the opcode pane absorbs the extra
-     horizontal space (its dense palette benefits from more room).
-     Listing stays at 320px fixed — the codeome blocks are a compact
-     display, not a tool zone. */
-  grid-template-columns: minmax(0, 50%) minmax(360px, 1fr) 320px;
+     the editor on wide viewports. The remaining horizontal space is
+     split equally between the opcode pane and the codeome listing pane
+     (each gets 1fr → 50% of what's left after the manual). */
+  grid-template-columns: minmax(0, 50%) minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   gap: 0.75rem;
   padding: 0.75rem;
@@ -965,7 +964,7 @@
 }
 
 .lenies-dashboard .editor-grid.manual-collapsed {
-  grid-template-columns: 24px minmax(360px, 1fr) 320px;
+  grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .lenies-dashboard .manual-pane {

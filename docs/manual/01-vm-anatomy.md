@@ -11,16 +11,16 @@ directly to `Lenies.Interpreter.State` and `Lenies.Interpreter`.
 
 The full runtime state of one Lenie is a struct with eight fields.
 
-| Field        | Type                          | Meaning                                                      |
-|--------------|-------------------------------|--------------------------------------------------------------|
-| `ip`         | non-neg integer               | Instruction pointer; wraps modulo codeome size               |
-| `stack`      | list of integers, max 16      | Top is the head; pushing beyond 16 drops the oldest element  |
-| `slots`      | `%{0..3 => integer}`          | 4 named memory slots; slot index wraps mod 4                 |
-| `dir`        | `:n \| :e \| :s \| :w`        | Facing direction (cardinal compass)                          |
-| `energy`     | float                         | Decreases on every opcode; Lenie dies when it reaches ≤ 0   |
-| `age`        | non-neg integer               | Incremented once per K-instruction batch (metabolic tick)    |
-| `pos`        | `{x, y}`                      | Grid coordinates (both non-neg integers)                     |
-| `call_stack` | list of non-neg integers, max 32 | Return IPs saved by `call_t`; consumed by `ret`           |
+| Field        | Type                             | Meaning                                                     |
+| ------------ | -------------------------------- | ----------------------------------------------------------- |
+| `ip`         | non-neg integer                  | Instruction pointer; wraps modulo codeome size              |
+| `stack`      | list of integers, max 16         | Top is the head; pushing beyond 16 drops the oldest element |
+| `slots`      | `%{0..3 => integer}`             | 4 named memory slots; slot index wraps mod 4                |
+| `dir`        | `:n \| :e \| :s \| :w`           | Facing direction (cardinal compass)                         |
+| `energy`     | float                            | Decreases on every opcode; Lenie dies when it reaches ≤ 0   |
+| `age`        | non-neg integer                  | Incremented once per K-instruction batch (metabolic tick)   |
+| `pos`        | `{x, y}`                         | Grid coordinates (both non-neg integers)                    |
+| `call_stack` | list of non-neg integers, max 32 | Return IPs saved by `call_t`; consumed by `ret`             |
 
 ### `ip` — instruction pointer
 
@@ -48,7 +48,7 @@ that.
 >   with top on the right of each side. `( a b -- a+b )` means pop `b`
 >   (the top), pop `a`, push their sum.
 >
-> The Elixir source implements the stack as a list where the *head* is
+> The Elixir source implements the stack as a list where the _head_ is
 > the top — so internally the same state above is `[c, b, a]`. The
 > manual deliberately reverses this for display, because reading
 > bottom-to-top left-to-right matches how stack growth is intuited and
@@ -107,14 +107,14 @@ wraps modulo the codeome size, making it a closed ring.
 ```
   codeome of size 12, ip = 3
   ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐
-  │  0 │  1 │  2 │  3 │  4 │  5 │  6 │  7 │  8 │  9 │ 10 │ 11 │
+     0     1    2     3     4     5     6     7     8     9    10    11
   └────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┴────┘
-                       ▲
+                      ▲
                       ip
   execution continues:  4 → 5 → 6 → … → 11 → 0 → 1 → 2 → 3 → …
 ```
 
-**Why the ring matters for template search.**  Jump opcodes (`jmp_t`,
+**Why the ring matters for template search.** Jump opcodes (`jmp_t`,
 `jz_t`, `jnz_t`, `call_t`) locate their targets by scanning for a
 complement template — a bit-flipped mirror of the nop sequence that follows
 the opcode. The scan is bounded by a configurable radius (default 256 cells)
@@ -174,11 +174,11 @@ the reply.
 
 ## 4. The Three Outcomes
 
-| Outcome        | When                                        | Examples                                                    |
-|----------------|---------------------------------------------|-------------------------------------------------------------|
-| `:cont`        | Ordinary opcode finished successfully       | `push0`, `push1`, `add`, `swap`, `jmp_t`, `sense_self`     |
-| `:wait_world`  | Opcode needs to call the World GenServer    | `move`, `eat`, `sense_front`, `attack`, `defend`, `allocate`, `write_child`, `divide` |
-| `:halt`        | Lenie is dead                               | starvation (`energy <= 0`), empty codeome                  |
+| Outcome       | When                                     | Examples                                                                              |
+| ------------- | ---------------------------------------- | ------------------------------------------------------------------------------------- |
+| `:cont`       | Ordinary opcode finished successfully    | `push0`, `push1`, `add`, `swap`, `jmp_t`, `sense_self`                                |
+| `:wait_world` | Opcode needs to call the World GenServer | `move`, `eat`, `sense_front`, `attack`, `defend`, `allocate`, `write_child`, `divide` |
+| `:halt`       | Lenie is dead                            | starvation (`energy <= 0`), empty codeome                                             |
 
 `:wait_world` carries an action term that describes what the Lenie wants to
 do — for example `{:move, pos, dir}` or `{:eat, pos}`. The Lenie process
@@ -236,18 +236,18 @@ bottom to top — the top of the stack is at the top of the box.
 ```
   │   │   │ 0 │   │ 1 │   │ 0 │   │ 1 │
   │   │   │   │   │ 0 │   │ 1 │   │   │
-  └───┘   └───┘   └───┘   └───┘   └───┘
+  └───┘  └───┘   └───┘  └───┘   └───┘
   start   push0   push1    swap    drop
 ```
 
 Stack effects in `( before -- after )` notation:
 
-| Opcode  | Stack effect          |
-|---------|-----------------------|
-| `push0` | `( -- 0 )`            |
-| `push1` | `( -- 1 )`            |
-| `swap`  | `( a b -- b a )`      |
-| `drop`  | `( a -- )`            |
+| Opcode  | Stack effect     |
+| ------- | ---------------- |
+| `push0` | `( -- 0 )`       |
+| `push1` | `( -- 1 )`       |
+| `swap`  | `( a b -- b a )` |
+| `drop`  | `( a -- )`       |
 
 In bracket notation (top on the right, per the convention introduced in
 §1): after `push0` the stack is `[0]`. After `push1` it is `[0, 1]` —

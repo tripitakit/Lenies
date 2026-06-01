@@ -30,7 +30,8 @@ defmodule LeniesWeb.ManualPaneComponentTest do
     assert html =~ ~s(id="manual-chapter-select")
     assert html =~ "02-opcode-reference.md"
     assert html =~ "00-introduction.md"
-    assert html =~ "10-cookbook.md"
+    assert html =~ "11-cookbook.md"
+    assert html =~ "10-conjugation-and-plasmids.md"
   end
 
   test "renders the selected chapter's HTML in the content area" do

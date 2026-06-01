@@ -12,9 +12,9 @@ defmodule Lenies.ManualTest do
     :ok
   end
 
-  test "list_chapters/0 returns all 13 chapters in filename order" do
+  test "list_chapters/0 returns all 14 chapters in filename order" do
     chapters = Manual.list_chapters()
-    assert length(chapters) == 13
+    assert length(chapters) == 14
 
     filenames = Enum.map(chapters, & &1.filename)
     expected = ~w(
@@ -29,8 +29,9 @@ defmodule Lenies.ManualTest do
       07-replication.md
       08-energy-economy.md
       09-minimal-replicator.md
-      10-cookbook.md
-      11-conjugation-and-plasmids.md
+      10-conjugation-and-plasmids.md
+      11-cookbook.md
+      LLM-APPENDIX.md
     )
 
     assert MapSet.new(filenames) == MapSet.new(expected)

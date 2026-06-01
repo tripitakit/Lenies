@@ -43,9 +43,8 @@ instructions in the top-level project README at
 - [Chapter 7 — Replication](07-replication.md) — Mini-replicator, Sustainable replicator
 - [Chapter 8 — Energy Economy](08-energy-economy.md) — budget, break-even, copy errors
 - [Chapter 9 — The MinimalReplicator Dissected](09-minimal-replicator.md) — the canonical hand-tuned replicator
-- [Chapter 10 — Cookbook](10-cookbook.md) — six recurring idioms
-- [Chapter 11 — Conjugation and Plasmids](11-conjugation-and-plasmids.md) — horizontal gene transfer; writing your own conjugable plasmid
-- [Chapter 12 — Recipes](12-recipes.md) — beginner-friendly idioms (loops, if-else, stack/storage patterns)
+- [Chapter 10 — Conjugation and Plasmids](10-conjugation-and-plasmids.md) — horizontal gene transfer; writing your own conjugable plasmid
+- [Chapter 11 — Cookbook](11-cookbook.md) — consolidated recipe book: constants, control flow, loops, slots, stack manipulation, self-inspection, anchor hygiene
 - [Appendix: LLM Knowledge Base](LLM-APPENDIX.md) — single-file reference for AI coding agents writing Lenies codeomes
 
 ---

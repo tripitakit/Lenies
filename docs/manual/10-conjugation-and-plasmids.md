@@ -1,4 +1,4 @@
-# Chapter 11 — Conjugation and Plasmids
+# Chapter 10 — Conjugation and Plasmids
 
 Source of truth: `lib/lenies/codeomes/minimal_replicator.ex`,
 `lib/lenies/codeomes/carnivore.ex`, `lib/lenies/lenie.ex`,
