@@ -50,7 +50,7 @@ use that value — `drop` discards it immediately (cost 0.1). Why bother sensing
 Because the yield is what lets the world advance around us: without it the Lenie would
 race through its loop without ever giving the simulation time to move things. You will see
 this idiom whenever a loop needs to pace itself without branching. (The cookbook in
-chapter 10 has more on world-yield patterns.)
+chapter 11 has more on world-yield patterns.)
 
 **Position 3 — `:eat`**
 Yields to the world and attempts to consume up to `eat_amount` (20 energy units) from the
@@ -126,7 +126,10 @@ Cost sources (from `Lenies.Codeome.Costs`):
 - `move` → 2.0
 - `jmp_t` with template_len=1 → 0.2 + 0.05 × 1 = 0.25
 
-Each full loop costs 4.95 energy. With `eat_amount` = 20, a single successful eat more
+After birth the jump lands at position 1, so `:nop_0` (position 0) runs only once and the
+steady-state loop is positions 1–5: `sense_front; drop; eat; move; jmp_t` =
+0.5 + 0.1 + 2.0 + 2.0 + 0.25 = **4.85 energy per loop** (the very first pass adds the
+one-time 0.1 for `:nop_0`, for 4.95). With `eat_amount` = 20, a single successful eat more
 than pays for the entire loop. On a world with reasonable resource density the Walker is
 comfortably energy-positive.
 
@@ -139,7 +142,7 @@ Three things must be true:
 
 1. **Length in bounds:** the codeome must have between 5 and 1000 opcodes.
 2. **Enough non-nop opcodes:** at least 10 opcodes that are not `:nop_0` or `:nop_1`.
-3. **All opcodes in the whitelist:** every atom must be in the 36-entry opcode set.
+3. **All opcodes in the whitelist:** every atom must be in the 38-entry opcode set.
 
 The conceptual Walker above has **8 opcodes total** and **6 non-nops**
 (`:sense_front`, `:drop`, `:eat`, `:move`, `:jmp_t`, `:push0`). It passes rule 1 and
@@ -176,7 +179,7 @@ add 8 more opcodes (all non-nops), for a total of 16 opcodes and 14 non-nops.
 
 Count check:
 
-- Total opcodes: 8 (core) + 8 (padding) = **16** — within the 5..500 bound.
+- Total opcodes: 8 (core) + 8 (padding) = **16** — within the 5..1000 bound.
 - Non-nop opcodes: 6 (core, excluding the two nops) + 8 (all padding ops are non-nop) = **14** — above the minimum of 10.
 - All atoms in whitelist: yes.
 
@@ -192,7 +195,7 @@ The padding is genuinely safe.
 
 ## 7. Try It — Editor Steps
 
-Fire up the app at `http://localhost:4001` and follow these steps exactly:
+Fire up the app at `http://localhost:4000` and follow these steps exactly:
 
 1. Click **`+ New Seed`** in the controls panel on the left.
 2. The codeome editor modal opens. The opcode palette is on the left side of the modal;
