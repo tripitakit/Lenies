@@ -1072,6 +1072,30 @@
     #050816;
   color: #e2e8f0;
 }
+
+/* HERO above the two splash cards on the landing page. Title is large
+   and slate-200 (no cyan accent — keeps the cyan saved for the CTA).
+   Pitch is one short line bounded by max-w-3xl on the wrapper. */
+.splash-hero-title {
+  font-size: 3.5rem;
+  line-height: 1.1;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #e2e8f0;
+  margin-bottom: 0.75rem;
+}
+.splash-hero-pitch {
+  font-size: 1.125rem;
+  line-height: 1.6;
+  opacity: 0.7;
+  max-width: 36rem;
+  margin: 0 auto;
+}
+@media (max-width: 640px) {
+  .splash-hero-title {
+    font-size: 2.5rem;
+  }
+}
 .lenies-splash-card {
   display: flex;
   flex-direction: column;

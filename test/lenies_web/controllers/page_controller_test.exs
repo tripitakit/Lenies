@@ -23,6 +23,20 @@ defmodule LeniesWeb.PageControllerTest do
       # to /users/log-in. After login, they land on /sandbox.
       assert html =~ ~r/href="\/sandbox"/
     end
+
+    test "GET / renders the HERO with title and elevator pitch", %{conn: conn} do
+      conn = get(conn, ~p"/")
+      html = html_response(conn, 200)
+
+      # HERO title (h1) — the splash-hero-title class is the anchor; the
+      # text "Lenies" alone also appears in the navbar logo, so match on
+      # the class to scope the assertion to the HERO.
+      assert html =~ ~r/<h1[^>]*class="splash-hero-title"[^>]*>\s*Lenies\s*<\/h1>/
+
+      # Elevator pitch text appears in the splash-hero-pitch paragraph.
+      assert html =~ "Programmable life on a 2D grid"
+      assert html =~ "Seed a creature, watch it evolve"
+    end
   end
 
   describe "splash (auth)" do
