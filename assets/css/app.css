@@ -651,6 +651,12 @@
   margin-top: 8px;
   border-top: 1px solid rgba(148, 163, 184, 0.2);
   padding-top: 6px;
+  /* Used as a flex container in the editor page so the list scrolls
+     internally instead of overflowing past the pane. Harmless in
+     contexts where the surrounding pane isn't flex-column too. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .lenies-dashboard .codeome-snippets-title {
@@ -727,16 +733,36 @@
 /* In the editor page the palette uses a wider/denser layout than the
    inline sidebar variant. The palette fills its pane and is sized so
    all categories fit without scrolling — the center pane intentionally
-   has no scrollbar. */
+   has no scrollbar.
+
+   `flex: 1 1 0` (basis 0) lets the snippets section below claim its
+   reserved share (capped via max-height) without the palette growing
+   past available space and pushing snippets past the page bottom. */
 .lenies-dashboard.codeome-editor-page .codeome-palette {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-auto-rows: min-content;
   gap: 8px 10px;
   font-size: 10px;
+  overflow-y: auto;
+}
+
+/* In the editor page the snippets panel sits directly under the palette
+   inside the same flex-column pane. Cap its height so a long list scrolls
+   internally — the list used to extend past the pane (and past the page
+   bottom) because nothing bounded it. */
+.lenies-dashboard.codeome-editor-page .codeome-snippets {
+  flex: 0 1 auto;
+  max-height: 35%;
   overflow: hidden;
+}
+
+.lenies-dashboard.codeome-editor-page .codeome-snippets-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .lenies-dashboard.codeome-editor-page .palette-category {
