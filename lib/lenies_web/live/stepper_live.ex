@@ -224,20 +224,31 @@ defmodule LeniesWeb.StepperLive do
 
             <section class="stepper-panel">
               <h3 class="stepper-panel-title">Stack (top↑)</h3>
-              <ol class="stepper-stack">
-                <%= for {v, idx} <- Enum.with_index(Enum.reverse(@session.interp.stack)) do %>
+              <%
+                stack_capacity = 16
+                depth = length(@session.interp.stack)
+                # Pad to fixed length with nils. The CSS uses
+                # flex-direction: column-reverse, so the LAST item in HTML
+                # ends up visually at the top — that's where the top of the
+                # stack belongs.
+                padded =
+                  List.duplicate(nil, max(0, stack_capacity - depth)) ++
+                    Enum.reverse(Enum.take(@session.interp.stack, stack_capacity))
+              %>
+              <ol class="stepper-stack stepper-stack-fixed">
+                <%= for {v, idx} <- Enum.with_index(padded) do %>
                   <li class={[
                     "stepper-chip",
-                    idx == length(@session.interp.stack) - 1 && "stepper-chip-top"
+                    is_nil(v) && "stepper-chip-empty",
+                    not is_nil(v) && idx == stack_capacity - 1 && "stepper-chip-top"
                   ]}>
-                    {v}
+                    <%= if not is_nil(v), do: v %>
                   </li>
                 <% end %>
-                <%= if @session.interp.stack == [] do %>
-                  <li class="stepper-empty">empty</li>
-                <% end %>
               </ol>
-              <div class="stepper-depth">depth: {length(@session.interp.stack)}</div>
+              <div class="stepper-depth">
+                depth: {depth}<%= if depth > stack_capacity, do: " (showing top #{stack_capacity})" %>
+              </div>
             </section>
 
             <section class="stepper-panel">

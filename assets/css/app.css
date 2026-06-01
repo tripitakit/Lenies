@@ -1262,8 +1262,14 @@
   background: rgba(15, 23, 42, 0.8);
   padding: 2px 6px;
   font-variant-numeric: tabular-nums;
+  min-height: 18px;
 }
 .stepper-chip-top { border-color: #22d3ee; }
+/* Empty slot in a fixed-capacity stack — visible chip outline but no
+   value text, so the stack column always has the same height and the
+   eye can compare depth across steps. */
+.stepper-chip-empty { border-color: rgba(148, 163, 184, 0.12); background: rgba(15, 23, 42, 0.3); }
+.stepper-stack-fixed { gap: 2px; }
 
 .stepper-empty { opacity: 0.4; font-style: italic; }
 .stepper-depth { font-size: 10px; opacity: 0.6; margin-top: 0.25rem; }
