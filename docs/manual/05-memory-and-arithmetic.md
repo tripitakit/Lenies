@@ -158,20 +158,31 @@ INIT_HEAD [0,0,0,0]:
   build 8 on stack (push1; dup; add × 3)
   store into slot[0]
 
-STEP_HEAD [1,1,1,1]:
+STEP_HEAD [1,1,0,0]:
   eat
   move
   load slot[0]; push1; sub; store slot[0]   # decrement
   load slot[0]                               # test value
-  jnz_t [0,0,0,0]                           # → STEP_HEAD if counter > 0
+  jnz_t [0,0,1,1]                           # → STEP_HEAD if counter > 0
   # fall through: counter hit zero
   turn_right
-  jmp_t [0,1,1,1]                           # → INIT_HEAD to reset
+  jmp_t [1,1,1,1]                           # → INIT_HEAD to reset
 ```
 
-Wait — `:jmp_t [0,1,1,1]` searches for anchor `[1,0,0,0]`, which does not exist. We need a template that finds INIT_HEAD `[0,0,0,0]`. The complement of `[0,0,0,0]` is `[1,1,1,1]`. So `:jmp_t :nop_1 :nop_1 :nop_1 :nop_1` goes to INIT_HEAD.
+Two jumps, two distinct anchors. A jump searches for the **complement** of its
+template, so to land on INIT_HEAD `[0,0,0,0]` the `:jmp_t` carries the template
+`[1,1,1,1]` (four `:nop_1`); to land on STEP_HEAD `[1,1,0,0]` the `:jnz_t`
+carries the template `[0,0,1,1]`.
 
-But STEP_HEAD is also a 4-nop block (`[1,1,1,1]`), which means the complement `[0,0,0,0]` is the template that finds it. And `jnz_t` carries `[0,0,0,0]` (four `:nop_0` after the jump) to find STEP_HEAD `[1,1,1,1]`. The final `jmp_t` carries `[1,1,1,1]` to find INIT_HEAD `[0,0,0,0]`. These two anchors are complements of each other — that is fine because they are distinct positions in the codeome. The forward/backward search priority ensures each jump finds the right one as long as we put STEP_HEAD between INIT_HEAD and the end of the body.
+It is tempting to reuse `[1,1,1,1]` for STEP_HEAD too, but that is a trap. The
+template search runs **forward first** and wraps around the ring, so the
+trailing `:jmp_t`'s own `[1,1,1,1]` template would be the first `[1,1,1,1]` the
+`:jnz_t` finds — the loop would jump there instead of to STEP_HEAD. Giving
+STEP_HEAD a pattern (`[1,1,0,0]`) that no jump template accidentally reproduces
+keeps the two search targets unambiguous. We also place a non-nop **separator**
+after each jump's template so the template extractor (which greedily consumes
+contiguous `:nop`s, even across the ring wrap) cannot bleed one anchor into the
+next.
 
 ### Full codeome listing
 
@@ -188,8 +199,8 @@ But STEP_HEAD is also a 4-nop block (`[1,1,1,1]`), which means the complement `[
   # ── 11..12  store 8 in slot[0] ─────────────────────────────────────────────
   :push0, :store,
 
-  # ── 13..16  STEP_HEAD anchor [1,1,1,1] ─────────────────────────────────────
-  :nop_1, :nop_1, :nop_1, :nop_1,
+  # ── 13..16  STEP_HEAD anchor [1,1,0,0] ─────────────────────────────────────
+  :nop_1, :nop_1, :nop_0, :nop_0,
 
   # ── 17..18  body: eat and move ─────────────────────────────────────────────
   :eat, :move,
@@ -202,21 +213,24 @@ But STEP_HEAD is also a 4-nop block (`[1,1,1,1]`), which means the complement `[
   # ── 25..26  reload for the test ────────────────────────────────────────────
   :push0, :load,
 
-  # ── 27..31  jnz_t → STEP_HEAD (template [0,0,0,0] finds anchor [1,1,1,1]) ─
-  :jnz_t, :nop_0, :nop_0, :nop_0, :nop_0,
+  # ── 27..31  jnz_t → STEP_HEAD (template [0,0,1,1] finds anchor [1,1,0,0]) ─
+  :jnz_t, :nop_0, :nop_0, :nop_1, :nop_1,
 
-  # ── 32     separator (non-nop) prevents extractor from reading into TURN ───
+  # ── 32     separator (non-nop) stops the extractor at the template edge ────
   :push0,
 
   # ── 33     turn right when counter reached zero ────────────────────────────
   :turn_right,
 
   # ── 34..38  jmp_t → INIT_HEAD (template [1,1,1,1] finds anchor [0,0,0,0]) ─
-  :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1
+  :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
+
+  # ── 39     separator (non-nop) keeps the wrap from extending the template ──
+  :push0
 ]
 ```
 
-**Op count**: 39 instructions (indices 0–38). Non-nop count: `push1, add, add, add, dup, dup, dup, push0, store, eat, move, push0, load, push1, sub, push0, store, push0, load, jnz_t, push0, turn_right, jmp_t` = 23 non-nops. Well above the minimum.
+**Op count**: 40 instructions (indices 0–39). Non-nop count: `push1, add, add, add, dup, dup, dup, push0, store, eat, move, push0, load, push1, sub, push0, store, push0, load, jnz_t, push0, turn_right, jmp_t, push0` = 24 non-nops. Well above the minimum.
 
 ### One full cycle, step by step
 
@@ -229,7 +243,7 @@ But STEP_HEAD is also a 4-nop block (`[1,1,1,1]`), which means the complement `[
 
 **Step phase (repeats 8 times):**
 
-Each pass: `:eat`, `:move`, load slot[0], subtract 1, store back, reload, test with `jnz_t`. The `jnz_t` carries template `[0,0,0,0]`, complement `[1,1,1,1]`. It does not find four `:nop_1` ahead but does find STEP_HEAD behind (positions 13–16). Jumps to ip 17, repeating the body.
+Each pass: `:eat`, `:move`, load slot[0], subtract 1, store back, reload, test with `jnz_t`. The `jnz_t` carries template `[0,0,1,1]`, complement `[1,1,0,0]`. The only `[1,1,0,0]` in the codeome is STEP_HEAD at positions 13–16; the search finds it (wrapping forward around the ring) and jumps to ip 17, repeating the body.
 
 After 8 passes slot[0] = 0.
 
@@ -269,7 +283,7 @@ One branch is explicit (the jump target); the other is the fall-through. Design 
 
 ### Mod is defensive against zero
 
-If `:pushN` somehow pushed 0 (which cannot happen — the range is 0..255 so 0 is a valid value — but imagine building the divisor with arithmetic), the `:mod` implementation returns 0 rather than crashing. The rule: if the divisor `a` is 0, the result is 0. Keep this in mind if you use `:mod` with a dynamically computed divisor.
+In the coin-flip the divisor is the constant 2, so it is never 0. But if you ever feed `:mod` a divisor of 0 — for example a dynamically computed value that happens to come out zero — the `:mod` implementation returns 0 rather than crashing. The rule: if the divisor (the top operand) is 0, the result is 0. Keep this in mind if you use `:mod` with a computed divisor.
 
 ---
 
@@ -372,11 +386,14 @@ All templates used are also mutually distinct. Search uniqueness holds.
   :nop_1, :nop_0, :nop_1, :nop_1,
 
   # ── 49..53  jmp_t → LOOP_HEAD (template [1,1,1,1] finds [0,0,0,0]) ─────────
-  :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1
+  :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
+
+  # ── 54      separator: keeps the ring wrap from extending the template ──────
+  :push0
 ]
 ```
 
-**Op count**: 54 instructions (indices 0–53). Non-nop count: `sense_front, jz_t, eat, move, jmp_t, push0, pushN, push1, push1, add, mod, jz_t, turn_right, jmp_t, push0, turn_left, push0, jmp_t` = 18 non-nops, well above the minimum of 10.
+**Op count**: 55 instructions (indices 0–54). Non-nop count: `sense_front, jz_t, eat, move, jmp_t, push0, pushN, push1, push1, add, mod, jz_t, turn_right, jmp_t, push0, turn_left, push0, jmp_t, push0` = 19 non-nops, well above the minimum of 10.
 
 ### Walk-through: one turn decision
 
@@ -441,14 +458,15 @@ def counter_walker_v1 do
     :nop_0, :nop_0, :nop_0, :nop_0,
     :push1, :dup, :add, :dup, :add, :dup, :add,
     :push0, :store,
-    :nop_1, :nop_1, :nop_1, :nop_1,
+    :nop_1, :nop_1, :nop_0, :nop_0,
     :eat, :move,
     :push0, :load, :push1, :sub, :push0, :store,
     :push0, :load,
-    :jnz_t, :nop_0, :nop_0, :nop_0, :nop_0,
+    :jnz_t, :nop_0, :nop_0, :nop_1, :nop_1,
     :push0,
     :turn_right,
-    :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1
+    :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
+    :push0
   ]
 end
 ```
@@ -474,7 +492,8 @@ def turning_forager_v1 do
     :turn_left,
     :push0,
     :nop_1, :nop_0, :nop_1, :nop_1,
-    :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1
+    :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
+    :push0
   ]
 end
 ```
