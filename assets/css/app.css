@@ -752,16 +752,27 @@
 /* In the editor page the snippets panel sits directly under the palette
    inside the same flex-column pane. Cap its height so a long list scrolls
    internally — the list used to extend past the pane (and past the page
-   bottom) because nothing bounded it. */
+   bottom) because nothing bounded it. Absolute max-height (px) instead
+   of percent: percent would resolve against the pane height, which the
+   browser sometimes computes as `auto` when the grid item's intrinsic
+   content is larger than the row, producing a no-op cap. */
+.lenies-dashboard.codeome-editor-page .codeome-palette-pane {
+  /* Bound the pane to its grid cell so children can't spill past the
+     viewport. The pane itself doesn't scroll — the palette and the
+     snippets list inside it each have their own internal scroll. */
+  overflow: hidden;
+}
+
 .lenies-dashboard.codeome-editor-page .codeome-snippets {
-  flex: 0 1 auto;
-  max-height: 35%;
+  flex: 0 0 auto;
+  max-height: 180px;
   overflow: hidden;
 }
 
 .lenies-dashboard.codeome-editor-page .codeome-snippets-list {
   flex: 1 1 auto;
   min-height: 0;
+  max-height: 140px;
   overflow-y: auto;
 }
 
