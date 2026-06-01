@@ -37,6 +37,15 @@ defmodule LeniesWeb.PageControllerTest do
       assert html =~ "Programmable life on a 2D grid"
       assert html =~ "Seed a creature, watch it evolve"
     end
+
+    test "GET / renders a footer with the GitHub repo link", %{conn: conn} do
+      conn = get(conn, ~p"/")
+      html = html_response(conn, 200)
+
+      assert html =~ ~s(href="https://github.com/tripitakit/Lenies")
+      assert html =~ "tripitakit/Lenies"
+      assert html =~ ~s(class="splash-footer")
+    end
   end
 
   describe "splash (auth)" do

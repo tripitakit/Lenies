@@ -1139,6 +1139,31 @@
   font-weight: 500;
 }
 
+.splash-footer {
+  flex: 0 0 auto;
+  padding: 1rem 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 0.8125rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  margin-top: 1.5rem;
+}
+.splash-footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #94a3b8;
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+.splash-footer-link:hover { color: #67e8f9; }
+.splash-footer-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
 /* ============================================================ */
 /* Codeome Stepper modal — full-screen overlay debugger.        */
 /* ============================================================ */
