@@ -145,6 +145,7 @@ defmodule LeniesWeb.ArenaLive do
       <Layouts.flash_group flash={@flash} />
       <header class="flex items-center justify-between px-2 shrink-0">
         <h1 class="text-lg font-bold tracking-widest">⬡ LENIES · ARENA</h1>
+        <% latest = @latest || %{population: 0, total_resource: 0, total_carcass: 0} %>
         <div class="flex items-center gap-4 text-xs">
           <span class="viewers flex items-center gap-1.5">
             <span class="inline-block w-2 h-2 rounded-full bg-fuchsia-400 shadow-[0_0_8px_#e879f9]">
@@ -157,6 +158,24 @@ defmodule LeniesWeb.ArenaLive do
             </span>
             <span class="opacity-70">TICK</span>
             <span class="text-cyan-300 font-bold tabular-nums">{@tick_count}</span>
+          </span>
+          <span class="opacity-70">
+            POP
+            <span class="text-cyan-300 font-bold tabular-nums">
+              {format_count(latest.population)}
+            </span>
+          </span>
+          <span class="opacity-70">
+            RES
+            <span class="text-emerald-300 font-bold tabular-nums" title={"#{latest.total_resource}"}>
+              {format_count(latest.total_resource)}
+            </span>
+          </span>
+          <span class="opacity-70">
+            DET
+            <span class="text-rose-300 font-bold tabular-nums" title={"#{latest.total_carcass}"}>
+              {format_count(latest.total_carcass)}
+            </span>
           </span>
           <span class="opacity-70">
             GRID <span class="text-cyan-300">{elem(@grid, 0)}×{elem(@grid, 1)}</span>
@@ -214,38 +233,7 @@ defmodule LeniesWeb.ArenaLive do
 
         <div class="flex-1 grid grid-rows-[minmax(0,1fr)_auto] gap-3 min-h-0 min-w-0">
           <div class="flex gap-3 min-h-0 min-w-0">
-            <div class="flex-1 grid grid-rows-[auto_minmax(0,1fr)] gap-3 min-h-0 min-w-0">
-              <div class="panel p-3 flex flex-col gap-2 min-h-0">
-                <h2 class="text-xs">▮ World totals</h2>
-                <% latest = @latest || %{population: 0, total_resource: 0, total_carcass: 0} %>
-                <div class="grid grid-cols-3 gap-2 text-[11px]">
-                  <div class="border border-cyan-500/30 px-2 py-1">
-                    <div class="opacity-60">Population</div>
-                    <div class="text-cyan-300 font-bold tabular-nums text-base">
-                      {format_count(latest.population)}
-                    </div>
-                  </div>
-                  <div class="border border-emerald-500/30 px-2 py-1">
-                    <div class="opacity-60">Resources</div>
-                    <div
-                      class="text-emerald-300 font-bold tabular-nums text-base"
-                      title={"#{latest.total_resource}"}
-                    >
-                      {format_count(latest.total_resource)}
-                    </div>
-                  </div>
-                  <div class="border border-rose-500/30 px-2 py-1">
-                    <div class="opacity-60">Detritus</div>
-                    <div
-                      class="text-rose-300 font-bold tabular-nums text-base"
-                      title={"#{latest.total_carcass}"}
-                    >
-                      {format_count(latest.total_carcass)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
+            <div class="flex-1 flex flex-col min-h-0 min-w-0">
               <div class="panel p-3 flex flex-col gap-2 min-h-0">
                 <h2 class="text-xs">▮ {@species_total} species</h2>
                 <div class="flex-1 min-h-0 overflow-auto">

@@ -146,5 +146,15 @@ defmodule LeniesWeb.ArenaLiveTest do
       refute html =~ "phx-value-layer"
       refute has_element?(view, "input[phx-click='toggle_layer']")
     end
+
+    test "world totals render in the header, not a panel", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/arena")
+      html = render(view)
+      assert html =~ "POP"
+      assert html =~ "RES"
+      assert html =~ "DET"
+      refute html =~ "World totals"
+      assert html =~ "ARENA"
+    end
   end
 end
