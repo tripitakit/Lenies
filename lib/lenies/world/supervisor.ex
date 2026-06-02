@@ -5,6 +5,7 @@ defmodule Lenies.World.Supervisor do
       Lenies.World                 GenServer (owns ETS, ticker, reconcile)
       Lenies.LenieSupervisor       per-world DynamicSupervisor for this world's Lenies
       Lenies.Telemetry             per-world telemetry collector
+      Lenies.WorldRenderer         per-world canvas frame encoder (shared by viewers)
 
   Started by `Lenies.Worlds.start_world(world_id, config)` which delegates to
   `DynamicSupervisor.start_child(Lenies.Worlds.Supervisor, {__MODULE__,
@@ -12,8 +13,8 @@ defmodule Lenies.World.Supervisor do
 
   If World crashes, the ETS tables (owned by the World process) die with it;
   `rest_for_one` then restarts LenieSupervisor (killing all Lenies of this
-  world) and Telemetry. The whole world resets to an empty fresh state.
-  Snapshot restore is the way to recover content.
+  world), Telemetry, and WorldRenderer. The whole world resets to an empty
+  fresh state. Snapshot restore is the way to recover content.
 
   Registered under `{:via, Registry, {Lenies.Registry, {:world_sup, world_id}}}`.
   """
@@ -36,7 +37,8 @@ defmodule Lenies.World.Supervisor do
     children = [
       {Lenies.World, world_id: world_id, config: config},
       {Lenies.LenieSupervisor, world_id: world_id},
-      {Lenies.Telemetry, world_id: world_id}
+      {Lenies.Telemetry, world_id: world_id},
+      {Lenies.WorldRenderer, world_id: world_id}
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)

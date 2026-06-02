@@ -19,10 +19,10 @@ defmodule LeniesWeb.StepperLive do
 
       cond do
         new_session.status == :halted ->
-          {:ok, assign(socket, :session, new_session)}
+          {:ok, assign_session(socket, new_session)}
 
         MapSet.member?(new_session.breakpoints, new_session.interp.ip) ->
-          {:ok, assign(socket, :session, %{new_session | status: :breakpoint_hit})}
+          {:ok, assign_session(socket, %{new_session | status: :breakpoint_hit})}
 
         true ->
           # `Stepper.step/1` resets status to :ready after every step. Restore
@@ -33,7 +33,7 @@ defmodule LeniesWeb.StepperLive do
           # Delay the next tick so the animation is visible to the user.
           # 100ms ≈ 10 ops/sec, slow enough to follow state changes by eye.
           Process.send_after(self(), {:stepper_tick, socket.assigns.id}, 100)
-          {:ok, assign(socket, :session, running_session)}
+          {:ok, assign_session(socket, running_session)}
       end
     else
       {:ok, socket}
@@ -60,7 +60,7 @@ defmodule LeniesWeb.StepperLive do
             case Stepper.place_seed(session, seed_map, {x, y}) do
               {:ok, new_session} ->
                 final = Stepper.set_place_seed_mode(new_session, nil)
-                {:ok, assign(socket, :session, final)}
+                {:ok, assign_session(socket, final)}
 
               {:error, _reason} ->
                 {:ok, socket}
@@ -75,7 +75,7 @@ defmodule LeniesWeb.StepperLive do
     {:ok,
      socket
      |> assign(assigns)
-     |> assign(:session, session)
+     |> assign_session(session)
      |> assign_new(:current_user, fn -> nil end)}
   end
 
@@ -224,17 +224,15 @@ defmodule LeniesWeb.StepperLive do
 
             <section class="stepper-panel">
               <h3 class="stepper-panel-title">Stack (top↑)</h3>
-              <%
-                stack_capacity = 16
-                depth = length(@session.interp.stack)
-                # Pad to fixed length with nils. The CSS uses
-                # flex-direction: column-reverse, so the LAST item in HTML
-                # ends up visually at the top — that's where the top of the
-                # stack belongs.
-                padded =
-                  List.duplicate(nil, max(0, stack_capacity - depth)) ++
-                    Enum.reverse(Enum.take(@session.interp.stack, stack_capacity))
-              %>
+              <% stack_capacity = 16
+              depth = length(@session.interp.stack)
+              # Pad to fixed length with nils. The CSS uses
+              # flex-direction: column-reverse, so the LAST item in HTML
+              # ends up visually at the top — that's where the top of the
+              # stack belongs.
+              padded =
+                List.duplicate(nil, max(0, stack_capacity - depth)) ++
+                  Enum.reverse(Enum.take(@session.interp.stack, stack_capacity)) %>
               <ol class="stepper-stack stepper-stack-fixed">
                 <%= for {v, idx} <- Enum.with_index(padded) do %>
                   <li class={[
@@ -242,12 +240,12 @@ defmodule LeniesWeb.StepperLive do
                     is_nil(v) && "stepper-chip-empty",
                     not is_nil(v) && idx == stack_capacity - 1 && "stepper-chip-top"
                   ]}>
-                    <%= if not is_nil(v), do: v %>
+                    {if not is_nil(v), do: v}
                   </li>
                 <% end %>
               </ol>
               <div class="stepper-depth">
-                depth: {depth}<%= if depth > stack_capacity, do: " (showing top #{stack_capacity})" %>
+                depth: {depth}{if depth > stack_capacity, do: " (showing top #{stack_capacity})"}
               </div>
             </section>
 
@@ -302,8 +300,9 @@ defmodule LeniesWeb.StepperLive do
               phx-hook="StepperCanvas"
               phx-update="ignore"
               class={["stepper-world-canvas", @session.place_seed_mode && "stepper-world-canvas-arm"]}
-              data-payload={Jason.encode!(Lenies.Stepper.World.encode_grid_payload(@session.world))}
-            ></div>
+              data-payload={@grid_payload_json}
+            >
+            </div>
           </aside>
         </div>
 
@@ -323,34 +322,34 @@ defmodule LeniesWeb.StepperLive do
   @impl true
   def handle_event("step", _params, socket) do
     {:ok, new_session} = Stepper.step(socket.assigns.session)
-    {:noreply, assign(socket, :session, new_session)}
+    {:noreply, assign_session(socket, new_session)}
   end
 
   def handle_event("step_back", _params, socket) do
     {:ok, new_session} = Stepper.step_back(socket.assigns.session)
-    {:noreply, assign(socket, :session, new_session)}
+    {:noreply, assign_session(socket, new_session)}
   end
 
   def handle_event("run", _params, socket) do
     new_session = %{socket.assigns.session | status: :running}
     send(self(), {:stepper_tick, socket.assigns.id})
-    {:noreply, assign(socket, :session, new_session)}
+    {:noreply, assign_session(socket, new_session)}
   end
 
   def handle_event("pause", _params, socket) do
     new_session = %{socket.assigns.session | status: :paused}
-    {:noreply, assign(socket, :session, new_session)}
+    {:noreply, assign_session(socket, new_session)}
   end
 
   def handle_event("reset", _params, socket) do
     new_session = Stepper.reset(socket.assigns.session)
-    {:noreply, assign(socket, :session, new_session)}
+    {:noreply, assign_session(socket, new_session)}
   end
 
   def handle_event("toggle_bp", %{"ip" => ip_str}, socket) do
     ip = String.to_integer(ip_str)
     new_session = Stepper.toggle_breakpoint(socket.assigns.session, ip)
-    {:noreply, assign(socket, :session, new_session)}
+    {:noreply, assign_session(socket, new_session)}
   end
 
   def handle_event("close", _params, socket) do
@@ -359,21 +358,21 @@ defmodule LeniesWeb.StepperLive do
   end
 
   def handle_event("select_seed", %{"value" => ""}, socket) do
-    {:noreply, assign(socket, :session, Stepper.set_place_seed_mode(socket.assigns.session, nil))}
+    {:noreply, assign_session(socket, Stepper.set_place_seed_mode(socket.assigns.session, nil))}
   end
 
   def handle_event("select_seed", %{"value" => "builtin:" <> id_str}, socket) do
     seed_id = {:builtin, String.to_atom(id_str)}
 
     {:noreply,
-     assign(socket, :session, Stepper.set_place_seed_mode(socket.assigns.session, seed_id))}
+     assign_session(socket, Stepper.set_place_seed_mode(socket.assigns.session, seed_id))}
   end
 
   def handle_event("select_seed", %{"value" => "collection:" <> id}, socket) do
     seed_id = {:collection, parse_int(id)}
 
     {:noreply,
-     assign(socket, :session, Stepper.set_place_seed_mode(socket.assigns.session, seed_id))}
+     assign_session(socket, Stepper.set_place_seed_mode(socket.assigns.session, seed_id))}
   end
 
   def handle_event("canvas_click", %{"x" => x, "y" => y}, socket) do
@@ -391,7 +390,7 @@ defmodule LeniesWeb.StepperLive do
               {:ok, new_session} ->
                 # Auto-exit place-seed mode after a successful drop.
                 final_session = Stepper.set_place_seed_mode(new_session, nil)
-                {:noreply, assign(socket, :session, final_session)}
+                {:noreply, assign_session(socket, final_session)}
 
               {:error, _reason} ->
                 {:noreply, socket}
@@ -434,6 +433,19 @@ defmodule LeniesWeb.StepperLive do
       _ ->
         {:noreply, socket}
     end
+  end
+
+  # Assign the session and, alongside it, the pre-encoded JSON the canvas hook
+  # reads from `data-payload`. Encoding here (on each session change) instead
+  # of inline in render/0 means the world isn't re-serialised when the
+  # component re-renders for unrelated reasons (parent re-render, flash, etc.).
+  defp assign_session(socket, session) do
+    socket
+    |> assign(:session, session)
+    |> assign(
+      :grid_payload_json,
+      Jason.encode!(Lenies.Stepper.World.encode_grid_payload(session.world))
+    )
   end
 
   defp resolve_seed({:builtin, id}, _user) do

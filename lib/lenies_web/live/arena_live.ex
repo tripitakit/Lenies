@@ -20,7 +20,6 @@ defmodule LeniesWeb.ArenaLive do
   use LeniesWeb, :live_view
 
   alias Lenies.SpeciesColor
-  alias LeniesWeb.GridRenderer
   alias LeniesWeb.Presence
 
   # Whitelist of clickable species-table columns -> the sort key. Guards
@@ -55,6 +54,9 @@ defmodule LeniesWeb.ArenaLive do
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:tick")
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:control")
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:fx")
+      # Canvas frames are encoded once per world by Lenies.WorldRenderer and
+      # broadcast here — every Arena viewer shares one encode instead of N.
+      Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:frame")
       Phoenix.PubSub.subscribe(Lenies.PubSub, "arena:manager_up")
       Phoenix.PubSub.subscribe(Lenies.PubSub, @presence_topic)
       {:ok, _ref} = Presence.track(self(), @presence_topic, session_id, %{})
@@ -96,15 +98,20 @@ defmodule LeniesWeb.ArenaLive do
       |> assign(:selected_hash, nil)
       |> assign(:sort_by, sort_by)
       |> assign(:sort_dir, sort_dir)
+      |> assign(:species_sig, nil)
       |> stream_configure(:species_table, dom_id: fn sp -> "species-row-#{sp.hash}" end)
       |> stream(:species_table, sort_species(all_species, sort_by, sort_dir))
 
     # Push an initial frame as soon as the websocket is connected so the
-    # canvas isn't black between mount and the next throttled tick.
+    # canvas isn't black between mount and the next broadcast frame. The
+    # frame comes from the shared per-world renderer's cache — no per-socket
+    # encode.
     socket =
       if connected?(socket) do
-        payload = GridRenderer.encode_payload(world_handle, grid)
-        push_event(socket, "render_frame", payload)
+        case Lenies.WorldRenderer.current_frame(@world_id) do
+          nil -> socket
+          payload -> push_event(socket, "render_frame", payload)
+        end
       else
         socket
       end
@@ -424,12 +431,12 @@ defmodule LeniesWeb.ArenaLive do
         hash
       end
 
-    %{all_species: all_species, sort_by: sort_by, sort_dir: sort_dir} = socket.assigns
+    %{all_species: all_species} = socket.assigns
 
     socket =
       socket
       |> assign(:selected_hash, new_hash)
-      |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
+      |> maybe_stream_species(all_species)
 
     {:noreply, socket}
   end
@@ -453,14 +460,12 @@ defmodule LeniesWeb.ArenaLive do
             {new_by, default_sort_dir(new_by)}
           end
 
+        all_species = socket.assigns.all_species
+
         socket =
           socket
           |> assign(sort_by: by, sort_dir: dir)
-          |> stream(
-            :species_table,
-            sort_species(socket.assigns.all_species, by, dir),
-            reset: true
-          )
+          |> maybe_stream_species(all_species)
 
         {:noreply, socket}
 
@@ -504,59 +509,64 @@ defmodule LeniesWeb.ArenaLive do
   end
 
   @impl true
-  def handle_info({:tick, n, _stats}, socket) do
+  def handle_info({:tick, n, stats}, socket) do
     throttle = Application.get_env(:lenies, :dashboard_throttle_ticks, 5)
     new_counter = socket.assigns.throttle_counter + 1
 
+    # `:latest` comes straight from the tick payload — no ETS history scan.
+    # The canvas frame arrives via the shared renderer's {:frame, _}
+    # broadcast, so the socket encodes nothing.
     socket =
       socket
       |> assign(:tick_count, n)
       |> assign(:throttle_counter, new_counter)
+      |> assign(:latest, %{
+        population: stats.population,
+        total_resource: stats.total_resource,
+        total_carcass: stats.total_carcass
+      })
 
     if rem(new_counter, throttle) == 0 do
-      {species, all_species, species_total} = aggregate_with_top(socket.assigns.world_handle, 10)
-      %{sort_by: sort_by, sort_dir: sort_dir} = socket.assigns
+      {_species, all_species, species_total} =
+        aggregate_with_top(socket.assigns.world_handle, 10)
 
       socket =
         socket
-        |> assign(
-          :latest,
-          List.last(Lenies.Telemetry.history(socket.assigns.world_id, :last_n, 1))
-        )
-        |> assign(:species, species)
         |> assign(:species_total, species_total)
         |> assign(:all_species, all_species)
         |> maybe_clear_selected_species(all_species)
-        |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
+        |> maybe_stream_species(all_species)
 
-      payload = GridRenderer.encode_payload(socket.assigns.world_handle, socket.assigns.grid)
-      {:noreply, push_event(socket, "render_frame", payload)}
+      {:noreply, socket}
     else
       {:noreply, socket}
     end
   end
 
+  # Canvas frame broadcast by the shared per-world Lenies.WorldRenderer.
+  def handle_info({:frame, payload}, socket) do
+    {:noreply, push_event(socket, "render_frame", payload)}
+  end
+
   def handle_info({:sterilized, _ts}, socket) do
-    {species, all_species, species_total} = aggregate_with_top(socket.assigns.world_handle, 10)
-    %{sort_by: sort_by, sort_dir: sort_dir} = socket.assigns
+    {_species, all_species, species_total} =
+      aggregate_with_top(socket.assigns.world_handle, 10)
 
     socket =
       socket
-      |> assign(:species, species)
       |> assign(:species_total, species_total)
       |> assign(:all_species, all_species)
-      |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
+      |> maybe_stream_species(all_species)
 
-    payload = GridRenderer.encode_payload(socket.assigns.world_handle, socket.assigns.grid)
-    {:noreply, push_event(socket, "render_frame", payload)}
+    {:noreply, socket}
   end
 
   # Mirrors Sandbox dashboard behaviour: on restore, push the fresh
   # stats into :latest immediately so a paused world doesn't render
   # zeros in the header until the next tick.
   def handle_info({:restored, _ts, stats}, socket) when is_map(stats) do
-    {species, all_species, species_total} = aggregate_with_top(socket.assigns.world_handle, 10)
-    %{sort_by: sort_by, sort_dir: sort_dir} = socket.assigns
+    {_species, all_species, species_total} =
+      aggregate_with_top(socket.assigns.world_handle, 10)
 
     socket =
       socket
@@ -565,13 +575,11 @@ defmodule LeniesWeb.ArenaLive do
         total_resource: Map.get(stats, :total_resource, 0),
         total_carcass: Map.get(stats, :total_carcass, 0)
       })
-      |> assign(:species, species)
       |> assign(:species_total, species_total)
       |> assign(:all_species, all_species)
-      |> stream(:species_table, sort_species(all_species, sort_by, sort_dir), reset: true)
+      |> maybe_stream_species(all_species)
 
-    payload = GridRenderer.encode_payload(socket.assigns.world_handle, socket.assigns.grid)
-    {:noreply, push_event(socket, "render_frame", payload)}
+    {:noreply, socket}
   end
 
   def handle_info(:arena_manager_up, socket) do
@@ -688,6 +696,23 @@ defmodule LeniesWeb.ArenaLive do
   # stream is always pre-sorted before being sent to the client.
   defp sort_species(species, sort_by, sort_dir) do
     Enum.sort_by(species, sort_key_fun(sort_by), sort_dir)
+  end
+
+  # Re-stream the species table only when its rendered content would actually
+  # change. Skips the full `reset: true` re-patch on a stable / paused world.
+  # The signature folds in `selected_hash` because the row highlight class
+  # depends on it.
+  defp maybe_stream_species(socket, all_species) do
+    sorted = sort_species(all_species, socket.assigns.sort_by, socket.assigns.sort_dir)
+    sig = :erlang.phash2({socket.assigns.selected_hash, sorted})
+
+    if sig == socket.assigns.species_sig do
+      socket
+    else
+      socket
+      |> assign(:species_sig, sig)
+      |> stream(:species_table, sorted, reset: true)
+    end
   end
 
   defp sort_key_fun(:seed), do: fn sp -> sp |> format_seed_origin() |> String.downcase() end

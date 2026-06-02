@@ -121,13 +121,37 @@ defmodule Lenies.Species do
   # `Lenie.init/1` finishes — population would also be 0 in that case,
   # so the row is harmless).
   defp codeome_metrics(hash, eat_amount, attack_damage) do
+    cache_key = {hash, eat_amount, attack_damage}
+
+    case ets_safe_lookup(:species_economics, cache_key) do
+      [{^cache_key, metrics}] ->
+        metrics
+
+      _ ->
+        compute_and_cache_metrics(hash, cache_key, eat_amount, attack_damage)
+    end
+  end
+
+  defp compute_and_cache_metrics(hash, cache_key, eat_amount, attack_damage) do
     case ets_safe_lookup(:species_codeomes, hash) do
       [{^hash, opcodes}] when is_list(opcodes) ->
         e = LeniesWeb.CodeomeBuffer.economics(opcodes, eat_amount, attack_damage)
-        {length(opcodes), e.cost, e.max_gain}
+        metrics = {length(opcodes), e.cost, e.max_gain}
+        # Only cache real hits: the {0, 0.0, 0.0} miss below is transient (the
+        # codeome isn't registered in :species_codeomes yet), so caching it
+        # would freeze a brand-new species at zeros even after it registers.
+        maybe_cache(:species_economics, cache_key, metrics)
+        metrics
 
       _ ->
         {0, 0.0, 0.0}
+    end
+  end
+
+  defp maybe_cache(table, key, value) do
+    case :ets.info(table) do
+      :undefined -> :ok
+      _ -> :ets.insert(table, {key, value})
     end
   end
 

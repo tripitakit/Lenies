@@ -21,6 +21,22 @@ defmodule Lenies.Application do
       ])
     end
 
+    # Memo cache for per-species economics (size / cost / max_gain), keyed by
+    # `{codeome_hash, eat_amount, attack_damage}`. `Lenies.Species.aggregate/1`
+    # runs once per throttled tick per viewer; without this each call
+    # re-disassembled every species' codeome. The key is invariant given the
+    # hash + tuning values, so the cache is shared across all worlds/viewers
+    # and stays correct when `eat_amount` / `attack_damage` are tuned.
+    if :ets.info(:species_economics) == :undefined do
+      :ets.new(:species_economics, [
+        :set,
+        :named_table,
+        :public,
+        read_concurrency: true,
+        write_concurrency: true
+      ])
+    end
+
     children = [
       Lenies.Repo,
       LeniesWeb.Telemetry,
