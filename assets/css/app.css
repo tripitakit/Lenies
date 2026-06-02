@@ -273,6 +273,16 @@
    width (the rest goes to the right column). Without an explicit width
    the canvas + flex hierarchy creates a circular dependency that
    collapses the pane to the canvas's intrinsic 512px attribute. */
+/* Still used by the Arena view's map hint (ArenaLive keeps its hint line). */
+.lenies-dashboard .dashboard-map-hint {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #67e8f9;
+  opacity: 0.6;
+  margin: 0;
+  user-select: none;
+}
+
 .lenies-dashboard .dashboard-map-pane {
   width: min(calc(100vh - 5rem), 70vw);
   min-width: 420px;
@@ -326,15 +336,6 @@
   display: block;
   /* Prevent the browser from interpreting dblclick as a text-select
      gesture, which on some browsers swallows the dblclick event. */
-  user-select: none;
-}
-
-.lenies-dashboard .dashboard-map-hint {
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  color: #67e8f9;
-  opacity: 0.6;
-  margin: 0;
   user-select: none;
 }
 

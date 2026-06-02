@@ -185,7 +185,15 @@ defmodule LeniesWeb.DashboardLive do
 
       <div class="flex-1 flex gap-3 min-h-0">
         <section class="panel p-3 flex flex-col gap-2 min-h-0 shrink-0 dashboard-map-pane">
-          <h2 class="text-xs">▮ World</h2>
+          <h2 class="text-xs flex items-center gap-1.5">
+            <span>▮ World</span>
+            <span
+              class="opacity-40 hover:opacity-80 cursor-help text-[10px] border border-slate-500/40 rounded-full w-4 h-4 inline-flex items-center justify-center"
+              title="scroll: zoom · drag: pan · click: focus · dblclick on a Lenie: edit codeome"
+            >
+              ?
+            </span>
+          </h2>
           <div
             id="conjugation-log"
             phx-update="ignore"
@@ -213,9 +221,6 @@ defmodule LeniesWeb.DashboardLive do
             >
             </canvas>
           </div>
-          <p class="dashboard-map-hint">
-            scroll: zoom · drag: pan · click: focus · dblclick on a Lenie: edit codeome
-          </p>
         </section>
 
         <div class="flex-1 grid grid-rows-[minmax(0,1fr)_auto] gap-3 min-h-0 min-w-0">
