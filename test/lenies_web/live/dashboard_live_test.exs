@@ -36,7 +36,7 @@ defmodule LeniesWeb.DashboardLiveTest do
   test "mounts on /sandbox and renders dashboard panels", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/sandbox")
 
-    assert html =~ ~r/LENIES/
+    assert html =~ ~r/Lenies/i
     assert html =~ "id=\"grid-canvas\""
     assert html =~ ~r/Sterilize/i
     assert html =~ ~r/(Pause|Resume)/i
@@ -884,18 +884,18 @@ defmodule LeniesWeb.DashboardLiveTest do
   end
 
   # ---------------------------------------------------------------------------
-  # ML4 — World totals panel uses @latest (no @history in assigns)
+  # ML4 — World totals moved into header strip (POP/RES/DET chips)
   # ---------------------------------------------------------------------------
   describe "world totals panel" do
-    test "totals panel renders zeroes before any tick", %{conn: conn} do
+    test "totals header chips render before any tick", %{conn: conn} do
       {:ok, _view, html} = live(conn, ~p"/sandbox")
 
-      assert html =~ "Population"
-      assert html =~ "Resources"
-      assert html =~ "Detritus"
+      assert html =~ "POP"
+      assert html =~ "RES"
+      assert html =~ "DET"
     end
 
-    test "totals panel reflects telemetry data after a tick",
+    test "totals header chips reflect telemetry data after a tick",
          %{conn: conn, world_id: world_id} do
       Application.put_env(:lenies, :dashboard_throttle_ticks, 1)
 
@@ -911,13 +911,29 @@ defmodule LeniesWeb.DashboardLiveTest do
       send(view.pid, {:tick, 1, %{population: 0, total_resource: 0, total_carcass: 0}})
       html = render(view)
 
-      # Population, Resources, Detritus columns are present
-      assert html =~ "Population"
-      assert html =~ "Resources"
-      assert html =~ "Detritus"
+      # POP, RES, DET chips are present in the header
+      assert html =~ "POP"
+      assert html =~ "RES"
+      assert html =~ "DET"
     after
       Application.delete_env(:lenies, :dashboard_throttle_ticks)
     end
+  end
+
+  test "world totals render in the header strip", %{conn: conn, handle: handle} do
+    :ets.insert(
+      handle.tables.lenies,
+      {"x", %{id: "x", codeome_hash: "hx", lineage: {nil, 0}, pid: self()}}
+    )
+
+    {:ok, view, _html} = live(conn, ~p"/sandbox")
+    html = render(view)
+    # Header chips present…
+    assert html =~ "POP"
+    assert html =~ "RES"
+    assert html =~ "DET"
+    # …and the standalone "World totals" panel is gone.
+    refute html =~ "World totals"
   end
 
   describe "spawn cap UI (Task 4)" do
