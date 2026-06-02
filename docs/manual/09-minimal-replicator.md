@@ -34,7 +34,7 @@ replicator left as an exercise — graceful handling of a busy front cell —
 ### pos 0..3 — LOOP_HEAD anchor `[nop_1, nop_1, nop_1, nop_1]`
 
 ```elixir
-# ── pos 0..3: LOOP_HEAD anchor [n1, n1, n1, n1] ──────────────────────
+# == pos 0..3: LOOP_HEAD anchor [n1, n1, n1, n1] ======================
 :nop_1, :nop_1, :nop_1, :nop_1,
 ```
 
@@ -47,7 +47,7 @@ Cross-reference: chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.
 ### pos 4..6 — get own size N, store in slot[0]
 
 ```elixir
-# ── pos 4..6: get own size N, store in slot[0] ───────────────────────
+# == pos 4..6: get own size N, store in slot[0] =======================
 :get_size, :push0, :store,
 ```
 
@@ -60,7 +60,7 @@ the lifetimes never overlap. Cross-reference: chapter 05
 ### pos 7..9 — allocate child slot of size N in front cell
 
 ```elixir
-# ── pos 7..9: allocate child slot of size N in front cell ────────────
+# == pos 7..9: allocate child slot of size N in front cell ============
 :push0, :load, :allocate,
 ```
 
@@ -73,7 +73,7 @@ Cross-reference: allocate semantics, chapter 07
 ### pos 10..14 — jz_t to ABORT_TARGET if allocate failed
 
 ```elixir
-# ── pos 10..14: jz_t → if allocate failed, jump to ABORT_TARGET ──────
+# == pos 10..14: jz_t -> if allocate failed, jump to ABORT_TARGET ======
 :jz_t, :nop_0, :nop_0, :nop_1, :nop_1,
 ```
 
@@ -87,7 +87,7 @@ risked writing into an occupied buffer. Cross-reference: chapter 04
 ### pos 15..17 — init copy counter slot[1] = 0
 
 ```elixir
-# ── pos 15..17: init copy counter slot[1] = 0 ────────────────────────
+# == pos 15..17: init copy counter slot[1] = 0 ========================
 :push0, :push1, :store,
 ```
 
@@ -98,7 +98,7 @@ Cross-reference: chapter 05 ([05-memory-and-arithmetic.md](05-memory-and-arithme
 ### pos 18..21 — COPY_LOOP_HEAD anchor `[nop_1, nop_0, nop_0, nop_1]`
 
 ```elixir
-# ── pos 18..21: COPY_LOOP_HEAD anchor [n1, n0, n0, n1] ───────────────
+# == pos 18..21: COPY_LOOP_HEAD anchor [n1, n0, n0, n1] ===============
 :nop_1, :nop_0, :nop_0, :nop_1,
 ```
 
@@ -110,7 +110,7 @@ Cross-reference: chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.
 ### pos 22..24 — read opcode at counter (slot[1])
 
 ```elixir
-# ── pos 22..24: read opcode at counter ───────────────────────────────
+# == pos 22..24: read opcode at counter ===============================
 :push1, :load, :read_self,
 ```
 
@@ -124,7 +124,7 @@ Cross-reference: `read_self` semantics, chapter 07
 ### pos 25..29 — write opcode to child at counter
 
 ```elixir
-# ── pos 25..29: write opcode to child at counter ─────────────────────
+# == pos 25..29: write opcode to child at counter =====================
 :push1, :load, :swap, :write_child, :drop,
 ```
 
@@ -138,11 +138,11 @@ write-child idiom. Cross-reference: chapter 07
 ### pos 30..45 — increment counter, test, loop back
 
 ```elixir
-# ── pos 30..35: increment counter slot[1] += 1 ───────────────────────
+# == pos 30..35: increment counter slot[1] += 1 ========================
 :push1, :load, :push1, :add, :push1, :store,
-# ── pos 36..40: loop condition (N - (counter+1) != 0?) ───────────────
+# == pos 36..40: loop condition (N - (counter+1) != 0?) ================
 :push0, :load, :push1, :load, :sub,
-# ── pos 41..45: jnz_t → back to COPY_LOOP_HEAD if not done ───────────
+# == pos 41..45: jnz_t -> back to COPY_LOOP_HEAD if not done ===========
 :jnz_t, :nop_0, :nop_1, :nop_1, :nop_0,
 ```
 
@@ -157,7 +157,7 @@ chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.md)).
 ### pos 46 — divide
 
 ```elixir
-# ── pos 46: divide ───────────────────────────────────────────────────
+# == pos 46: divide ===================================================
 :divide,
 ```
 
@@ -169,7 +169,7 @@ Cross-reference: chapter 07 ([07-replication.md](07-replication.md)).
 ### pos 47..50 — ABORT_TARGET anchor `[nop_1, nop_1, nop_0, nop_0]`
 
 ```elixir
-# ── pos 47..50: ABORT_TARGET anchor [n1, n1, n0, n0] ─────────────────
+# == pos 47..50: ABORT_TARGET anchor [n1, n1, n0, n0] =================
 # Landing pad for both jz_t (allocate failed) and fall-through after divide.
 :nop_1, :nop_1, :nop_0, :nop_0,
 ```
@@ -185,7 +185,7 @@ Cross-reference: anchor reuse, chapter 04
 ### pos 51..55 — random turn: r := pushN; stack ← (r mod 2)
 
 ```elixir
-# ── pos 51..55: r := pushN; stack ← (r mod 2) ────────────────────────
+# == pos 51..55: r := pushN; stack <- (r mod 2) ========================
 :pushN, :push1, :push1, :add, :mod,
 ```
 
@@ -200,7 +200,7 @@ Cross-reference: fair-coin random branch, chapter 05
 ### pos 56..60 — jz_t to TURN_LEFT_ANCHOR if coin == 0
 
 ```elixir
-# ── pos 56..60: jz_t → if 0, jump to TURN_LEFT_ANCHOR ────────────────
+# == pos 56..60: jz_t -> if 0, jump to TURN_LEFT_ANCHOR ================
 :jz_t, :nop_1, :nop_0, :nop_1, :nop_1,
 ```
 
@@ -212,10 +212,10 @@ Cross-reference: chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.
 ### pos 61 — turn_right; pos 62..66 — jmp_t to SKIP_TURN_ANCHOR
 
 ```elixir
-# ── pos 61: turn_right (executed when r mod 2 == 1) ──────────────────
+# == pos 61: turn_right (executed when r mod 2 == 1) ===================
 :turn_right,
 
-# ── pos 62..66: jmp_t → skip turn_left branch ────────────────────────
+# == pos 62..66: jmp_t -> skip turn_left branch ========================
 :jmp_t, :nop_1, :nop_1, :nop_0, :nop_1,
 ```
 
@@ -228,7 +228,7 @@ Cross-reference: chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.
 ### pos 67 — SEPARATOR `:push0`
 
 ```elixir
-# ── pos 67: separator (dead code, never executed) ────────────────────
+# == pos 67: separator (dead code, never executed) ====================
 :push0,
 ```
 
@@ -243,10 +243,10 @@ Cross-reference: chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.
 ### pos 68..71 — TURN_LEFT_ANCHOR; pos 72 — turn_left
 
 ```elixir
-# ── pos 68..71: TURN_LEFT_ANCHOR [n0, n1, n0, n0] ────────────────────
+# == pos 68..71: TURN_LEFT_ANCHOR [n0, n1, n0, n0] ====================
 :nop_0, :nop_1, :nop_0, :nop_0,
 
-# ── pos 72: turn_left (executed when r mod 2 == 0) ───────────────────
+# == pos 72: turn_left (executed when r mod 2 == 0) ===================
 :turn_left,
 ```
 
@@ -258,7 +258,7 @@ Cross-reference: chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.
 ### pos 73..76 — SKIP_TURN_ANCHOR `[nop_0, nop_0, nop_1, nop_0]`
 
 ```elixir
-# ── pos 73..76: SKIP_TURN_ANCHOR [n0, n0, n1, n0] ────────────────────
+# == pos 73..76: SKIP_TURN_ANCHOR [n0, n0, n1, n0] ====================
 :nop_0, :nop_0, :nop_1, :nop_0,
 ```
 
@@ -271,7 +271,7 @@ Cross-reference: chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.
 ### pos 77..91 — build K=128 on stack
 
 ```elixir
-# ── pos 77..91: build K=128 on stack ─────────────────────────────────
+# == pos 77..91: build K=128 on stack =================================
 # push1 (=1), then 7 doublings via dup+add: 2, 4, 8, 16, 32, 64, 128
 :push1,
 :dup, :add, :dup, :add, :dup, :add, :dup, :add,
@@ -288,7 +288,7 @@ gathered per generation. Cross-reference: doubling chain, chapter 05
 ### pos 92..93 — store K in slot[0]
 
 ```elixir
-# ── pos 92..93: store K in slot[0] ───────────────────────────────────
+# == pos 92..93: store K in slot[0] ===================================
 :push0, :store,
 ```
 
@@ -301,7 +301,7 @@ non-overlapping lifetimes in one slot. Cross-reference: chapter 05
 ### pos 94..97 — FORAGE_LOOP_HEAD anchor `[nop_0, nop_1, nop_0, nop_1]`
 
 ```elixir
-# ── pos 94..97: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ─────────────
+# == pos 94..97: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] =============
 :nop_0, :nop_1, :nop_0, :nop_1,
 ```
 
@@ -314,7 +314,7 @@ Cross-reference: chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.
 ### pos 98..101 — forage body: sense_front, drop, eat, move
 
 ```elixir
-# ── pos 98..101: forage body — sense, drop result, eat, move ─────────
+# == pos 98..101: forage body - sense, drop result, eat, move =========
 :sense_front, :drop, :eat, :move,
 ```
 
@@ -329,7 +329,7 @@ forward; blocked → no-op. Cross-reference: chapter 03
 ### pos 102..103 — try to infect a neighbour with a plasmid
 
 ```elixir
-# ── pos 102..103: try to infect a neighbor; drop the result ─────────
+# == pos 102..103: try to infect a neighbor; drop the result =========
 :conjugate, :drop,
 ```
 
@@ -364,11 +364,11 @@ the energy accounting that makes this every-iteration spam sustainable.
 ### pos 104..116 — decrement counter, loop back to FORAGE_LOOP_HEAD
 
 ```elixir
-# ── pos 104..109: counter := counter - 1 (slot[0]) ───────────────────
+# == pos 104..109: counter := counter - 1 (slot[0]) ====================
 :push0, :load, :push1, :sub, :push0, :store,
-# ── pos 110..111: load counter for check ─────────────────────────────
+# == pos 110..111: load counter for check ==============================
 :push0, :load,
-# ── pos 112..116: jnz_t → back to FORAGE_LOOP_HEAD if counter != 0 ───
+# == pos 112..116: jnz_t -> back to FORAGE_LOOP_HEAD if counter != 0 ===
 :jnz_t, :nop_1, :nop_0, :nop_1, :nop_0,
 ```
 
@@ -382,7 +382,7 @@ chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.md)).
 ### pos 117..121 — jmp_t back to LOOP_HEAD
 
 ```elixir
-# ── pos 117..121: jmp_t → back to LOOP_HEAD to retry replication ─────
+# == pos 117..121: jmp_t -> back to LOOP_HEAD to retry replication =====
 :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
 ```
 
@@ -395,7 +395,7 @@ Cross-reference: chapter 04 ([04-loops-and-templates.md](04-loops-and-templates.
 ### pos 122 — SEPARATOR `:push0`
 
 ```elixir
-# ── pos 122: separator (dead code, never executed) ───────────────────
+# == pos 122: separator (dead code, never executed) ===================
 :push0,
 ```
 
@@ -474,7 +474,7 @@ with `:attack` injected immediately before the first (and only) `:eat`.
 defp inject_attack([], acc), do: Enum.reverse(acc)
 
 defp inject_attack([:eat | rest], acc) do
-  # Found the first :eat — inject :attack before it and return the rest unchanged
+  # Found the first :eat - inject :attack before it and return the rest unchanged
   Enum.reverse(acc) ++ [:attack, :eat | rest]
 end
 

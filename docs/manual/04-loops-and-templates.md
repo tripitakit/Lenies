@@ -129,7 +129,7 @@ The template extractor is **greedy**. It does not stop at the boundary between t
 Suppose you place two anchors next to each other without anything between them:
 
 ```elixir
-# BROKEN — extractor swallows both anchor runs into one 8-bit template
+# BROKEN - extractor swallows both anchor runs into one 8-bit template
 ..., :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
 :nop_1, :nop_1, :nop_1, :nop_1, <next_opcode>
 ```
@@ -139,7 +139,7 @@ The extractor reads all eight nops as a single template `[:nop_0, :nop_0, :nop_0
 Fix: insert any non-nop opcode between the anchor runs to act as a **separator**. The cheapest option is `:push0` (cost 0.1, side effect: pushes 0 onto the data stack — harmless in most contexts):
 
 ```elixir
-# CORRECT — push0 terminates the extractor
+# CORRECT - push0 terminates the extractor
 ..., :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
 :push0,
 :nop_1, :nop_1, :nop_1, :nop_1, <next_opcode>
@@ -176,7 +176,7 @@ The resulting state — with the tested value removed — is what advances to th
 
 ```
 before jz_t:   stack = [3, 5]    (top = 5)
-jz_t tests 5 (not zero → condition false, no jump)
+jz_t tests 5 (not zero -> condition false, no jump)
 jz_t pops 5 regardless
 after jz_t:    stack = [3]
 ```
@@ -186,7 +186,7 @@ If the next instruction is `:dup`, it will duplicate `3`, not `5`. Beginners exp
 **Cost formula.** All three jump opcodes pay:
 
 ```
-cost = 0.2 + 0.05 × template_length
+cost = 0.2 + 0.05 x template_length
 ```
 
 A 4-bit template costs 0.40 per jump execution. An 8-bit template costs 0.60. Keep templates short when energy budget matters.
@@ -203,28 +203,28 @@ The codeome has two branches and two loop-back jumps. We use 4-bit anchors to ke
 
 ```elixir
 [
-  # ── 0..3   LOOP_HEAD anchor [0,0,0,0] ────────────────────────────────
+  # == 0..3   LOOP_HEAD anchor [0,0,0,0] =================================
   :nop_0, :nop_0, :nop_0, :nop_0,
-  # ── 4      sense the front cell; push result onto stack ──────────────
+  # == 4      sense the front cell; push result onto stack ===============
   :sense_front,
-  # ── 5..9   jz_t to TURN [0,1,0,1] (template [1,0,1,0]) ─────────────
+  # == 5..9   jz_t to TURN [0,1,0,1] (template [1,0,1,0]) ================
   #          jz_t consumes the sense result regardless of branch taken
   :jz_t, :nop_1, :nop_0, :nop_1, :nop_0,
-  # ── 10     eat the cell ───────────────────────────────────────────────
+  # == 10     eat the cell ===============================================
   :eat,
-  # ── 11     move forward ───────────────────────────────────────────────
+  # == 11     move forward ===============================================
   :move,
-  # ── 12..16 jmp_t back to LOOP_HEAD (template [1,1,1,1]) ─────────────
+  # == 12..16 jmp_t back to LOOP_HEAD (template [1,1,1,1]) ===============
   :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
-  # ── 17     separator — terminates extractor before TURN anchor ───────
+  # == 17     separator - terminates extractor before TURN anchor ========
   :push0,
-  # ── 18..21 TURN anchor [0,1,0,1] ─────────────────────────────────────
+  # == 18..21 TURN anchor [0,1,0,1] ======================================
   :nop_0, :nop_1, :nop_0, :nop_1,
-  # ── 22     turn right when there's nothing to eat ─────────────────────
+  # == 22     turn right when there's nothing to eat =====================
   :turn_right,
-  # ── 23..27 jmp_t back to LOOP_HEAD (template [1,1,1,1]) ─────────────
+  # == 23..27 jmp_t back to LOOP_HEAD (template [1,1,1,1]) ===============
   :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
-  # ── 28..29 padding to reach the 10 non-nop minimum ───────────────────
+  # == 28..29 padding to reach the 10 non-nop minimum ====================
   :push0, :drop
 ]
 ```
@@ -283,33 +283,33 @@ These two opcodes are never executed (the loop-back jumps at 12 and 23 always re
 **Cycle with an empty front cell** (`sense_front` returns 0):
 
 ```
-ip=4   sense_front  → pushes 0          stack: [0]
+ip=4   sense_front  -> pushes 0          stack: [0]
 ip=5   jz_t [1,0,1,0]
-       tests top: 0 == 0 → true, will jump
+       tests top: 0 == 0 -> true, will jump
        pops 0 unconditionally            stack: []
-       searches for [0,1,0,1] → found at pos 18
+       searches for [0,1,0,1] -> found at pos 18
        ip = (18 + 4) mod size = 22
-ip=22  turn_right   → rotates creature
+ip=22  turn_right   -> rotates creature
 ip=23  jmp_t [1,1,1,1]
-       searches for [0,0,0,0] → found at pos 0
+       searches for [0,0,0,0] -> found at pos 0
        ip = (0 + 4) mod size = 4
-ip=4   sense_front  → next cell ahead   (loop repeats)
+ip=4   sense_front  -> next cell ahead   (loop repeats)
 ```
 
 **Cycle with a resource in the front cell** (`sense_front` returns 15):
 
 ```
-ip=4   sense_front  → pushes 15         stack: [15]
+ip=4   sense_front  -> pushes 15         stack: [15]
 ip=5   jz_t [1,0,1,0]
-       tests top: 15 == 0 → false, no jump
+       tests top: 15 == 0 -> false, no jump
        pops 15 unconditionally           stack: []
        falls through to ip = (5+1+4) mod size = 10
-ip=10  eat          → consumes resource, gains energy
-ip=11  move         → advances one cell
+ip=10  eat          -> consumes resource, gains energy
+ip=11  move         -> advances one cell
 ip=12  jmp_t [1,1,1,1]
-       searches for [0,0,0,0] → found at pos 0
+       searches for [0,0,0,0] -> found at pos 0
        ip = (0 + 4) mod size = 4
-ip=4   sense_front  → next cell ahead   (loop repeats)
+ip=4   sense_front  -> next cell ahead   (loop repeats)
 ```
 
 ---

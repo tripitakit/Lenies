@@ -11,8 +11,8 @@ Think of a replication cycle as a ledger. On the cost side: every opcode you exe
 On the gain side: every successful `:eat` adds energy. The rule is simple:
 
 ```
-survive long-term  →  gain per cycle ≥ cost per cycle
-grow the population →  gain per cycle > cost per cycle (with margin for the divide split)
+survive long-term  ->  gain per cycle >= cost per cycle
+grow the population ->  gain per cycle > cost per cycle (with margin for the divide split)
 ```
 
 At `:divide`, energy is split evenly between parent and child. If your codeome enters a divide
@@ -29,9 +29,9 @@ costs are exact, derived from `lib/lenies/codeome/costs.ex` and the actual opcod
 Exact costs for the one-time setup before the copy loop:
 
 ```
-LOOP_HEAD anchor   4 × nop              0.40
+LOOP_HEAD anchor   4 x nop              0.40
 Init block         get_size+push0+store 0.90
-Allocate(121)      5.0 + 0.05×121      11.05
+Allocate(121)      5.0 + 0.05x121      11.05
 jz_t alloc check   4-bit template       0.40
 Copy counter init  push0+push1+store    0.70
 ```
@@ -75,7 +75,7 @@ jz_t check             0.40
 copy counter init      0.70
 copy loop (121 iters) 774.40
 divide                10.00
-                      ──────
+                      ======
                       797.85 energy
 ```
 
@@ -88,7 +88,7 @@ the forage counter. Both are one-time costs per cycle:
 
 ```
 ABORT_TARGET anchor + random turn decision + branch   2.8 energy
-Forage init: push1 + 7×(dup+add) + push0 + store     2.8 energy
+Forage init: push1 + 7x(dup+add) + push0 + store     2.8 energy
 ```
 
 ### Forage loop body (pos 94–114, repeated K = 128 times)
@@ -115,13 +115,13 @@ Init block                  0.90
 Allocate(121)              11.05
 jz_t (alloc check)          0.40
 Copy counter init            0.70
-Copy loop (121 × 6.4)      774.40
+Copy loop (121 x 6.4)      774.40
 Divide                      10.00
 Turn block                   2.80
 Forage init                  2.80
-Forage loop (128 × 7.5)    960.00
+Forage loop (128 x 7.5)    960.00
 Final jmp_t                  0.40
-                           ──────
+                           ======
 Total per cycle           1763.85 energy
 ```
 
@@ -136,7 +136,7 @@ Each successful `:eat` returns `eat_amount = 20` energy. The forage loop runs K 
 Define `hit_rate` as the fraction of visited cells that have resource when you arrive:
 
 ```
-gain per cycle = 128 × 20 × hit_rate = 2560 × hit_rate
+gain per cycle = 128 x 20 x hit_rate = 2560 x hit_rate
 ```
 
 | hit_rate | gain | cost | net |
@@ -175,20 +175,20 @@ At `:divide`, energy is split evenly. Let C = cost through divide (797.85) and F
 gain after divide = `K × eat_amount × hit_rate − forage_and_turn_cost`. The recurrence is:
 
 ```
-E_{k+1} = (E_k − C) / 2 + F
+E_{k+1} = (E_k - C) / 2 + F
 ```
 
 At steady state E_{k+1} = E_k:
 
 ```
-E_steady = 2F − C
+E_steady = 2F - C
 ```
 
 For MinimalReplicator at 100% hit rate:
 
 ```
-F = 128 × 20 − 966 = 2560 − 966 = 1594
-E_steady = 2 × 1594 − 798 ≈ 2390 energy
+F = 128 x 20 - 966 = 2560 - 966 = 1594
+E_steady = 2 x 1594 - 798 ~ 2390 energy
 ```
 
 The moduledoc gives a different steady-state estimate (≈ +805 surplus per generation) because it
@@ -212,11 +212,11 @@ copy_delete_rate:       0.0005  # 0.05% per opcode
 For a 121-opcode codeome, each replication produces on average:
 
 ```
-substitutions:  121 × 0.005  = 0.605 per replication
-insertions:     121 × 0.0005 = 0.061
-deletions:      121 × 0.0005 = 0.061
-─────────────────────────────────────
-total:          ≈ 0.73 mutations per replication
+substitutions:  121 x 0.005  = 0.605 per replication
+insertions:     121 x 0.0005 = 0.061
+deletions:      121 x 0.0005 = 0.061
+=====================================
+total:          ~ 0.73 mutations per replication
 ```
 
 Roughly 1 in every 1.4 replications introduces at least one mutation. Most are silent: anchor
@@ -235,7 +235,7 @@ mutations per generation but most land in non-critical padding or anchor positio
 ```
 sustainable  iff
 
-  K × (eat_amount × hit_rate  −  forage_cost_per_iter)  >  replication_cycle_cost
+  K x (eat_amount x hit_rate  -  forage_cost_per_iter)  >  replication_cycle_cost
 ```
 
 Where:
@@ -252,7 +252,7 @@ Where:
 Solve for the minimum K:
 
 ```
-K > replication_cycle_cost / (eat_amount × hit_rate − forage_cost_per_iter)
+K > replication_cycle_cost / (eat_amount x hit_rate - forage_cost_per_iter)
 ```
 
 At different hit rates (for a 121-op codeome, forage_cost_per_iter = 7.5):

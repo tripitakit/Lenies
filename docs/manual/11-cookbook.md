@@ -35,29 +35,29 @@ integer in 0..255 — so deterministic constants must be constructed.
 **Code (build 32 = 2^5):**
 
 ```elixir
-[:push1,             # → [1]
- :dup, :add,         # → [2]
- :dup, :add,         # → [4]
- :dup, :add,         # → [8]
- :dup, :add,         # → [16]
- :dup, :add]         # → [32]
+[:push1,             # -> [1]
+ :dup, :add,         # -> [2]
+ :dup, :add,         # -> [4]
+ :dup, :add,         # -> [8]
+ :dup, :add,         # -> [16]
+ :dup, :add]         # -> [32]
 ```
 
 **Stack trace:**
 
 ```
 before:        [ ]
-push1     →    [1]
-dup       →    [1, 1]
-add       →    [2]            ; 1 + 1
-dup       →    [2, 2]
-add       →    [4]            ; 2 + 2
-dup       →    [4, 4]
-add       →    [8]            ; 4 + 4
-dup       →    [8, 8]
-add       →    [16]           ; 8 + 8
-dup       →    [16, 16]
-add       →    [32]           ; 16 + 16
+push1     ->    [1]
+dup       ->    [1, 1]
+add       ->    [2]            ; 1 + 1
+dup       ->    [2, 2]
+add       ->    [4]            ; 2 + 2
+dup       ->    [4, 4]
+add       ->    [8]            ; 4 + 4
+dup       ->    [8, 8]
+add       ->    [16]           ; 8 + 8
+dup       ->    [16, 16]
+add       ->    [32]           ; 16 + 16
 ```
 
 **Cost:** `0.1 + 0.3k` energy for 2^k (initial `:push1` plus k
@@ -89,19 +89,19 @@ predicate of a 50/50 branch.
 **Code:**
 
 ```elixir
-[:pushN,                # → [r]        r uniform in 0..255
- :push1, :push1, :add,  # → [r, 2]     build the divisor
- :mod]                  # → [r mod 2]  0 if r even, 1 if r odd
+[:pushN,                # -> [r]        r uniform in 0..255
+ :push1, :push1, :add,  # -> [r, 2]     build the divisor
+ :mod]                  # -> [r mod 2]  0 if r even, 1 if r odd
 ```
 
 **Trace** (assuming `:pushN` happens to draw 137):
 
 ```
-pushN      →   [137]
-push1      →   [137, 1]
-push1      →   [137, 1, 1]
-add        →   [137, 2]
-mod        →   [1]              ; 137 mod 2  (mod: second mod top)
+pushN      ->   [137]
+push1      ->   [137, 1]
+push1      ->   [137, 1, 1]
+add        ->   [137, 2]
+mod        ->   [1]              ; 137 mod 2  (mod: second mod top)
 ```
 
 **Cost:** `pushN (0.10) + push1 (0.10) + push1 (0.10) + add (0.20) +
@@ -127,12 +127,12 @@ with equal probability.
 **Code:**
 
 ```elixir
-:pushN,                                  # → [r]   uniform random in 0..255
-:push1, :push1, :add,                    # → [r, 2]
-:mod,                                    # → [r mod 2]  ∈ {0, 1}
+:pushN,                                  # -> [r]   uniform random in 0..255
+:push1, :push1, :add,                    # -> [r, 2]
+:mod,                                    # -> [r mod 2]  in {0, 1}
 
 # Jump to PATH_A if coin == 0; fall through to PATH_B otherwise.
-:jz_t, :nop_0, :nop_0, :nop_1, :nop_1,   # template [0,0,1,1] → searches [1,1,0,0]
+:jz_t, :nop_0, :nop_0, :nop_1, :nop_1,   # template [0,0,1,1] -> searches [1,1,0,0]
 
 # --- PATH_B code ---
 # ...
@@ -177,49 +177,49 @@ ones that produce 0 vs nonzero **naturally** — `:sense_front` returns 0
 for an empty cell and a positive integer for an occupied one.
 
 ```elixir
-[# ── CONDITION: sense the front cell ──────────────────────────────
- :sense_front,                              # → [k]  0 if empty, >0 if occupied
+[# == CONDITION: sense the front cell ==============================
+ :sense_front,                              # -> [k]  0 if empty, >0 if occupied
 
- # ── BRANCH: jz_t to anchor A (the FALSE / "empty" block) ─────────
- :jz_t, :nop_1, :nop_1, :nop_0, :nop_0,     # template [1,1,0,0] → searches [0,0,1,1]
+ # == BRANCH: jz_t to anchor A (the FALSE / "empty" block) ==========
+ :jz_t, :nop_1, :nop_1, :nop_0, :nop_0,     # template [1,1,0,0] -> searches [0,0,1,1]
 
- # ── TRUE block: front is occupied → attack ───────────────────────
+ # == TRUE block: front is occupied -> attack =======================
  :attack,
 
- # ── SKIP THE FALSE BLOCK ─────────────────────────────────────────
- :jmp_t, :nop_0, :nop_1, :nop_1, :nop_0,    # template [0,1,1,0] → searches [1,0,0,1]
+ # == SKIP THE FALSE BLOCK ==========================================
+ :jmp_t, :nop_0, :nop_1, :nop_1, :nop_0,    # template [0,1,1,0] -> searches [1,0,0,1]
 
- # ── SEPARATOR (prevent extractor swallowing anchor A) ────────────
+ # == SEPARATOR (prevent extractor swallowing anchor A) =============
  :push0,
 
- # ── anchor A [0,0,1,1] (FALSE landing) ───────────────────────────
+ # == anchor A [0,0,1,1] (FALSE landing) ============================
  :nop_0, :nop_0, :nop_1, :nop_1,
 
- # ── FALSE block: front is empty → defend ─────────────────────────
+ # == FALSE block: front is empty -> defend =========================
  :defend,
 
- # ── anchor B [1,0,0,1] (join point) ──────────────────────────────
+ # == anchor B [1,0,0,1] (join point) ===============================
  :nop_1, :nop_0, :nop_0, :nop_1]
 ```
 
 **Stack trace (TRUE path, front cell value 15):**
 
 ```
-sense_front              →   [15]
-jz_t [1,1,0,0]            tests 15 ≠ 0 → no jump; pops 15
-                       →   [ ]
+sense_front              ->   [15]
+jz_t [1,1,0,0]            tests 15 != 0 -> no jump; pops 15
+                       ->   [ ]
 attack                    yields {:attack, pos, dir}
-jmp_t [0,1,1,0]           searches for [1,0,0,1] → finds anchor B
+jmp_t [0,1,1,0]           searches for [1,0,0,1] -> finds anchor B
                           ip lands just after anchor B
 ```
 
 **Stack trace (FALSE path, k = 0):**
 
 ```
-sense_front              →   [0]
-jz_t [1,1,0,0]            tests 0 == 0 → jump fires; pops 0
-                       →   [ ]
-                          searches for [0,0,1,1] → finds anchor A
+sense_front              ->   [0]
+jz_t [1,1,0,0]            tests 0 == 0 -> jump fires; pops 0
+                       ->   [ ]
+                          searches for [0,0,1,1] -> finds anchor A
                           ip lands just after anchor A
 defend                    yields :defend
 ```
@@ -246,12 +246,12 @@ cell becomes empty, or a sensor crosses a threshold.
 **Code (spin until the front cell is empty):**
 
 ```elixir
-[# ── WAIT_HEAD anchor [0,0,0,0] ──────────────────────────────────
+[# == WAIT_HEAD anchor [0,0,0,0] ==================================
  :nop_0, :nop_0, :nop_0, :nop_0,
 
- # ── sense; if non-zero, loop back ───────────────────────────────
+ # == sense; if non-zero, loop back ===============================
  :sense_front,
- :jnz_t, :nop_1, :nop_1, :nop_1, :nop_1,   # template → anchor [0,0,0,0]
+ :jnz_t, :nop_1, :nop_1, :nop_1, :nop_1,   # template -> anchor [0,0,0,0]
  :push0]                                    # separator: stops the greedy
                                             # template read from wrapping
                                             # into the head anchor
@@ -260,9 +260,9 @@ cell becomes empty, or a sensor crosses a threshold.
 **Trace** (cell occupied, k = 5):
 
 ```
-sense_front      →   [5]
-jnz_t [1,1,1,1]   tests 5 ≠ 0 → jump fires; pops 5
-                  searches for anchor [0,0,0,0] → lands after the nops
+sense_front      ->   [5]
+jnz_t [1,1,1,1]   tests 5 != 0 -> jump fires; pops 5
+                  searches for anchor [0,0,0,0] -> lands after the nops
 ```
 
 **Cost per spin iteration:** `4 × nop_0 (0.40) + sense_front (0.50) +
@@ -292,34 +292,34 @@ a compile-time constant or a value already on the stack.
 **Code (execute body exactly 4 times):**
 
 ```elixir
-[# ── SETUP: counter = 4 in slot 1 ─────────────────────────────────
- :push1, :dup, :add, :dup, :add,    # → [4]   (1 → 2 → 4 via doubling)
+[# == SETUP: counter = 4 in slot 1 =================================
+ :push1, :dup, :add, :dup, :add,    # -> [4]   (1 -> 2 -> 4 via doubling)
  :push1, :store,                    # slot[1] = 4  (pops slot_idx=1 then value=4)
 
- # ── LOOP_HEAD anchor [0,0,0,0] ───────────────────────────────────
+ # == LOOP_HEAD anchor [0,0,0,0] ===================================
  :nop_0, :nop_0, :nop_0, :nop_0,
 
- # ── BODY (replace with your code) ────────────────────────────────
+ # == BODY (replace with your code) ================================
  :sense_front, :drop,               # placeholder body
 
- # ── DECREMENT AND TEST ───────────────────────────────────────────
- :push1, :load,                     # → [counter]
- :push1, :sub,                      # → [counter - 1]   (sub: second − top)
+ # == DECREMENT AND TEST ===========================================
+ :push1, :load,                     # -> [counter]
+ :push1, :sub,                      # -> [counter - 1]   (sub: second - top)
  :push1, :store,                    # slot[1] = counter - 1
- :push1, :load,                     # → [counter - 1]   (reload for jnz_t)
- :jnz_t, :nop_1, :nop_1, :nop_1, :nop_1]   # template → anchor [0,0,0,0]
+ :push1, :load,                     # -> [counter - 1]   (reload for jnz_t)
+ :jnz_t, :nop_1, :nop_1, :nop_1, :nop_1]   # template -> anchor [0,0,0,0]
 ```
 
 **Setup trace (build the counter):**
 
 ```
-push1      →   [1]
-dup        →   [1, 1]
-add        →   [2]
-dup        →   [2, 2]
-add        →   [4]
-push1      →   [4, 1]
-store      →   [ ]                  ; slot[1] = 4
+push1      ->   [1]
+dup        ->   [1, 1]
+add        ->   [2]
+dup        ->   [2, 2]
+add        ->   [4]
+push1      ->   [4, 1]
+store      ->   [ ]                  ; slot[1] = 4
 ```
 
 Note: `:push1, :dup, :add` only doubles to 2.  To get 4 you must double
@@ -330,17 +330,17 @@ forgetting the `k` repetitions in recipe 1.1's formula.
 **First-iteration trace (body and decrement):**
 
 ```
-sense_front      →   [k]                    ; some sensed value k
-drop             →   [ ]
-push1            →   [1]
-load             →   [4]                    ; slot[1] before decrement
-push1            →   [4, 1]
-sub              →   [3]                    ; 4 − 1   (sub: second − top)
-push1            →   [3, 1]
-store            →   [ ]                    ; slot[1] = 3
-push1            →   [1]
-load             →   [3]
-jnz_t [1,1,1,1]  →   [ ]   pops 3; non-zero, jumps to LOOP_HEAD anchor
+sense_front      ->   [k]                    ; some sensed value k
+drop             ->   [ ]
+push1            ->   [1]
+load             ->   [4]                    ; slot[1] before decrement
+push1            ->   [4, 1]
+sub              ->   [3]                    ; 4 - 1   (sub: second - top)
+push1            ->   [3, 1]
+store            ->   [ ]                    ; slot[1] = 3
+push1            ->   [1]
+load             ->   [3]
+jnz_t [1,1,1,1]  ->   [ ]   pops 3; non-zero, jumps to LOOP_HEAD anchor
 ```
 
 After three more iterations slot[1] is 0; `:jnz_t` sees 0 (popped), does
@@ -377,21 +377,21 @@ The VM has `:mod` but no `:div`, so the easiest env-derived bound is
 "sensor modulo a power of 2".
 
 ```elixir
-[# ── COMPUTE BOUND: E mod 8 ───────────────────────────────────────
- :sense_energy,                     # → [E]
- :push1, :dup, :add,                # → [E, 2]
- :dup, :add,                        # → [E, 4]
- :dup, :add,                        # → [E, 8]
- :mod,                              # → [E mod 8]   (mod: second mod top)
+[# == COMPUTE BOUND: E mod 8 =======================================
+ :sense_energy,                     # -> [E]
+ :push1, :dup, :add,                # -> [E, 2]
+ :dup, :add,                        # -> [E, 4]
+ :dup, :add,                        # -> [E, 8]
+ :mod,                              # -> [E mod 8]   (mod: second mod top)
  :push1, :store,                    # slot[1] = E mod 8
 
- # ── LOOP_HEAD anchor [0,0,0,0] ───────────────────────────────────
+ # == LOOP_HEAD anchor [0,0,0,0] ===================================
  :nop_0, :nop_0, :nop_0, :nop_0,
 
- # ── BODY ─────────────────────────────────────────────────────────
+ # == BODY =========================================================
  :move,
 
- # ── DECREMENT AND TEST (identical to recipe 3.1) ─────────────────
+ # == DECREMENT AND TEST (identical to recipe 3.1) =================
  :push1, :load,
  :push1, :sub,
  :push1, :store,
@@ -413,9 +413,9 @@ want a non-zero floor, add 1 before storing:
 
 ```elixir
 [:sense_energy,
- :push1, :dup, :add, :dup, :add, :dup, :add,   # → [E, 8]
- :mod,                                          # → [E mod 8]
- :push1, :add,                                  # → [E mod 8 + 1]  (1..8)
+ :push1, :dup, :add, :dup, :add, :dup, :add,   # -> [E, 8]
+ :mod,                                          # -> [E mod 8]
+ :push1, :add,                                  # -> [E mod 8 + 1]  (1..8)
  :push1, :store]                                # slot[1] = 1..8
 ```
 
@@ -446,8 +446,8 @@ Trace, assuming the stack starts as `[42]`:
 
 ```
 before:        [42]
-push1     →    [42, 1]
-store     →    [ ]                ; slot[1] = 42 (top=slot_idx, second=value)
+push1     ->    [42, 1]
+store     ->    [ ]                ; slot[1] = 42 (top=slot_idx, second=value)
 ```
 
 **Cost:** `push1 (0.10) + store (0.50) = 0.60` energy.
@@ -461,7 +461,7 @@ whatever was on top.  This is the most-forgotten detail in the VM.
 **Stack effect:** `( -- v )`.
 
 ```elixir
-[:push1, :load]       # → [slot[1]]
+[:push1, :load]       # -> [slot[1]]
 ```
 
 **Cost:** `push1 (0.10) + load (0.50) = 0.60` energy.
@@ -471,20 +471,20 @@ whatever was on top.  This is the most-forgotten detail in the VM.
 **Stack effect:** `( -- )`, side effect: `slot[s] += 1`.
 
 ```elixir
-[:push1, :load,       # → [counter]
- :push1, :add,        # → [counter + 1]
+[:push1, :load,       # -> [counter]
+ :push1, :add,        # -> [counter + 1]
  :push1, :store]      # slot[1] = counter + 1
 ```
 
 Trace, assuming `slot[1] = 7`:
 
 ```
-push1      →   [1]
-load       →   [7]
-push1      →   [7, 1]
-add        →   [8]
-push1      →   [8, 1]
-store      →   [ ]              ; slot[1] = 8
+push1      ->   [1]
+load       ->   [7]
+push1      ->   [7, 1]
+add        ->   [8]
+push1      ->   [8, 1]
+store      ->   [ ]              ; slot[1] = 8
 ```
 
 **Cost:** `push1 (0.10) + load (0.50) + push1 (0.10) + add (0.20) +
@@ -498,12 +498,12 @@ push1 (0.10) + store (0.50) = 1.50` energy per increment.
 **Code (counter mod 8 in slot 1):**
 
 ```elixir
-[:push1, :load,       # → [counter]
- :push1, :add,        # → [counter + 1]
- :push1, :dup, :add,  # → [counter+1, 2]
- :dup, :add,          # → [counter+1, 4]
- :dup, :add,          # → [counter+1, 8]
- :mod,                # → [(counter+1) mod 8]
+[:push1, :load,       # -> [counter]
+ :push1, :add,        # -> [counter + 1]
+ :push1, :dup, :add,  # -> [counter+1, 2]
+ :dup, :add,          # -> [counter+1, 4]
+ :dup, :add,          # -> [counter+1, 8]
+ :mod,                # -> [(counter+1) mod 8]
  :push1, :store]      # slot[1] = result
 ```
 
@@ -525,8 +525,8 @@ sum of sensed values, etc.
 
 ```elixir
 [# pre: stack = [v]
- :push1, :load,       # → [v, sum]
- :add,                # → [v + sum]
+ :push1, :load,       # -> [v, sum]
+ :add,                # -> [v + sum]
  :push1, :store]      # slot[1] = v + sum
 ```
 
@@ -534,11 +534,11 @@ Trace, assuming `slot[1] = 30` and stack top is `5`:
 
 ```
 before:       [5]
-push1     →   [5, 1]
-load      →   [5, 30]
-add       →   [35]              ; 5 + 30
-push1     →   [35, 1]
-store     →   [ ]               ; slot[1] = 35
+push1     ->   [5, 1]
+load      ->   [5, 30]
+add       ->   [35]              ; 5 + 30
+push1     ->   [35, 1]
+store     ->   [ ]               ; slot[1] = 35
 ```
 
 **Cost:** `push1+load (0.60) + add (0.20) + push1+store (0.60) = 1.40`
@@ -552,25 +552,25 @@ target" and "next target".
 **Code (swap slot 0 and slot 1):**
 
 ```elixir
-[:push0, :load,       # → [A]            A = slot[0]
- :push1, :load,       # → [A, B]         B = slot[1]
- :swap,               # → [B, A]
- :push1, :store,      # slot[1] = A;  → [B]
+[:push0, :load,       # -> [A]            A = slot[0]
+ :push1, :load,       # -> [A, B]         B = slot[1]
+ :swap,               # -> [B, A]
+ :push1, :store,      # slot[1] = A;  -> [B]
  :push0, :store]      # slot[0] = B
 ```
 
 Trace, assuming `slot[0] = 10, slot[1] = 99`:
 
 ```
-push0      →   [0]
-load       →   [10]              ; slot[0]
-push1      →   [10, 1]
-load       →   [10, 99]          ; slot[1]
-swap       →   [99, 10]
-push1      →   [99, 10, 1]
-store      →   [99]              ; slot[1] = 10
-push0      →   [99, 0]
-store      →   [ ]               ; slot[0] = 99
+push0      ->   [0]
+load       ->   [10]              ; slot[0]
+push1      ->   [10, 1]
+load       ->   [10, 99]          ; slot[1]
+swap       ->   [99, 10]
+push1      ->   [99, 10, 1]
+store      ->   [99]              ; slot[1] = 10
+push0      ->   [99, 0]
+store      ->   [ ]               ; slot[0] = 99
 ```
 
 After: `slot[0] = 99, slot[1] = 10`.
@@ -596,7 +596,7 @@ slots (section 4) when the dance starts looking acrobatic.
 **Stack effect:** `( a -- a a )`
 
 ```elixir
-[:dup]                  # → [a, a]      cost 0.10
+[:dup]                  # -> [a, a]      cost 0.10
 ```
 
 Use it before any opcode that consumes the value you want to read
@@ -609,8 +609,8 @@ the `:dup` the value is gone afterwards.
 **Stack effect:** `( b a -- a )`
 
 ```elixir
-[:swap,      # → [a, b]      top and second swap
- :drop]      # → [a]         drop the new top (was b)
+[:swap,      # -> [a, b]      top and second swap
+ :drop]      # -> [a]         drop the new top (was b)
 ```
 
 **Cost:** `swap (0.10) + drop (0.10) = 0.20` energy.
@@ -630,10 +630,10 @@ either consume it immediately or use it briefly before restoring order:
 
 ```elixir
 # pre:    [b, a]
-[:swap,      # → [a, b]
- :dup,       # → [a, b, b]
+[:swap,      # -> [a, b]
+ :dup,       # -> [a, b, b]
  # ... opcode that consumes the top b (e.g., :jz_t or arithmetic) ...
- :swap]      # → [b, a]    restores original order, assuming consumer
+ :swap]      # -> [b, a]    restores original order, assuming consumer
              #             left one value on top
 ```
 
@@ -653,14 +653,14 @@ parking values in slots.  Two slots are not enough — you need three
 # pre:    [c, b, a]
 [:push0, :store,     # slot[0] = a
  :push1, :store,     # slot[1] = b
- :push1, :dup, :add, # → [c, 2]
+ :push1, :dup, :add, # -> [c, 2]
  :store,             # slot[2] = c
 
  # now load in the order we want:
- :push0, :load,      # → [a]
- :push1, :load,      # → [a, b]
- :push1, :dup, :add, # → [a, b, 2]
- :load]              # → [a, b, c]
+ :push0, :load,      # -> [a]
+ :push1, :load,      # -> [a, b]
+ :push1, :dup, :add, # -> [a, b, 2]
+ :load]              # -> [a, b, c]
 ```
 
 **Cost:** three stores + three loads + arithmetic to build slot index 2
@@ -683,7 +683,7 @@ GenServer to step) but do not need the cell's actual contents.
 
 ```elixir
 :sense_front,   # yields to World; pushes a small integer for the front cell
-:drop           # discard the result — keep the stack clean
+:drop           # discard the result - keep the stack clean
 ```
 
 **Cost:** `sense_front (0.50) + drop (0.10) = 0.60` energy.
@@ -730,19 +730,19 @@ size`), so out-of-range arithmetic is safe.
 **Code (read opcode at position 5):**
 
 ```elixir
-[:push1, :dup, :add, :dup, :add,     # → [4]   (1 → 2 → 4 via doubling)
- :push1, :add,                        # → [5]   (+1)
- :read_self]                          # → [op_int_at_pos_5]
+[:push1, :dup, :add, :dup, :add,     # -> [4]   (1 -> 2 -> 4 via doubling)
+ :push1, :add,                        # -> [5]   (+1)
+ :read_self]                          # -> [op_int_at_pos_5]
 ```
 
 ### 6.3 — Copy-one-cell snippet (read self, write child)
 
 ```elixir
-[:push1, :load,        # → [i]            current address (also child dest)
- :read_self,           # → [op_int]       reads codeome[i]
- :push1, :load,        # → [op_int, i]    child_addr
- :swap,                # → [i, op_int]    swap to put child_addr below op_int
- :write_child]         # writes op_int → child[i]; pops both
+[:push1, :load,        # -> [i]            current address (also child dest)
+ :read_self,           # -> [op_int]       reads codeome[i]
+ :push1, :load,        # -> [op_int, i]    child_addr
+ :swap,                # -> [i, op_int]    swap to put child_addr below op_int
+ :write_child]         # writes op_int -> child[i]; pops both
 ```
 
 **Why the swap?** `:write_child` pops `op_int` (top) THEN `child_addr`
@@ -766,53 +766,53 @@ child write).
 
 ```elixir
 [
-  # ── OUTER LOOP HEAD anchor [1,1,1,1] ─────────────────────────────────────
+  # == OUTER LOOP HEAD anchor [1,1,1,1] ======================================
   :nop_1, :nop_1, :nop_1, :nop_1,
 
-  # ── GET AND STORE OWN SIZE ────────────────────────────────────────────────
-  :get_size,                           # → [size]           cost 0.30
+  # == GET AND STORE OWN SIZE ================================================
+  :get_size,                           # -> [size]           cost 0.30
   :push0, :store,                      # slot[0] = size     cost 0.60
 
-  # ── ALLOCATE CHILD ────────────────────────────────────────────────────────
-  :push0, :load,                       # → [size]           cost 0.60
-  :allocate,                           # → [ok/no_target]   cost 5.0 + 0.05×size
+  # == ALLOCATE CHILD ========================================================
+  :push0, :load,                       # -> [size]           cost 0.60
+  :allocate,                           # -> [ok/no_target]   cost 5.0 + 0.05xsize
   :drop,                               # discard reply      cost 0.10
 
-  # ── INIT COPY COUNTER ─────────────────────────────────────────────────────
-  :push0,                              # → [0]              cost 0.10
+  # == INIT COPY COUNTER =====================================================
+  :push0,                              # -> [0]              cost 0.10
   :push1, :store,                      # slot[1] = 0        cost 0.60
 
-  # ── COPY LOOP HEAD anchor [1,0,0,1] ──────────────────────────────────────
+  # == COPY LOOP HEAD anchor [1,0,0,1] =======================================
   :nop_1, :nop_0, :nop_0, :nop_1,
 
-  # ── COPY BODY: read self[i], write child[i], i++ ──────────────────────────
-  :push1, :load,                       # → [i]              cost 0.60
-  :read_self,                          # → [opcode_int]     cost 0.30
-  :push1, :load,                       # → [opcode_int, i]  cost 0.60
-  :swap,                               # → [i, opcode_int]  cost 0.10
+  # == COPY BODY: read self[i], write child[i], i++ ==========================
+  :push1, :load,                       # -> [i]              cost 0.60
+  :read_self,                          # -> [opcode_int]     cost 0.30
+  :push1, :load,                       # -> [opcode_int, i]  cost 0.60
+  :swap,                               # -> [i, opcode_int]  cost 0.10
   :write_child,                        # writes opcode_int at child[i]
                                        #                    cost 1.00
-  :push1, :load,                       # → [i]              cost 0.60
-  :push1, :add,                        # → [i+1]            cost 0.30
+  :push1, :load,                       # -> [i]              cost 0.60
+  :push1, :add,                        # -> [i+1]            cost 0.30
   :push1, :store,                      # slot[1] = i+1      cost 0.60
 
-  # ── CONDITION: remaining = size - counter ─────────────────────────────────
-  :push0, :load,                       # → [size]           cost 0.60
-  :push1, :load,                       # → [size, i+1]      cost 0.60
-  :sub,                                # → [size - (i+1)]   cost 0.20
+  # == CONDITION: remaining = size - counter =================================
+  :push0, :load,                       # -> [size]           cost 0.60
+  :push1, :load,                       # -> [size, i+1]      cost 0.60
+  :sub,                                # -> [size - (i+1)]   cost 0.20
 
-  # ── LOOP BACK IF NOT DONE ─────────────────────────────────────────────────
+  # == LOOP BACK IF NOT DONE =================================================
   :jnz_t, :nop_0, :nop_1, :nop_1, :nop_0,   # complement of [1,0,0,1] is [0,1,1,0]
                                               # cost 0.40
 
-  # ── DIVIDE (spawn child) ──────────────────────────────────────────────────
+  # == DIVIDE (spawn child) ==================================================
   :divide,                             # cost 10.0
 
-  # ═══════════════════════════════════════════════════════════════════════════
+  # ===========================================================================
   # YOUR FORAGE / TURN / RESTART CODE GOES HERE
   # After foraging, jump back to the outer LOOP HEAD anchor [1,1,1,1]:
   #   :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0   (complement of [1,1,1,1])
-  # ═══════════════════════════════════════════════════════════════════════════
+  # ===========================================================================
 ]
 ```
 
@@ -853,12 +853,12 @@ outer anchor and the allocate block is implicit here because
 ### 7.1 — Random walk
 
 ```elixir
-[:pushN,                                    # → [r]      0..255
- :push1, :dup, :add, :dup, :add,            # → [r, 4]
- :mod,                                       # → [r mod 4]  0..3 → direction index
+[:pushN,                                    # -> [r]      0..255
+ :push1, :dup, :add, :dup, :add,            # -> [r, 4]
+ :mod,                                       # -> [r mod 4]  0..3 -> direction index
  :push1, :store,                            # slot[1] = r mod 4
 
- # ── turn_left counter times ───────────────────────────────────
+ # == turn_left counter times ===================================
  :nop_0, :nop_0, :nop_0, :nop_0,            # loop anchor
  :push1, :load,
  :jz_t, :nop_1, :nop_1, :nop_0, :nop_0,    # if 0, skip turn_left
@@ -899,7 +899,7 @@ anchor-run immediately follows the nop-template of a jump instruction.
 
 ```elixir
 ..., :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
-:push0,                                        # ← SEPARATOR (any non-nop opcode)
+:push0,                                        # <- SEPARATOR (any non-nop opcode)
 :nop_1, :nop_1, :nop_1, :nop_1, <next code>
 ```
 

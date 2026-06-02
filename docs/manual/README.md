@@ -56,7 +56,7 @@ instructions in the top-level project README at
 sections with a comment header of the form:
 
 ```
-# ── pos X..Y: description ──
+# == pos X..Y: description ==
 ```
 
 The positions refer to the zero-based index of the opcode in the codeome ring.

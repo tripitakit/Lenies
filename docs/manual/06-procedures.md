@@ -99,7 +99,7 @@ computed values to its caller simply by leaving them on the stack.
 Both `call_t` and `ret` follow the same formula as the other template opcodes (from `costs.ex`):
 
 ```
-cost = 0.2 + 0.05 × template_len
+cost = 0.2 + 0.05 x template_len
 ```
 
 For `:ret` the template length is always 0 (`:ret` has no following template), giving a fixed cost
@@ -110,9 +110,9 @@ For `:call_t` with a 4-cell template the cost is `0.2 + 0.05 × 4 = 0.40`.
 A complete call-and-return round trip with 4-bit anchors therefore costs:
 
 ```
-call_t  (T=4)  → 0.40
-ret     (T=0)  → 0.20
-total          → 0.60
+call_t  (T=4)  -> 0.40
+ret     (T=0)  -> 0.20
+total          -> 0.60
 ```
 
 plus whatever the procedure body costs. That 0.60 overhead is the price of the procedure
@@ -125,7 +125,7 @@ entry is pushed, `push_call` keeps the 32 most recent entries and silently **dro
 The entry at the tail of the list (the oldest return address) is the one discarded.
 
 ```elixir
-# state.ex — push_call implementation
+# state.ex - push_call implementation
 new_cs = [return_ip | cs] |> Enum.take(@call_stack_max)
 ```
 
@@ -191,9 +191,9 @@ Keep a short index at the top of your codeome comments listing each anchor and i
 
 ```elixir
 # Anchor map:
-#   [0,0,0,0] — LOOP_HEAD  (target of jmp_t with template [1,1,1,1])
-#   [1,0,0,1] — TURN       (target of jz_t  with template [0,1,1,0])
-#   [1,1,1,0] — EAT_MOVE   (target of call_t with template [0,0,0,1])
+#   [0,0,0,0] - LOOP_HEAD  (target of jmp_t with template [1,1,1,1])
+#   [1,0,0,1] - TURN       (target of jz_t  with template [0,1,1,0])
+#   [1,1,1,0] - EAT_MOVE   (target of call_t with template [0,0,0,1])
 ```
 
 ---
@@ -243,40 +243,40 @@ non-nop cell so two groups never merge into one long run.
 
 ```elixir
 [
-  # ── Anchor map: ────────────────────────────────────────────
-  #   [0,0,0,0] LOOP_HEAD  ← jmp_t template [1,1,1,1]
-  #   [1,0,0,1] TURN       ← jz_t  template [0,1,1,0]
-  #   [1,1,1,0] EAT_MOVE   ← call_t template [0,0,0,1]
+  # == Anchor map: ============================================
+  #   [0,0,0,0] LOOP_HEAD  <- jmp_t template [1,1,1,1]
+  #   [1,0,0,1] TURN       <- jz_t  template [0,1,1,0]
+  #   [1,1,1,0] EAT_MOVE   <- call_t template [0,0,0,1]
   #
-  # ── 0..3   LOOP_HEAD anchor [0,0,0,0] ────────────────────
+  # == 0..3   LOOP_HEAD anchor [0,0,0,0] ======================
   :nop_0, :nop_0, :nop_0, :nop_0,
-  # ── 4      sense the front cell ─────────────────────────
+  # == 4      sense the front cell ============================
   :sense_front,
-  # ── 5..9   jz_t to TURN [1,0,0,1] — template [0,1,1,0] ─
+  # == 5..9   jz_t to TURN [1,0,0,1] - template [0,1,1,0] =====
   :jz_t, :nop_0, :nop_1, :nop_1, :nop_0,
-  # ── 10..14 call_t to EAT_MOVE [1,1,1,0] — template [0,0,0,1]
+  # == 10..14 call_t to EAT_MOVE [1,1,1,0] - template [0,0,0,1]
   :call_t, :nop_0, :nop_0, :nop_0, :nop_1,
-  # ── 15..19 jmp_t back to LOOP_HEAD — template [1,1,1,1] ─
+  # == 15..19 jmp_t back to LOOP_HEAD - template [1,1,1,1] ====
   :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
-  # ── 20     separator (prevents template bleed) ───────────
+  # == 20     separator (prevents template bleed) =============
   :push0,
-  # ── 21..24 TURN anchor [1,0,0,1] ─────────────────────────
+  # == 21..24 TURN anchor [1,0,0,1] ===========================
   :nop_1, :nop_0, :nop_0, :nop_1,
-  # ── 25     turn right ────────────────────────────────────
+  # == 25     turn right ======================================
   :turn_right,
-  # ── 26..30 call_t to EAT_MOVE — template [0,0,0,1] ──────
+  # == 26..30 call_t to EAT_MOVE - template [0,0,0,1] =========
   :call_t, :nop_0, :nop_0, :nop_0, :nop_1,
-  # ── 31..35 jmp_t back to LOOP_HEAD — template [1,1,1,1] ─
+  # == 31..35 jmp_t back to LOOP_HEAD - template [1,1,1,1] ====
   :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
-  # ── 36     separator ─────────────────────────────────────
+  # == 36     separator =======================================
   :push0,
-  # ── 37..40 EAT_MOVE anchor [1,1,1,0] ─────────────────────
+  # == 37..40 EAT_MOVE anchor [1,1,1,0] =======================
   :nop_1, :nop_1, :nop_1, :nop_0,
-  # ── 41     eat ───────────────────────────────────────────
+  # == 41     eat =============================================
   :eat,
-  # ── 42     move ──────────────────────────────────────────
+  # == 42     move ============================================
   :move,
-  # ── 43     ret ───────────────────────────────────────────
+  # == 43     ret =============================================
   :ret
 ]
 ```
@@ -314,24 +314,24 @@ tick | ip | opcode         | call stack | data stack | notes
   3  |  2 | nop_0          | []         | []         |
   4  |  3 | nop_0          | []         | []         |
   5  |  4 | sense_front    | []         | [1]        | food present; push 1; costs 0.5
-  6  |  5 | jz_t           | []         | [1]        | template [0,1,1,0] → T=4
-     |    |                |            |            | top=1 (non-zero) → no jump
-     |    |                |            |            | ip ← 5+1+4=10; costs 0.40
-  7  | 10 | call_t         | [15]       | [1]        | template [0,0,0,1] → T=4
+  6  |  5 | jz_t           | []         | [1]        | template [0,1,1,0] -> T=4
+     |    |                |            |            | top=1 (non-zero) -> no jump
+     |    |                |            |            | ip <- 5+1+4=10; costs 0.40
+  7  | 10 | call_t         | [15]       | [1]        | template [0,0,0,1] -> T=4
      |    |                |            |            | return_ip = 10+1+4 = 15
      |    |                |            |            | push 15 onto call stack
      |    |                |            |            | search complement [1,1,1,0]
      |    |                |            |            | found at pos 37; target = 37+4 = 41
-     |    |                |            |            | ip ← 41; costs 0.40
+     |    |                |            |            | ip <- 41; costs 0.40
   8  | 41 | eat            | [15]       | [1]        | costs 2.0
   9  | 42 | move           | [15]       | [1]        | costs 2.0
  10  | 43 | ret            | []         | [1]        | pop 15 from call stack
-     |    |                |            |            | ip ← 15; costs 0.20
- 11  | 15 | jmp_t          | []         | [1]        | template [1,1,1,1] → T=4
+     |    |                |            |            | ip <- 15; costs 0.20
+ 11  | 15 | jmp_t          | []         | [1]        | template [1,1,1,1] -> T=4
      |    |                |            |            | search complement [0,0,0,0]
      |    |                |            |            | found at pos 0; target = 0+4 = 4
-     |    |                |            |            | ip ← 4; costs 0.40
- 12  |  4 | sense_front    | []         | [1,1]      | next iteration begins …
+     |    |                |            |            | ip <- 4; costs 0.40
+ 12  |  4 | sense_front    | []         | [1,1]      | next iteration begins ...
 ```
 
 Key observations:

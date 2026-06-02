@@ -27,7 +27,7 @@ internally):
 [
   :nop_0,        # 0  LOOP_HEAD anchor (bit pattern: [0])
   :sense_front,  # 1  yield to world; push cell info (we'll ignore the value)
-  :drop,         # 2  discard the sense result — we just want the wait_world cycle
+  :drop,         # 2  discard the sense result - we just want the wait_world cycle
   :eat,          # 3  yield; consume up to eat_amount from current cell if present
   :move,         # 4  yield; step forward if the front cell is empty
   :jmp_t,        # 5  jump to complement of the following template
@@ -149,7 +149,7 @@ The conceptual Walker above has **8 opcodes total** and **6 non-nops**
 rule 3, but it fails rule 2. If you try to save it the editor shows:
 
 ```
-⚠ too few non-nops (6, min 10)
+! too few non-nops (6, min 10)
 ```
 
 The minimum-non-nop rule exists to prevent degenerate creatures that are mostly junk DNA

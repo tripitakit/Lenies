@@ -38,8 +38,8 @@ A reliable mnemonic: _"the slot index is the most recent thing you pushed, so it
 ```
 # Write 42 into slot 0
 :push1, :dup, :add, ...   # any method that leaves 42 on top
-:push0                    # push slot index (0)  ← on top
-:store                    # pops 0 (slot idx), pops 42 (value) → slot[0] = 42
+:push0                    # push slot index (0)  <- on top
+:store                    # pops 0 (slot idx), pops 42 (value) -> slot[0] = 42
 ```
 
 ### Example trace
@@ -112,17 +112,17 @@ The **right operand** (divisor for `:mod`, subtrahend for `:sub`) is popped firs
 This is the canonical idiom for "run the body N times then exit":
 
 ```elixir
-# ── Phase 1: initialise the counter ─────────────────────────────────────────
+# == Phase 1: initialise the counter ==========================================
 <build N on stack>       # whatever sequence produces N
 :push0, :store           # slot[0] = N   (push0 is the slot index)
 
-# ── LOOP_HEAD anchor ────────────────────────────────────────────────────────
+# == LOOP_HEAD anchor =========================================================
 :nop_X, :nop_Y, :nop_Z, :nop_W,   # 4-nop anchor, e.g. [1,1,1,1]
 
-# ── Phase 2: body ────────────────────────────────────────────────────────────
+# == Phase 2: body ============================================================
 # ... whatever the loop does each iteration ...
 
-# ── Phase 3: decrement and test ──────────────────────────────────────────────
+# == Phase 3: decrement and test ==============================================
 :push0, :load,           # push slot[0] onto stack    stack: [counter]
 :push1, :sub,            # subtract 1                  stack: [counter-1]
 :push0, :store,          # slot[0] = counter-1         stack: []
@@ -155,7 +155,7 @@ A Walker that takes exactly 8 steps, then turns right, then repeats. The counter
 
 ```
 INIT_HEAD [0,0,0,0]:
-  build 8 on stack (push1; dup; add × 3)
+  build 8 on stack (push1; dup; add x 3)
   store into slot[0]
 
 STEP_HEAD [1,1,0,0]:
@@ -163,10 +163,10 @@ STEP_HEAD [1,1,0,0]:
   move
   load slot[0]; push1; sub; store slot[0]   # decrement
   load slot[0]                               # test value
-  jnz_t [0,0,1,1]                           # → STEP_HEAD if counter > 0
+  jnz_t [0,0,1,1]                           # -> STEP_HEAD if counter > 0
   # fall through: counter hit zero
   turn_right
-  jmp_t [1,1,1,1]                           # → INIT_HEAD to reset
+  jmp_t [1,1,1,1]                           # -> INIT_HEAD to reset
 ```
 
 Two jumps, two distinct anchors. A jump searches for the **complement** of its
@@ -188,44 +188,44 @@ next.
 
 ```elixir
 [
-  # ── 0..3   INIT_HEAD anchor [0,0,0,0] ─────────────────────────────────────
+  # == 0..3   INIT_HEAD anchor [0,0,0,0] ======================================
   :nop_0, :nop_0, :nop_0, :nop_0,
 
-  # ── 4..10  build 8: push1; dup; add × 3 ───────────────────────────────────
-  :push1, :dup, :add,    # → 2
-          :dup, :add,    # → 4
-          :dup, :add,    # → 8
+  # == 4..10  build 8: push1; dup; add x 3 ====================================
+  :push1, :dup, :add,    # -> 2
+          :dup, :add,    # -> 4
+          :dup, :add,    # -> 8
 
-  # ── 11..12  store 8 in slot[0] ─────────────────────────────────────────────
+  # == 11..12  store 8 in slot[0] =============================================
   :push0, :store,
 
-  # ── 13..16  STEP_HEAD anchor [1,1,0,0] ─────────────────────────────────────
+  # == 13..16  STEP_HEAD anchor [1,1,0,0] =====================================
   :nop_1, :nop_1, :nop_0, :nop_0,
 
-  # ── 17..18  body: eat and move ─────────────────────────────────────────────
+  # == 17..18  body: eat and move =============================================
   :eat, :move,
 
-  # ── 19..24  decrement slot[0] ──────────────────────────────────────────────
+  # == 19..24  decrement slot[0] ==============================================
   :push0, :load,         # push slot[0]
   :push1, :sub,          # subtract 1
   :push0, :store,        # write back
 
-  # ── 25..26  reload for the test ────────────────────────────────────────────
+  # == 25..26  reload for the test ============================================
   :push0, :load,
 
-  # ── 27..31  jnz_t → STEP_HEAD (template [0,0,1,1] finds anchor [1,1,0,0]) ─
+  # == 27..31  jnz_t -> STEP_HEAD (template [0,0,1,1] finds anchor [1,1,0,0]) =
   :jnz_t, :nop_0, :nop_0, :nop_1, :nop_1,
 
-  # ── 32     separator (non-nop) stops the extractor at the template edge ────
+  # == 32     separator (non-nop) stops the extractor at the template edge ====
   :push0,
 
-  # ── 33     turn right when counter reached zero ────────────────────────────
+  # == 33     turn right when counter reached zero ============================
   :turn_right,
 
-  # ── 34..38  jmp_t → INIT_HEAD (template [1,1,1,1] finds anchor [0,0,0,0]) ─
+  # == 34..38  jmp_t -> INIT_HEAD (template [1,1,1,1] finds anchor [0,0,0,0]) =
   :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
 
-  # ── 39     separator (non-nop) keeps the wrap from extending the template ──
+  # == 39     separator (non-nop) keeps the wrap from extending the template ==
   :push0
 ]
 ```
@@ -260,10 +260,10 @@ The `jnz_t` tests 0 — falls through. `:push0` (separator) executes harmlessly.
 `:pushN` pushes a uniform integer in 0..255. To reduce this to a binary value (0 or 1), divide by 2 and keep the remainder:
 
 ```elixir
-:pushN,               # stack: [r]  where r ∈ 0..255
+:pushN,               # stack: [r]  where r in 0..255
 :push1, :push1, :add, # stack: [r, 2]  (there is no push2; build 2 from 1+1)
 :mod,                 # pops a=2 (top), pops b=r, pushes r mod 2
-                      # stack: [coin]  where coin ∈ {0, 1}, each with prob 0.5
+                      # stack: [coin]  where coin in {0, 1}, each with prob 0.5
 ```
 
 Total cost: 0.1 (pushN) + 0.1 + 0.1 + 0.2 (build 2) + 0.2 (mod) = **0.7 energy**.
@@ -294,22 +294,22 @@ The Turning Forager is the Forager from chapter 4 with its unconditional `:turn_
 ```
 LOOP_HEAD:
     sense_front
-    jz_t → TURN_HEAD         # empty ahead → time to turn
+    jz_t -> TURN_HEAD         # empty ahead -> time to turn
     eat
     move
-    jmp_t → LOOP_HEAD
+    jmp_t -> LOOP_HEAD
 
 TURN_HEAD:
     pushN; push1; push1; add; mod   # fair coin
-    jz_t → TURN_LEFT_HEAD           # coin=0 → turn left
-    turn_right                       # coin=1 → fall through, turn right
-    jmp_t → AFTER_TURN_HEAD
+    jz_t -> TURN_LEFT_HEAD           # coin=0 -> turn left
+    turn_right                       # coin=1 -> fall through, turn right
+    jmp_t -> AFTER_TURN_HEAD
 
 TURN_LEFT_HEAD:
     turn_left
 
 AFTER_TURN_HEAD:
-    jmp_t → LOOP_HEAD
+    jmp_t -> LOOP_HEAD
 ```
 
 ### Anchor assignments
@@ -335,60 +335,60 @@ All templates used are also mutually distinct. Search uniqueness holds.
 
 ```elixir
 [
-  # ── 0..3    LOOP_HEAD [0,0,0,0] ────────────────────────────────────────────
+  # == 0..3    LOOP_HEAD [0,0,0,0] =============================================
   :nop_0, :nop_0, :nop_0, :nop_0,
 
-  # ── 4       sense the cell ahead ───────────────────────────────────────────
+  # == 4       sense the cell ahead ============================================
   :sense_front,
 
-  # ── 5..9    jz_t → TURN_HEAD if cell ahead is empty ───────────────────────
+  # == 5..9    jz_t -> TURN_HEAD if cell ahead is empty ========================
   #            template [1,0,1,0] searches for anchor [0,1,0,1]
   :jz_t, :nop_1, :nop_0, :nop_1, :nop_0,
 
-  # ── 10..11  cell is occupied: eat and move ──────────────────────────────────
+  # == 10..11  cell is occupied: eat and move ==================================
   :eat, :move,
 
-  # ── 12..16  jmp_t → LOOP_HEAD (template [1,1,1,1] finds [0,0,0,0]) ─────────
+  # == 12..16  jmp_t -> LOOP_HEAD (template [1,1,1,1] finds [0,0,0,0]) =========
   :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
 
-  # ── 17      separator: non-nop to stop extractor from bleeding into TURN ───
+  # == 17      separator: non-nop to stop extractor from bleeding into TURN ====
   :push0,
 
-  # ── 18..21  TURN_HEAD anchor [0,1,0,1] ─────────────────────────────────────
+  # == 18..21  TURN_HEAD anchor [0,1,0,1] ======================================
   :nop_0, :nop_1, :nop_0, :nop_1,
 
-  # ── 22..26  fair coin: pushN; push1; push1; add; mod ───────────────────────
+  # == 22..26  fair coin: pushN; push1; push1; add; mod ========================
   :pushN, :push1, :push1, :add, :mod,
 
-  # ── 27..31  jz_t → TURN_LEFT_HEAD if coin == 0 ─────────────────────────────
+  # == 27..31  jz_t -> TURN_LEFT_HEAD if coin == 0 =============================
   #            template [0,0,1,1] searches for anchor [1,1,0,0]
   :jz_t, :nop_0, :nop_0, :nop_1, :nop_1,
 
-  # ── 32      coin was 1 → turn right ────────────────────────────────────────
+  # == 32      coin was 1 -> turn right ========================================
   :turn_right,
 
-  # ── 33..37  jmp_t → AFTER_TURN_HEAD (template [0,1,0,0] finds [1,0,1,1]) ──
+  # == 33..37  jmp_t -> AFTER_TURN_HEAD (template [0,1,0,0] finds [1,0,1,1]) ===
   :jmp_t, :nop_0, :nop_1, :nop_0, :nop_0,
 
-  # ── 38      separator ───────────────────────────────────────────────────────
+  # == 38      separator =======================================================
   :push0,
 
-  # ── 39..42  TURN_LEFT_HEAD anchor [1,1,0,0] ────────────────────────────────
+  # == 39..42  TURN_LEFT_HEAD anchor [1,1,0,0] =================================
   :nop_1, :nop_1, :nop_0, :nop_0,
 
-  # ── 43      coin was 0 → turn left ─────────────────────────────────────────
+  # == 43      coin was 0 -> turn left =========================================
   :turn_left,
 
-  # ── 44      separator ───────────────────────────────────────────────────────
+  # == 44      separator =======================================================
   :push0,
 
-  # ── 45..48  AFTER_TURN_HEAD anchor [1,0,1,1] ───────────────────────────────
+  # == 45..48  AFTER_TURN_HEAD anchor [1,0,1,1] ================================
   :nop_1, :nop_0, :nop_1, :nop_1,
 
-  # ── 49..53  jmp_t → LOOP_HEAD (template [1,1,1,1] finds [0,0,0,0]) ─────────
+  # == 49..53  jmp_t -> LOOP_HEAD (template [1,1,1,1] finds [0,0,0,0]) =========
   :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
 
-  # ── 54      separator: keeps the ring wrap from extending the template ──────
+  # == 54      separator: keeps the ring wrap from extending the template ======
   :push0
 ]
 ```
@@ -412,13 +412,13 @@ The table below shows the state at the **end of each iteration** of the step loo
 ```
 Iter  slot[0] before decrement  Action              slot[0] after  jnz_t fires?
 ----  -------------------------  ------------------  -------------  ------------
-  1   8                          eat + move          7              yes (7 ≠ 0)
-  2   7                          eat + move          6              yes (6 ≠ 0)
-  3   6                          eat + move          5              yes (5 ≠ 0)
-  4   5                          eat + move          4              yes (4 ≠ 0)
-  5   4                          eat + move          3              yes (3 ≠ 0)
-  6   3                          eat + move          2              yes (2 ≠ 0)
-  7   2                          eat + move          1              yes (1 ≠ 0)
+  1   8                          eat + move          7              yes (7 != 0)
+  2   7                          eat + move          6              yes (6 != 0)
+  3   6                          eat + move          5              yes (5 != 0)
+  4   5                          eat + move          4              yes (4 != 0)
+  5   4                          eat + move          3              yes (3 != 0)
+  6   3                          eat + move          2              yes (2 != 0)
+  7   2                          eat + move          1              yes (1 != 0)
   8   1                          eat + move          0              no  (0 == 0)
 ```
 
@@ -436,10 +436,10 @@ ip    Instruction   Stack before   Stack after   slot[0]
 24    store         [0, 0]         []            0
 25    push0         []             [0]           0
 26    load          [0]            [0]           0
-27    jnz_t (test)  [0]            []            0     ← 0 == 0, falls through
+27    jnz_t (test)  [0]            []            0     <- 0 == 0, falls through
 32    push0         []             [0]           0
-33    turn_right    [0]            [0]           0     ← direction rotates
-34    jmp_t         [0]            [0]           0     ← jumps to ip 4
+33    turn_right    [0]            [0]           0     <- direction rotates
+34    jmp_t         [0]            [0]           0     <- jumps to ip 4
 ```
 
 ---

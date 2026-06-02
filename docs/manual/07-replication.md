@@ -18,16 +18,16 @@ Step 1: allocate(N)
         Parent pops N, asks World to reserve a child buffer of size N
         in the cell directly in front of the parent.
         World replies on the stack:
-          1  — buffer reserved (ok)
-          0  — front cell occupied / off-grid / already reserved (no_target)
+          1  - buffer reserved (ok)
+          0  - front cell occupied / off-grid / already reserved (no_target)
 
 Step 2: write_child(addr, op_int)   [repeated N times]
         Parent pops op_int (top), pops addr.
         World writes decode(op_int) into buffer[addr mod N].
         Mutations may occur here (substitution / insertion / deletion).
         World replies:
-          1  — written
-          0  — no pending buffer (write silently ignored)
+          1  - written
+          0  - no pending buffer (write silently ignored)
 
 Step 3: divide
         Parent asks World to spawn a child from the pending buffer
@@ -60,10 +60,10 @@ is a no-op — the parent still pays the 10.0 energy cost.
 **Stack effect:** `( n -- 1|0 )`
 
 ```
-pop  n        ← number of opcodes in the child codeome
+pop  n        <- number of opcodes in the child codeome
 send {:allocate, n, pos, dir} to World
-push 1        ← if the front cell is free and on-grid
-push 0        ← otherwise
+push 1        <- if the front cell is free and on-grid
+push 0        <- otherwise
 ```
 
 The cost formula from `Lenies.Codeome.Costs`:
@@ -94,11 +94,11 @@ does not — we will see what happens.
 **Stack effect:** `( addr op_int -- 1|0 )`
 
 ```
-pop  op_int   ← integer encoding of the opcode to write (top of stack)
-pop  addr     ← position in the child buffer (second from top)
+pop  op_int   <- integer encoding of the opcode to write (top of stack)
+pop  addr     <- position in the child buffer (second from top)
 send {:write_child, op_int, addr} to World
-push 1        ← written ok
-push 0        ← no pending buffer (allocation failed or not yet called)
+push 1        <- written ok
+push 0        <- no pending buffer (allocation failed or not yet called)
 ```
 
 The World:
@@ -211,43 +211,43 @@ why it fails motivates the forage cycle in section 7.9.
 
 ```elixir
 [
-  # ── pos 0..3   LOOP_HEAD anchor [1,1,1,1] ──────────────────────────────
+  # == pos 0..3   LOOP_HEAD anchor [1,1,1,1] ================================
   :nop_1, :nop_1, :nop_1, :nop_1,
 
-  # ── pos 4..6   get own size N, store in slot[0] ─────────────────────────
+  # == pos 4..6   get own size N, store in slot[0] ==========================
   :get_size, :push0, :store,
 
-  # ── pos 7..9   load N, request allocation ───────────────────────────────
+  # == pos 7..9   load N, request allocation ================================
   :push0, :load, :allocate,
 
-  # ── pos 10     drop the allocate reply (1 or 0) — we ignore it ──────────
+  # == pos 10     drop the allocate reply (1 or 0) - we ignore it ===========
   :drop,
 
-  # ── pos 11..13 init copy counter: slot[1] = 0 ───────────────────────────
+  # == pos 11..13 init copy counter: slot[1] = 0 ============================
   :push0, :push1, :store,
 
-  # ── pos 14..17 COPY_LOOP anchor [1,0,0,1] ───────────────────────────────
+  # == pos 14..17 COPY_LOOP anchor [1,0,0,1] ================================
   :nop_1, :nop_0, :nop_0, :nop_1,
 
-  # ── pos 18..20 read_self at counter (slot[1]) → op_int on stack ─────────
+  # == pos 18..20 read_self at counter (slot[1]) -> op_int on stack =========
   :push1, :load, :read_self,
 
-  # ── pos 21..25 write_child at counter ───────────────────────────────────
+  # == pos 21..25 write_child at counter ====================================
   # Stack before: [op_int]
   # write_child needs (addr op_int --), addr on second, op_int on top.
-  # Push counter (addr), then swap so [addr op_int] → write_child → drop reply.
+  # Push counter (addr), then swap so [addr op_int] -> write_child -> drop reply.
   :push1, :load, :swap, :write_child, :drop,
 
-  # ── pos 26..31 increment counter: slot[1] += 1 ──────────────────────────
+  # == pos 26..31 increment counter: slot[1] += 1 ===========================
   :push1, :load, :push1, :add, :push1, :store,
 
-  # ── pos 32..36 loop condition: N - counter → 0 means done ───────────────
+  # == pos 32..36 loop condition: N - counter -> 0 means done ===============
   :push0, :load, :push1, :load, :sub,
 
-  # ── pos 37..41 jnz_t back to COPY_LOOP ──────────────────────────────────
+  # == pos 37..41 jnz_t back to COPY_LOOP ===================================
   :jnz_t, :nop_0, :nop_1, :nop_1, :nop_0,
 
-  # ── pos 42     divide ────────────────────────────────────────────────────
+  # == pos 42     divide ====================================================
   :divide
 ]
 ```
@@ -280,14 +280,14 @@ anchor at pos 14–17. Correct.
 **Read and write (pos 18–25):** This is the heart of the copy loop.
 
 ```
-pos 18: push1        → stack: [1]
-pos 19: load         → pops 1, pushes slot[1] (the counter)  → stack: [counter]
-pos 20: read_self    → pops counter, pushes encode(codeome[counter mod 43]) → stack: [op_int]
-pos 21: push1        → stack: [op_int, 1]
-pos 22: load         → pops 1, pushes slot[1] (counter again) → stack: [op_int, counter]
-pos 23: swap         → stack: [counter, op_int]
-pos 24: write_child  → pops op_int (top), pops counter (addr), writes to child → pushes 1|0
-pos 25: drop         → discards the write_child reply
+pos 18: push1        -> stack: [1]
+pos 19: load         -> pops 1, pushes slot[1] (the counter)  -> stack: [counter]
+pos 20: read_self    -> pops counter, pushes encode(codeome[counter mod 43]) -> stack: [op_int]
+pos 21: push1        -> stack: [op_int, 1]
+pos 22: load         -> pops 1, pushes slot[1] (counter again) -> stack: [op_int, counter]
+pos 23: swap         -> stack: [counter, op_int]
+pos 24: write_child  -> pops op_int (top), pops counter (addr), writes to child -> pushes 1|0
+pos 25: drop         -> discards the write_child reply
 ```
 
 After pos 25 the stack is empty (as at the start of the loop body).
@@ -295,18 +295,18 @@ After pos 25 the stack is empty (as at the start of the loop body).
 **Increment counter (pos 26–31):**
 
 ```
-push1 + load    → push slot[1] (counter)        → stack: [counter]
-push1           → push 1                         → stack: [counter, 1]
-add             → pops both, pushes counter+1    → stack: [counter+1]
-push1 + store   → pops 1 (slot), pops counter+1, stores in slot[1]
+push1 + load    -> push slot[1] (counter)        -> stack: [counter]
+push1           -> push 1                         -> stack: [counter, 1]
+add             -> pops both, pushes counter+1    -> stack: [counter+1]
+push1 + store   -> pops 1 (slot), pops counter+1, stores in slot[1]
 ```
 
 **Loop condition (pos 32–36):**
 
 ```
-push0 + load    → push slot[0] (= N = 43)        → stack: [N]
-push1 + load    → push slot[1] (counter)          → stack: [N, counter]
-sub             → pops counter (top), pops N, pushes N - counter
+push0 + load    -> push slot[0] (= N = 43)        -> stack: [N]
+push1 + load    -> push slot[1] (counter)          -> stack: [N, counter]
+sub             -> pops counter (top), pops N, pushes N - counter
 ```
 
 When counter = N, `N - counter = 0`, so `jnz_t` does not jump and execution falls through
@@ -354,21 +354,21 @@ write_child  ( addr op_int -- 1|0 )
 To write opcode integer `X` into the child buffer at address `A`:
 
 ```elixir
-# Method 1 — push addr first, then op_int (natural order)
+# Method 1 - push addr first, then op_int (natural order)
 :push0        # or however you get A onto the stack
               # ... A is now on top
 :push1        # or however you get X
-              # stack: [A, X] — X on top, A on second
+              # stack: [A, X] - X on top, A on second
 :write_child  # pops X, pops A, writes codeome[A] = decode(X)
 :drop         # discard the reply
 ```
 
 ```elixir
-# Method 2 — op_int already on stack, push addr and swap
+# Method 2 - op_int already on stack, push addr and swap
               # ... op_int (X) is already on top from read_self
 :push1        # push counter (which is A)
-:load         # stack: [X, A] — A on top, X on second
-:swap         # stack: [A, X] — X on top, A on second
+:load         # stack: [X, A] - A on top, X on second
+:swap         # stack: [A, X] - X on top, A on second
 :write_child  # pops X, pops A
 :drop
 ```
@@ -393,7 +393,7 @@ of `eat`+`move` to replenish its energy before attempting the next replication.
 
 ```
 LOOP_HEAD:
-  get_size → store in slot[0]        (N = own codeome size)
+  get_size -> store in slot[0]        (N = own codeome size)
   push0; load; allocate              (request child buffer of size N)
   drop                               (ignore allocate reply)
   push0; push1; store                (init copy counter slot[1] = 0)
@@ -404,7 +404,7 @@ COPY_LOOP:
   drop                               (discard write_child reply)
   push1; load; push1; add; push1; store   (slot[1] += 1)
   push0; load; push1; load; sub     (N - counter)
-  jnz_t [0,1,1,0]                   (→ COPY_LOOP while counter < N)
+  jnz_t [0,1,1,0]                   (-> COPY_LOOP while counter < N)
 
   divide
 
@@ -412,9 +412,9 @@ COPY_LOOP:
 
 TURN_BLOCK:
   pushN; push1; push1; add; mod     (random r in 0..1 via r mod 2)
-  jz_t [template → TURN_LEFT]       (if r == 0 go left)
+  jz_t [template -> TURN_LEFT]       (if r == 0 go left)
   turn_right
-  jmp_t [template → AFTER_TURN]
+  jmp_t [template -> AFTER_TURN]
   [separator :push0]
 TURN_LEFT:
   turn_left
@@ -430,9 +430,9 @@ FORAGE_LOOP:
   move                               (move forward)
   push0; load; push1; sub; push0; store   (slot[0] -= 1)
   push0; load                        (push counter for check)
-  jnz_t [template → FORAGE_LOOP]    (loop if counter != 0)
+  jnz_t [template -> FORAGE_LOOP]    (loop if counter != 0)
 
-  jmp_t [template → LOOP_HEAD]      (back to top for next replication)
+  jmp_t [template -> LOOP_HEAD]      (back to top for next replication)
 ```
 
 ### Anchor table
@@ -476,69 +476,69 @@ Both separators are `:push0` and are never executed (control flow always jumps p
 
 ```elixir
 [
-  # ── pos 0..3    LOOP_HEAD anchor [1,1,1,1] ──────────────────────────────
+  # == pos 0..3    LOOP_HEAD anchor [1,1,1,1] ================================
   :nop_1, :nop_1, :nop_1, :nop_1,
 
-  # ── pos 4..6    get own size N, store in slot[0] ────────────────────────
+  # == pos 4..6    get own size N, store in slot[0] ==========================
   :get_size, :push0, :store,
 
-  # ── pos 7..9    load N, allocate child buffer ────────────────────────────
+  # == pos 7..9    load N, allocate child buffer =============================
   :push0, :load, :allocate,
 
-  # ── pos 10      drop allocate reply ─────────────────────────────────────
+  # == pos 10      drop allocate reply =======================================
   :drop,
 
-  # ── pos 11..13  init copy counter slot[1] = 0 ────────────────────────────
+  # == pos 11..13  init copy counter slot[1] = 0 =============================
   :push0, :push1, :store,
 
-  # ── pos 14..17  COPY_LOOP anchor [1,0,0,1] ──────────────────────────────
+  # == pos 14..17  COPY_LOOP anchor [1,0,0,1] ================================
   :nop_1, :nop_0, :nop_0, :nop_1,
 
-  # ── pos 18..20  read_self at counter ────────────────────────────────────
+  # == pos 18..20  read_self at counter ======================================
   :push1, :load, :read_self,
 
-  # ── pos 21..25  write_child at counter, drop reply ──────────────────────
+  # == pos 21..25  write_child at counter, drop reply ========================
   :push1, :load, :swap, :write_child, :drop,
 
-  # ── pos 26..31  slot[1] += 1 ─────────────────────────────────────────────
+  # == pos 26..31  slot[1] += 1 ==============================================
   :push1, :load, :push1, :add, :push1, :store,
 
-  # ── pos 32..36  loop condition: N - counter ──────────────────────────────
+  # == pos 32..36  loop condition: N - counter ===============================
   :push0, :load, :push1, :load, :sub,
 
-  # ── pos 37..41  jnz_t → COPY_LOOP while N - counter != 0 ────────────────
+  # == pos 37..41  jnz_t -> COPY_LOOP while N - counter != 0 =================
   :jnz_t, :nop_0, :nop_1, :nop_1, :nop_0,
 
-  # ── pos 42      divide ───────────────────────────────────────────────────
+  # == pos 42      divide ====================================================
   :divide,
 
-  # ── pos 43..47  random turn: pushN; (push1; push1; add) builds 2; mod ────
-  # Computes r = pushN mod 2 → 0 or 1
+  # == pos 43..47  random turn: pushN; (push1; push1; add) builds 2; mod =====
+  # Computes r = pushN mod 2 -> 0 or 1
   :pushN, :push1, :push1, :add, :mod,
 
-  # ── pos 48..52  jz_t → TURN_LEFT if r == 0 ──────────────────────────────
+  # == pos 48..52  jz_t -> TURN_LEFT if r == 0 ===============================
   :jz_t, :nop_1, :nop_0, :nop_1, :nop_0,
 
-  # ── pos 53      turn_right (r == 1 branch) ───────────────────────────────
+  # == pos 53      turn_right (r == 1 branch) ================================
   :turn_right,
 
-  # ── pos 54..58  jmp_t → AFTER_TURN ──────────────────────────────────────
+  # == pos 54..58  jmp_t -> AFTER_TURN =======================================
   :jmp_t, :nop_0, :nop_1, :nop_0, :nop_0,
 
-  # ── pos 59      separator (dead code) ────────────────────────────────────
+  # == pos 59      separator (dead code) =====================================
   :push0,
 
-  # ── pos 60..63  TURN_LEFT anchor [0,1,0,1] ──────────────────────────────
+  # == pos 60..63  TURN_LEFT anchor [0,1,0,1] ================================
   :nop_0, :nop_1, :nop_0, :nop_1,
 
-  # ── pos 64      turn_left (r == 0 branch) ────────────────────────────────
+  # == pos 64      turn_left (r == 0 branch) =================================
   :turn_left,
 
-  # ── pos 65..68  AFTER_TURN anchor [1,0,1,1] ─────────────────────────────
+  # == pos 65..68  AFTER_TURN anchor [1,0,1,1] ===============================
   :nop_1, :nop_0, :nop_1, :nop_1,
 
-  # ── pos 69..81  build K=64 on stack: push1, then 6 doublings ─────────────
-  # push1 → 1; dup+add → 2; dup+add → 4; ... dup+add → 64
+  # == pos 69..81  build K=64 on stack: push1, then 6 doublings ==============
+  # push1 -> 1; dup+add -> 2; dup+add -> 4; ... dup+add -> 64
   :push1,
   :dup, :add,
   :dup, :add,
@@ -547,28 +547,28 @@ Both separators are `:push0` and are never executed (control flow always jumps p
   :dup, :add,
   :dup, :add,
 
-  # ── pos 82..83  store 64 in slot[0] ─────────────────────────────────────
+  # == pos 82..83  store 64 in slot[0] =======================================
   :push0, :store,
 
-  # ── pos 84..87  FORAGE_LOOP anchor [1,1,0,1] ────────────────────────────
+  # == pos 84..87  FORAGE_LOOP anchor [1,1,0,1] ==============================
   :nop_1, :nop_1, :nop_0, :nop_1,
 
-  # ── pos 88..91  forage body: sense, drop, eat, move ──────────────────────
+  # == pos 88..91  forage body: sense, drop, eat, move =======================
   :sense_front, :drop, :eat, :move,
 
-  # ── pos 92..97  slot[0] -= 1 ─────────────────────────────────────────────
+  # == pos 92..97  slot[0] -= 1 ==============================================
   :push0, :load, :push1, :sub, :push0, :store,
 
-  # ── pos 98..99  load counter for jnz_t check ────────────────────────────
+  # == pos 98..99  load counter for jnz_t check ==============================
   :push0, :load,
 
-  # ── pos 100..104 jnz_t → FORAGE_LOOP while counter != 0 ─────────────────
+  # == pos 100..104 jnz_t -> FORAGE_LOOP while counter != 0 ==================
   :jnz_t, :nop_0, :nop_0, :nop_1, :nop_0,
 
-  # ── pos 105..109 jmp_t → LOOP_HEAD for next replication ──────────────────
+  # == pos 105..109 jmp_t -> LOOP_HEAD for next replication ==================
   :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
 
-  # ── pos 110     separator (dead code) ────────────────────────────────────
+  # == pos 110     separator (dead code) =====================================
   # Prevents template-extractor from reading jmp_t template + LOOP_HEAD anchor
   # through the ring wrap as a single 8-nop run.
   :push0

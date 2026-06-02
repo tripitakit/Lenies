@@ -267,26 +267,26 @@ K=128 forage iters per replication. Sustainable at default `eat_amount=20`.
 ```elixir
 # Forage body (appended to MinimalReplicator.replication_preamble() above)
 [
-  # ── pos 52..65: build K=128 (push1 + 7×(dup,add)) ────────────────────
+  # == pos 52..65: build K=128 (push1 + 7x(dup,add)) =====================
   :push1,
   :dup, :add, :dup, :add, :dup, :add, :dup, :add,
   :dup, :add, :dup, :add, :dup, :add,
 
-  # ── pos 66..67: K+1 = 129 (decrement-first loop overshoots by 1) ────
+  # == pos 66..67: K+1 = 129 (decrement-first loop overshoots by 1) ======
   :push1,
   :add,
 
-  # ── pos 68..69: store K+1 in slot[0] ─────────────────────────────────
+  # == pos 68..69: store K+1 in slot[0] ==================================
   :push0,
   :store,
 
-  # ── pos 70..73: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ─────────────
+  # == pos 70..73: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ==============
   :nop_0,
   :nop_1,
   :nop_0,
   :nop_1,
 
-  # ── pos 74..79: decrement slot[0] ────────────────────────────────────
+  # == pos 74..79: decrement slot[0] =====================================
   :push0,
   :load,
   :push1,
@@ -294,22 +294,22 @@ K=128 forage iters per replication. Sustainable at default `eat_amount=20`.
   :push0,
   :store,
 
-  # ── pos 80..81: load slot[0] for exit check ──────────────────────────
+  # == pos 80..81: load slot[0] for exit check ===========================
   :push0,
   :load,
 
-  # ── pos 82..86: jz_t LOOP_HEAD (template [n0,n0,n0,n0]) — exit forage ─
+  # == pos 82..86: jz_t LOOP_HEAD (template [n0,n0,n0,n0]) - exit forage =
   :jz_t,
   :nop_0,
   :nop_0,
   :nop_0,
   :nop_0,
 
-  # ── pos 87..88: forage body — eat, move ──────────────────────────────
+  # == pos 87..88: forage body - eat, move ===============================
   :eat,
   :move,
 
-  # ── pos 89..95: pushN; build 3; mod (pushN mod 3) ────────────────────
+  # == pos 89..95: pushN; build 3; mod (pushN mod 3) =====================
   :pushN,
   :push1,
   :push1,
@@ -318,76 +318,76 @@ K=128 forage iters per replication. Sustainable at default `eat_amount=20`.
   :add,
   :mod,
 
-  # ── pos 96: dup the result ───────────────────────────────────────────
+  # == pos 96: dup the result ============================================
   :dup,
 
-  # ── pos 97..101: jz_t NO_TURN_BR (template [n1,n1,n1,n0]) ───────────
+  # == pos 97..101: jz_t NO_TURN_BR (template [n1,n1,n1,n0]) =============
   :jz_t,
   :nop_1,
   :nop_1,
   :nop_1,
   :nop_0,
 
-  # ── pos 102..103: val - 1 (val was 1 or 2) ───────────────────────────
+  # == pos 102..103: val - 1 (val was 1 or 2) ============================
   :push1,
   :sub,
 
-  # ── pos 104..108: jz_t TURN_LEFT_BR (template [n1,n0,n0,n0]) ────────
+  # == pos 104..108: jz_t TURN_LEFT_BR (template [n1,n0,n0,n0]) ==========
   :jz_t,
   :nop_1,
   :nop_0,
   :nop_0,
   :nop_0,
 
-  # ── pos 109: turn_right (val was 2) ──────────────────────────────────
+  # == pos 109: turn_right (val was 2) ===================================
   :turn_right,
 
-  # ── pos 110..114: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ───
+  # == pos 110..114: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) =====
   :jmp_t,
   :nop_1,
   :nop_0,
   :nop_1,
   :nop_0,
 
-  # ── pos 115: separator (prevents 8-consecutive-nop misread) ──────────
+  # == pos 115: separator (prevents 8-consecutive-nop misread) ===========
   :push0,
 
-  # ── pos 116..119: NO_TURN_BR anchor [n0, n0, n0, n1] ─────────────────
+  # == pos 116..119: NO_TURN_BR anchor [n0, n0, n0, n1] ==================
   :nop_0,
   :nop_0,
   :nop_0,
   :nop_1,
 
-  # ── pos 120: drop remaining val (= 0) ────────────────────────────────
+  # == pos 120: drop remaining val (= 0) =================================
   :drop,
 
-  # ── pos 121..125: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ───
+  # == pos 121..125: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) =====
   :jmp_t,
   :nop_1,
   :nop_0,
   :nop_1,
   :nop_0,
 
-  # ── pos 126: separator ───────────────────────────────────────────────
+  # == pos 126: separator ================================================
   :push0,
 
-  # ── pos 127..130: TURN_LEFT_BR anchor [n0, n1, n1, n1] ──────────────
+  # == pos 127..130: TURN_LEFT_BR anchor [n0, n1, n1, n1] ================
   :nop_0,
   :nop_1,
   :nop_1,
   :nop_1,
 
-  # ── pos 131: turn_left ───────────────────────────────────────────────
+  # == pos 131: turn_left ================================================
   :turn_left,
 
-  # ── pos 132..136: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ───
+  # == pos 132..136: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) =====
   :jmp_t,
   :nop_1,
   :nop_0,
   :nop_1,
   :nop_0,
 
-  # ── pos 137: separator (final wrap protection) ───────────────────────
+  # == pos 137: separator (final wrap protection) ========================
   :push0
 ]
 ```
@@ -406,7 +406,7 @@ testbed when an AI agent is unsure whether a template will land correctly.
   :store,             # 2  slot[0] = 0
   :jmp_t,             # 3  jump opcode
   :nop_0,             # 4  template[0]
-  :nop_1,             # 5  template[1] → template = [:nop_0, :nop_1]
+  :nop_1,             # 5  template[1] -> template = [:nop_0, :nop_1]
 
   # fail path (executes only if no match is found)
   :push1,             # 6
@@ -419,7 +419,7 @@ testbed when an AI agent is unsure whether a template will land correctly.
 
   # success path (jump target)
   :nop_1,             # 13 complement[0]
-  :nop_0,             # 14 complement[1] → match starts at 13; IP lands at 15
+  :nop_0,             # 14 complement[1] -> match starts at 13; IP lands at 15
   :push1,             # 15
   :push0,             # 16
   :store,             # 17 slot[0] = 1 (proves jump succeeded)
@@ -451,124 +451,124 @@ to K=128). Sustainable at default `eat_amount=20`.
 ```elixir
 # Forage body (appended to MinimalReplicator.replication_preamble())
 [
-  # ── pos 52..66: build K=96 = 32 + 64 ────────────────────────────────
-  # Phase 1 (11 ops): push1 + 5×(dup, add) → stack=[32]
-  # Phase 2 (4 ops):  dup→[32,32]; dup→[32,32,32]; add→[32,64]; add→[96]
+  # == pos 52..66: build K=96 = 32 + 64 ==================================
+  # Phase 1 (11 ops): push1 + 5x(dup, add) -> stack=[32]
+  # Phase 2 (4 ops):  dup->[32,32]; dup->[32,32,32]; add->[32,64]; add->[96]
   :push1,
   :dup, :add, :dup, :add, :dup, :add, :dup, :add, :dup, :add,
   :dup, :dup, :add, :add,
 
-  # ── pos 67..68: K+1 = 97 ─────────────────────────────────────────────
+  # == pos 67..68: K+1 = 97 ==============================================
   :push1,
   :add,
 
-  # ── pos 69..70: store K+1 in slot[0] ─────────────────────────────────
+  # == pos 69..70: store K+1 in slot[0] ==================================
   :push0,
   :store,
 
-  # ── pos 71..77: init slot[3] := 0 ────────────────────────────────────
+  # == pos 71..77: init slot[3] := 0 =====================================
   # push0 [0]; push1+push1+push1 [0,1,1,1]; add [0,1,2]; add [0,3]; store
   :push0,
   :push1, :push1, :push1,
   :add, :add,
   :store,
 
-  # ── pos 78..81: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ─────────────
+  # == pos 78..81: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ==============
   :nop_0, :nop_1, :nop_0, :nop_1,
 
-  # ── pos 82..87: decrement slot[0] ────────────────────────────────────
+  # == pos 82..87: decrement slot[0] =====================================
   :push0, :load,
   :push1, :sub,
   :push0, :store,
 
-  # ── pos 88..89: load slot[0] for exit check ──────────────────────────
+  # == pos 88..89: load slot[0] for exit check ===========================
   :push0, :load,
 
-  # ── pos 90..94: jz_t LOOP_HEAD (template [n0,n0,n0,n0]) — exit ──────
+  # == pos 90..94: jz_t LOOP_HEAD (template [n0,n0,n0,n0]) - exit ========
   :jz_t,
   :nop_0, :nop_0, :nop_0, :nop_0,
 
-  # ── pos 95..97: sense_front; push1; add — value+1 ────────────────────
+  # == pos 95..97: sense_front; push1; add - value+1 =====================
   :sense_front,
   :push1,
   :add,
 
-  # ── pos 98..102: jz_t LENIE_HANDLER (template [n1,n1,n1,n0]) ────────
-  # Pops value+1. If was -1 (now 0) → jump to LENIE_HANDLER.
+  # == pos 98..102: jz_t LENIE_HANDLER (template [n1,n1,n1,n0]) ==========
+  # Pops value+1. If was -1 (now 0) -> jump to LENIE_HANDLER.
   :jz_t,
   :nop_1, :nop_1, :nop_1, :nop_0,
 
-  # ── pos 103..104: not prey — eat, move ───────────────────────────────
+  # == pos 103..104: not prey - eat, move ================================
   :eat,
   :move,
 
-  # ── pos 105..110: build slot idx 3 and load slot[3] ──────────────────
+  # == pos 105..110: build slot idx 3 and load slot[3] ===================
   :push1, :push1, :push1,
   :add, :add,
   :load,
 
-  # ── pos 111..112: counter + 1 ────────────────────────────────────────
+  # == pos 111..112: counter + 1 =========================================
   :push1,
   :add,
 
-  # ── pos 113: dup (value needed for parity check AND for storing) ─────
+  # == pos 113: dup (value needed for parity check AND for storing) ======
   :dup,
 
-  # ── pos 114..116: build 2 on stack ───────────────────────────────────
+  # == pos 114..116: build 2 on stack ====================================
   :push1, :push1,
   :add,
 
-  # ── pos 117: mod — (counter+1) mod 2 ─────────────────────────────────
+  # == pos 117: mod - (counter+1) mod 2 ==================================
   :mod,
 
-  # ── pos 118..122: jz_t TURN_LEFT_BR (template [n1,n0,n0,n0]) ────────
+  # == pos 118..122: jz_t TURN_LEFT_BR (template [n1,n0,n0,n0]) ==========
   :jz_t,
   :nop_1, :nop_0, :nop_0, :nop_0,
 
-  # ── pos 123: turn_right (mod was 1) ──────────────────────────────────
+  # == pos 123: turn_right (mod was 1) ===================================
   :turn_right,
 
-  # ── pos 124..129: store counter+1 → slot[3] ──────────────────────────
+  # == pos 124..129: store counter+1 -> slot[3] ==========================
   :push1, :push1, :push1,
   :add, :add,
   :store,
 
-  # ── pos 130..134: jmp_t FORAGE_LOOP_HEAD ─────────────────────────────
+  # == pos 130..134: jmp_t FORAGE_LOOP_HEAD ==============================
   :jmp_t,
   :nop_1, :nop_0, :nop_1, :nop_0,
 
-  # ── pos 135: separator ───────────────────────────────────────────────
+  # == pos 135: separator ================================================
   :push0,
 
-  # ── pos 136..139: LENIE_HANDLER anchor [n0, n0, n0, n1] ─────────────
+  # == pos 136..139: LENIE_HANDLER anchor [n0, n0, n0, n1] ===============
   :nop_0, :nop_0, :nop_0, :nop_1,
 
-  # ── pos 140: attack (no move, no turn — lock on) ─────────────────────
+  # == pos 140: attack (no move, no turn - lock on) ======================
   :attack,
 
-  # ── pos 141..145: jmp_t FORAGE_LOOP_HEAD ─────────────────────────────
+  # == pos 141..145: jmp_t FORAGE_LOOP_HEAD ==============================
   :jmp_t,
   :nop_1, :nop_0, :nop_1, :nop_0,
 
-  # ── pos 146: separator ───────────────────────────────────────────────
+  # == pos 146: separator ================================================
   :push0,
 
-  # ── pos 147..150: TURN_LEFT_BR anchor [n0, n1, n1, n1] ──────────────
+  # == pos 147..150: TURN_LEFT_BR anchor [n0, n1, n1, n1] ================
   :nop_0, :nop_1, :nop_1, :nop_1,
 
-  # ── pos 151: turn_left ───────────────────────────────────────────────
+  # == pos 151: turn_left ================================================
   :turn_left,
 
-  # ── pos 152..157: store counter+1 → slot[3] ──────────────────────────
+  # == pos 152..157: store counter+1 -> slot[3] ==========================
   :push1, :push1, :push1,
   :add, :add,
   :store,
 
-  # ── pos 158..162: jmp_t FORAGE_LOOP_HEAD ─────────────────────────────
+  # == pos 158..162: jmp_t FORAGE_LOOP_HEAD ==============================
   :jmp_t,
   :nop_1, :nop_0, :nop_1, :nop_0,
 
-  # ── pos 163: separator (final wrap protection) ───────────────────────
+  # == pos 163: separator (final wrap protection) ========================
   :push0
 ]
 ```
@@ -586,24 +586,24 @@ opcodes (§5.7), inject `:attack` before `:eat`, then append the plasmid:
 ```elixir
 # The Sprint plasmid (appended to a modified MR base)
 [
-  # ── pos 0..3: INTERCEPT_ANCHOR = FORAGE_LOOP_HEAD pattern [n0,n1,n0,n1] ──
+  # == pos 0..3: INTERCEPT_ANCHOR = FORAGE_LOOP_HEAD pattern [n0,n1,n0,n1] ==
   :nop_0,
   :nop_1,
   :nop_0,
   :nop_1,
 
-  # ── pos 4..5: extra step + extra eat (sprint) ────────────────────────
+  # == pos 4..5: extra step + extra eat (sprint) ============================
   :move,
   :eat,
 
-  # ── pos 6..10: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ───────
+  # == pos 6..10: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ===========
   :jmp_t,
   :nop_1,
   :nop_0,
   :nop_1,
   :nop_0,
 
-  # ── pos 11: trailing separator (CRITICAL) ───────────────────────────
+  # == pos 11: trailing separator (CRITICAL) ================================
   # Without this non-nop, the final jmp_t template merges with the host's
   # LOOP_HEAD nops across the codeome-ring wrap (8 nops read instead of
   # 4), so the bounce-back lands in replication setup instead of
@@ -633,43 +633,43 @@ K further would push toward starvation.
 ```elixir
 # Forage body (appended to MinimalReplicator.replication_preamble())
 [
-  # ── pos 52..62: build K=32 on stack (push1 + 5×(dup,add) = 32) ─────
+  # == pos 52..62: build K=32 on stack (push1 + 5x(dup,add) = 32) =======
   :push1,
   :dup, :add, :dup, :add, :dup, :add, :dup, :add, :dup, :add,
 
-  # ── pos 63..64: K+1 = 33 (decrement-first loop overshoots by 1) ─────
+  # == pos 63..64: K+1 = 33 (decrement-first loop overshoots by 1) ======
   :push1,
   :add,
 
-  # ── pos 65..66: store K+1 in slot[0] (forage counter) ────────────────
+  # == pos 65..66: store K+1 in slot[0] (forage counter) ================
   :push0,
   :store,
 
-  # ── pos 67..70: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ─────────────
+  # == pos 67..70: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] =============
   :nop_0, :nop_1, :nop_0, :nop_1,
 
-  # ── pos 71..76: decrement slot[0] (slot[0] -= 1) ─────────────────────
+  # == pos 71..76: decrement slot[0] (slot[0] -= 1) =====================
   :push0, :load,
   :push1, :sub,
   :push0, :store,
 
-  # ── pos 77..78: load slot[0] for exit check ──────────────────────────
+  # == pos 77..78: load slot[0] for exit check ==========================
   :push0, :load,
 
-  # ── pos 79..83: jz_t LOOP_HEAD (template [n0,n0,n0,n0]) — exit ──────
+  # == pos 79..83: jz_t LOOP_HEAD (template [n0,n0,n0,n0]) - exit =======
   :jz_t,
   :nop_0, :nop_0, :nop_0, :nop_0,
 
-  # ── pos 84..86: forage body — defend, eat, move ──────────────────────
+  # == pos 84..86: forage body - defend, eat, move ======================
   :defend,
   :eat,
   :move,
 
-  # ── pos 87..91: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ─────
+  # == pos 87..91: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ======
   :jmp_t,
   :nop_1, :nop_0, :nop_1, :nop_0,
 
-  # ── pos 92: separator — prevents template extractor from reading ────
+  # == pos 92: separator - prevents template extractor from reading =====
   # 4 nops of the final template + 4 nops of LOOP_HEAD across wrap.
   :push0
 ]
@@ -688,132 +688,132 @@ replication. Steady state ≈ +805 energy per generation cycle.
 
 ```elixir
 [
-  # ── pos 0..3: LOOP_HEAD anchor [n1, n1, n1, n1] ──────────────────────
+  # == pos 0..3: LOOP_HEAD anchor [n1, n1, n1, n1] =======================
   :nop_1, :nop_1, :nop_1, :nop_1,
 
-  # ── pos 4..6: get own size N, store in slot[0] ───────────────────────
+  # == pos 4..6: get own size N, store in slot[0] ========================
   :get_size,
   :push0,
   :store,
 
-  # ── pos 7..9: allocate child slot of size N in front cell ────────────
+  # == pos 7..9: allocate child slot of size N in front cell =============
   :push0,
   :load,
   :allocate,
 
-  # ── pos 10..14: jz_t → if allocate failed, jump to ABORT_TARGET ──────
+  # == pos 10..14: jz_t -> if allocate failed, jump to ABORT_TARGET ======
   :jz_t,
   :nop_0, :nop_0, :nop_1, :nop_1,
 
-  # ── pos 15..17: init copy counter slot[1] = 0 ────────────────────────
+  # == pos 15..17: init copy counter slot[1] = 0 =========================
   :push0,
   :push1,
   :store,
 
-  # ── pos 18..21: COPY_LOOP_HEAD anchor [n1, n0, n0, n1] ───────────────
+  # == pos 18..21: COPY_LOOP_HEAD anchor [n1, n0, n0, n1] ================
   :nop_1, :nop_0, :nop_0, :nop_1,
 
-  # ── pos 22..24: read opcode at counter ───────────────────────────────
+  # == pos 22..24: read opcode at counter ================================
   :push1,
   :load,
   :read_self,
 
-  # ── pos 25..29: write opcode to child at counter ─────────────────────
+  # == pos 25..29: write opcode to child at counter ======================
   :push1,
   :load,
   :swap,
   :write_child,
   :drop,
 
-  # ── pos 30..35: increment counter slot[1] += 1 ───────────────────────
+  # == pos 30..35: increment counter slot[1] += 1 ========================
   :push1, :load,
   :push1, :add,
   :push1, :store,
 
-  # ── pos 36..40: loop condition (N - (counter+1) != 0?) ───────────────
+  # == pos 36..40: loop condition (N - (counter+1) != 0?) ================
   :push0, :load,
   :push1, :load,
   :sub,
 
-  # ── pos 41..45: jnz_t → back to COPY_LOOP_HEAD if not done ───────────
+  # == pos 41..45: jnz_t -> back to COPY_LOOP_HEAD if not done ===========
   :jnz_t,
   :nop_0, :nop_1, :nop_1, :nop_0,
 
-  # ── pos 46: divide ───────────────────────────────────────────────────
+  # == pos 46: divide ====================================================
   :divide,
 
-  # ── pos 47..50: ABORT_TARGET anchor [n1, n1, n0, n0] ─────────────────
+  # == pos 47..50: ABORT_TARGET anchor [n1, n1, n0, n0] ==================
   # Landing pad for both jz_t (allocate failed) and fall-through after divide.
   :nop_1, :nop_1, :nop_0, :nop_0,
 
-  # ── pos 51..55: r := pushN; stack ← (r mod 2) ────────────────────────
+  # == pos 51..55: r := pushN; stack <- (r mod 2) ========================
   :pushN,
   :push1, :push1, :add,
   :mod,
 
-  # ── pos 56..60: jz_t → if 0, jump to TURN_LEFT_ANCHOR ────────────────
+  # == pos 56..60: jz_t -> if 0, jump to TURN_LEFT_ANCHOR ================
   :jz_t,
   :nop_1, :nop_0, :nop_1, :nop_1,
 
-  # ── pos 61: turn_right (executed when r mod 2 == 1) ─────────────────
+  # == pos 61: turn_right (executed when r mod 2 == 1) ===================
   :turn_right,
 
-  # ── pos 62..66: jmp_t → skip turn_left branch ────────────────────────
+  # == pos 62..66: jmp_t -> skip turn_left branch ========================
   :jmp_t,
   :nop_1, :nop_1, :nop_0, :nop_1,
 
-  # ── pos 67: separator (dead code, never executed) ────────────────────
+  # == pos 67: separator (dead code, never executed) =====================
   :push0,
 
-  # ── pos 68..71: TURN_LEFT_ANCHOR [n0, n1, n0, n0] ────────────────────
+  # == pos 68..71: TURN_LEFT_ANCHOR [n0, n1, n0, n0] =====================
   :nop_0, :nop_1, :nop_0, :nop_0,
 
-  # ── pos 72: turn_left (executed when r mod 2 == 0) ──────────────────
+  # == pos 72: turn_left (executed when r mod 2 == 0) ====================
   :turn_left,
 
-  # ── pos 73..76: SKIP_TURN_ANCHOR [n0, n0, n1, n0] ────────────────────
+  # == pos 73..76: SKIP_TURN_ANCHOR [n0, n0, n1, n0] =====================
   :nop_0, :nop_0, :nop_1, :nop_0,
 
-  # ── pos 77..91: build K=128 on stack ─────────────────────────────────
+  # == pos 77..91: build K=128 on stack ==================================
   :push1,
   :dup, :add, :dup, :add, :dup, :add, :dup, :add,
   :dup, :add, :dup, :add, :dup, :add,
 
-  # ── pos 92..93: store K in slot[0] ───────────────────────────────────
+  # == pos 92..93: store K in slot[0] ====================================
   :push0,
   :store,
 
-  # ── pos 94..97: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ─────────────
+  # == pos 94..97: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ==============
   :nop_0, :nop_1, :nop_0, :nop_1,
 
-  # ── pos 98..101: forage body — sense, drop result, eat, move ─────────
+  # == pos 98..101: forage body - sense, drop result, eat, move ==========
   :sense_front,
   :drop,
   :eat,
   :move,
 
-  # ── pos 102..103: try to infect a neighbor; drop the result ─────────
+  # == pos 102..103: try to infect a neighbor; drop the result ===========
   :conjugate,
   :drop,
 
-  # ── pos 104..109: counter := counter - 1 (slot[0]) ───────────────────
+  # == pos 104..109: counter := counter - 1 (slot[0]) ====================
   :push0, :load,
   :push1, :sub,
   :push0, :store,
 
-  # ── pos 110..111: load counter for check ─────────────────────────────
+  # == pos 110..111: load counter for check ==============================
   :push0,
   :load,
 
-  # ── pos 112..116: jnz_t → back to FORAGE_LOOP_HEAD if counter != 0 ───
+  # == pos 112..116: jnz_t -> back to FORAGE_LOOP_HEAD if counter != 0 ===
   :jnz_t,
   :nop_1, :nop_0, :nop_1, :nop_0,
 
-  # ── pos 117..121: jmp_t → back to LOOP_HEAD to retry replication ─────
+  # == pos 117..121: jmp_t -> back to LOOP_HEAD to retry replication =====
   :jmp_t,
   :nop_0, :nop_0, :nop_0, :nop_0,
 
-  # ── pos 122: separator (dead code, never executed) ───────────────────
+  # == pos 122: separator (dead code, never executed) ====================
   :push0
 ]
 ```

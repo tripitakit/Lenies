@@ -155,20 +155,20 @@ the real forage body (sense, eat, move) runs next — then its `jnz_t` diverts
 into the plasmid again. The result is a tight cycle:
 
 ```
-   ┌─────────────────────────────────────────────┐
-   │  real forage body: sense_front, eat, move    │
-   │  decrement counter                            │
-   │  jnz_t FORAGE_LOOP_HEAD  ───────────┐         │
-   └─────────────────────────────────────│─────────┘
-                                          │ (counter ≠ 0)
-                                          ▼
-                          ┌──────────────────────────────┐
-                          │  PLASMID (appended at tail)    │
-                          │  [0,1,0,1] anchor              │
-                          │  …behaviour…                   │
-                          │  jmp_t FORAGE_LOOP_HEAD  ───────┘
-                          └────────────────────────────────┘
-                                  (bounces to the real anchor at 94)
+   +============================================+
+   |  real forage body: sense_front, eat, move  |
+   |  decrement counter                         |
+   |  jnz_t FORAGE_LOOP_HEAD  ============+     |
+   +======================================|=====+
+                                          |  (counter != 0)
+                                          v
+                        +==================================+
+                        |  PLASMID (appended at tail)      |
+                        |  [0,1,0,1] anchor                |
+                        |  ...behaviour...                 |
+                        |  jmp_t FORAGE_LOOP_HEAD  ========+
+                        +==================================+
+                              (bounces to the real anchor at 94)
 ```
 
 The behaviour fires once per forage step — frequent, and therefore *visible*.
@@ -209,35 +209,35 @@ producing the jittery, space-filling walk you see from a seeded Minimal
 Replicator. It is 32 opcodes:
 
 ```
-# ── pos 0..3: INTERCEPT anchor = FORAGE_LOOP_HEAD pattern [0,1,0,1] ──
+# == pos 0..3: INTERCEPT anchor = FORAGE_LOOP_HEAD pattern [0,1,0,1] ============
 :nop_0, :nop_1, :nop_0, :nop_1,
 
-# ── pos 4..8: push a random bit — pushN mod 2 ──
+# == pos 4..8: push a random bit - pushN mod 2 ==================================
 :pushN, :push1, :push1, :add, :mod,
 
-# ── pos 9..13: jz_t TURN_LEFT_BR (template [1,0,0,0] → anchor [0,1,1,1]) ──
+# == pos 9..13: jz_t TURN_LEFT_BR (template [1,0,0,0] -> anchor [0,1,1,1]) ======
 :jz_t, :nop_1, :nop_0, :nop_0, :nop_0,
 
-# ── pos 14: turn_right (taken when the random bit was 1) ──
+# == pos 14: turn_right (taken when the random bit was 1) =======================
 :turn_right,
 
-# ── pos 15..19: jmp_t FORAGE_LOOP_HEAD (template [1,0,1,0]) ──
+# == pos 15..19: jmp_t FORAGE_LOOP_HEAD (template [1,0,1,0]) ====================
 :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
 
-# ── pos 20: separator (keeps the template above from merging into the anchor) ──
+# == pos 20: separator (keeps the template above from merging into the anchor) ==
 :push0,
 
-# ── pos 21..24: TURN_LEFT_BR anchor [0,1,1,1] ──
+# == pos 21..24: TURN_LEFT_BR anchor [0,1,1,1] ==================================
 :nop_0, :nop_1, :nop_1, :nop_1,
 
-# ── pos 25: turn_left (taken when the random bit was 0) ──
+# == pos 25: turn_left (taken when the random bit was 0) ========================
 :turn_left,
 
-# ── pos 26..30: jmp_t FORAGE_LOOP_HEAD (template [1,0,1,0]) ──
+# == pos 26..30: jmp_t FORAGE_LOOP_HEAD (template [1,0,1,0]) ====================
 :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
 
-# ── pos 31: trailing separator (mandatory — breaks the nop run across
-#            the ring wrap into LOOP_HEAD; never executed) ──
+# == pos 31: trailing separator (mandatory - breaks the nop run across
+#            the ring wrap into LOOP_HEAD; never executed) ==
 :push0
 ```
 
@@ -270,16 +270,16 @@ iteration, so it covers ground roughly twice as fast. It needs no internal
 branch, so it is only 12 opcodes:
 
 ```
-# ── pos 0..3: INTERCEPT anchor = FORAGE_LOOP_HEAD pattern [0,1,0,1] ──
+# == pos 0..3: INTERCEPT anchor = FORAGE_LOOP_HEAD pattern [0,1,0,1] ==
 :nop_0, :nop_1, :nop_0, :nop_1,
 
-# ── pos 4..5: an extra step and an extra bite ──
+# == pos 4..5: an extra step and an extra bite ========================
 :move, :eat,
 
-# ── pos 6..10: jmp_t FORAGE_LOOP_HEAD (template [1,0,1,0]) ──
+# == pos 6..10: jmp_t FORAGE_LOOP_HEAD (template [1,0,1,0]) ===========
 :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
 
-# ── pos 11: trailing separator (mandatory) ──
+# == pos 11: trailing separator (mandatory) ===========================
 :push0
 ```
 
@@ -331,16 +331,16 @@ The simplest payload that visibly changes movement is a single turn. Eleven
 opcodes (ten of behaviour plus the mandatory trailing separator):
 
 ```
-# ── pos 0..3: FORAGE_LOOP_HEAD anchor [0,1,0,1] ──
+# == pos 0..3: FORAGE_LOOP_HEAD anchor [0,1,0,1] ============
 :nop_0, :nop_1, :nop_0, :nop_1,
 
-# ── pos 4: the trait — one left turn ──
+# == pos 4: the trait - one left turn =======================
 :turn_left,
 
-# ── pos 5..9: jmp_t FORAGE_LOOP_HEAD (template [1,0,1,0]) ──
+# == pos 5..9: jmp_t FORAGE_LOOP_HEAD (template [1,0,1,0]) ==
 :jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
 
-# ── pos 10: trailing separator (mandatory — rule 4) ──
+# == pos 10: trailing separator (mandatory - rule 4) ========
 :push0
 ```
 
