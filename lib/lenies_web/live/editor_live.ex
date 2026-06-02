@@ -662,7 +662,7 @@ defmodule LeniesWeb.EditorLive do
           class="text-xs px-2 py-0.5 border border-amber-500/60 text-amber-200 disabled:opacity-40 disabled:cursor-not-allowed"
           title="Open codeome stepper (debug)"
         >
-          🐞 Debug
+          Debug
         </button>
 
         <button

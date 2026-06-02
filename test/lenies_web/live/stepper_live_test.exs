@@ -32,14 +32,14 @@ defmodule LeniesWeb.StepperLiveTest do
 
   test "Debug button is visible on the editor", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/sandbox/editor/new")
-    assert html =~ "🐞 Debug"
+    assert html =~ "Debug"
   end
 
   test "clicking Debug opens the stepper modal with all 5 panels", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
     populate_buffer(view)
 
-    html = view |> element("button", "🐞 Debug") |> render_click()
+    html = view |> element("button", "Debug") |> render_click()
 
     assert html =~ "Codeome Stepper"
     assert html =~ "Step #0"
@@ -54,7 +54,7 @@ defmodule LeniesWeb.StepperLiveTest do
   test "click Step advances IP", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
     populate_buffer(view)
-    view |> element("button", "🐞 Debug") |> render_click()
+    view |> element("button", "Debug") |> render_click()
 
     html = view |> element("button", "▶ Step") |> render_click()
 
@@ -64,7 +64,7 @@ defmodule LeniesWeb.StepperLiveTest do
   test "click on codeome row toggles a breakpoint", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
     populate_buffer(view)
-    view |> element("button", "🐞 Debug") |> render_click()
+    view |> element("button", "Debug") |> render_click()
 
     html = view |> element(".stepper-codeome-row[phx-value-ip='3']") |> render_click()
 
@@ -86,7 +86,7 @@ defmodule LeniesWeb.StepperLiveTest do
   test "click ✕ closes the modal", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
     populate_buffer(view)
-    view |> element("button", "🐞 Debug") |> render_click()
+    view |> element("button", "Debug") |> render_click()
 
     view |> element("button.stepper-close") |> render_click()
     # The component sends an info message to the parent LiveView; re-render
@@ -98,7 +98,7 @@ defmodule LeniesWeb.StepperLiveTest do
   test "selecting a built-in seed enters place-seed mode", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
     populate_buffer(view)
-    view |> element("button", "🐞 Debug") |> render_click()
+    view |> element("button", "Debug") |> render_click()
 
     html =
       view
@@ -111,7 +111,7 @@ defmodule LeniesWeb.StepperLiveTest do
   test "selecting (none) exits place-seed mode", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
     populate_buffer(view)
-    view |> element("button", "🐞 Debug") |> render_click()
+    view |> element("button", "Debug") |> render_click()
 
     view
     |> element("form[phx-change='select_seed']")
@@ -128,7 +128,7 @@ defmodule LeniesWeb.StepperLiveTest do
   test "click Run transitions to running status and starts the tick loop", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
     populate_buffer(view)
-    view |> element("button", "🐞 Debug") |> render_click()
+    view |> element("button", "Debug") |> render_click()
 
     # Set energy low so the run halts quickly and we don't loop forever.
     # The stepper starts with default 5000 energy; the 10-op buffer is cheap

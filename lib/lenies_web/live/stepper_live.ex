@@ -92,7 +92,7 @@ defmodule LeniesWeb.StepperLive do
       <div class="stepper-modal" role="dialog" aria-labelledby="stepper-title">
         <header class="stepper-header">
           <div class="stepper-header-title">
-            <span id="stepper-title">🐞 Codeome Stepper</span>
+            <span id="stepper-title">Codeome Stepper</span>
             <span class="stepper-step-counter">
               Step #{@session.step_count} · {status_label(@session.status)}
             </span>
@@ -128,7 +128,7 @@ defmodule LeniesWeb.StepperLive do
             <% end %>
           </div>
           <form phx-change="select_seed" phx-target={@myself} class="stepper-seed-picker">
-            <label class="stepper-seed-label">🎯 Place:</label>
+            <label class="stepper-seed-label">Place:</label>
             <select name="value" class="stepper-seed-select">
               <option value="">(none)</option>
               <optgroup label="Built-in">
