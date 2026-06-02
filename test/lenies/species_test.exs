@@ -118,4 +118,25 @@ defmodule Lenies.SpeciesTest do
     # spawned via Lenie.start_link directly in a test).
     assert h2.seed_origin == nil
   end
+
+  test "aggregate/1 reports plasmid_count = number of distinct carried plasmids", %{handle: h} do
+    :ets.insert(
+      h.tables.lenies,
+      {"p",
+       %{
+         id: "p",
+         codeome_hash: "hP",
+         lineage: {nil, 0},
+         plasmids: [Lenies.Plasmid.new([:nop_0]), Lenies.Plasmid.new([:nop_1, :nop_1])]
+       }}
+    )
+
+    :ets.insert(h.tables.lenies, {"q", %{id: "q", codeome_hash: "hQ", lineage: {nil, 0}}})
+
+    species = Species.aggregate(h)
+
+    assert Enum.find(species, &(&1.hash == "hP")).plasmid_count == 2
+    # No :plasmids key → 0, not a crash.
+    assert Enum.find(species, &(&1.hash == "hQ")).plasmid_count == 0
+  end
 end
