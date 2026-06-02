@@ -190,7 +190,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
             navigate={~p"/sandbox/editor/new"}
             class="px-2 py-0.5 border border-cyan-500/60 text-cyan-200 hover:bg-cyan-900/40 whitespace-nowrap"
           >
-            + New Seed
+            + New
           </.link>
 
           <button
@@ -203,36 +203,29 @@ defmodule LeniesWeb.ControlsPanelComponent do
           </button>
         </div>
 
-        <form
-          phx-submit="spawn_seed"
-          phx-target={@myself}
-          class="flex flex-col gap-1.5 border border-cyan-500/20 p-2"
-        >
-          <h3 class="text-[10px]">▸ Seed</h3>
-          <label class="flex items-center gap-2 text-[11px]">
-            <span class="opacity-70 w-12">type</span>
-            <select name="seed_id" class="flex-1 text-xs">
-              <%= for s <- Lenies.Seeds.all() do %>
-                <option value={Atom.to_string(s.id)}>{s.name}</option>
-              <% end %>
-              <%= for s <- @custom_seeds do %>
-                <option value={"custom:" <> to_string(s.id)}>★ {s.name}</option>
-              <% end %>
-            </select>
-            <button
-              id="spawn-btn"
-              phx-hook="ActionFeedback"
-              data-fx="success"
-              type="submit"
-              disabled={@at_spawn_cap}
-              class={[
-                "ml-auto text-xs px-3 py-1 border border-cyan-500/60 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/50",
-                @at_spawn_cap && "opacity-50 cursor-not-allowed"
-              ]}
-            >
-              Spawn
-            </button>
-          </label>
+        <form phx-submit="spawn_seed" phx-target={@myself} class="flex items-center gap-2 text-[11px]">
+          <span class="text-[9px] tracking-widest opacity-50 w-9">SEED</span>
+          <select name="seed_id" class="flex-1 text-xs">
+            <%= for s <- Lenies.Seeds.all() do %>
+              <option value={Atom.to_string(s.id)}>{s.name}</option>
+            <% end %>
+            <%= for s <- @custom_seeds do %>
+              <option value={"custom:" <> to_string(s.id)}>★ {s.name}</option>
+            <% end %>
+          </select>
+          <button
+            id="spawn-btn"
+            phx-hook="ActionFeedback"
+            data-fx="success"
+            type="submit"
+            disabled={@at_spawn_cap}
+            class={[
+              "text-xs px-3 py-1 border border-cyan-500/60 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/50",
+              @at_spawn_cap && "opacity-50 cursor-not-allowed"
+            ]}
+          >
+            Spawn
+          </button>
         </form>
 
         <%= if @show_custom_manage do %>
@@ -262,42 +255,32 @@ defmodule LeniesWeb.ControlsPanelComponent do
         <form
           phx-submit="snapshot_action"
           phx-target={@myself}
-          class="flex flex-col gap-1.5 border border-violet-500/20 p-2"
+          class="flex items-center gap-2 text-[11px]"
         >
-          <h3 class="text-[10px]">▸ Snapshot</h3>
-          <label class="flex items-center gap-2 text-[11px]">
-            <span class="opacity-70 w-12">name</span>
-            <input
-              type="text"
-              name="snapshot_name"
-              value="default"
-              class="flex-1 text-xs"
-            />
-          </label>
-          <div class="flex gap-1">
-            <button
-              id="snapshot-save-btn"
-              phx-hook="ActionFeedback"
-              data-fx="success"
-              type="submit"
-              name="action"
-              value="save"
-              class="flex-1 text-xs px-2 py-1 border border-violet-500/60 bg-violet-900/30 text-violet-200 hover:bg-violet-800/50"
-            >
-              Save
-            </button>
-            <button
-              id="snapshot-restore-btn"
-              phx-hook="ActionFeedback"
-              data-fx="info"
-              type="submit"
-              name="action"
-              value="restore"
-              class="flex-1 text-xs px-2 py-1 border border-violet-500/60 bg-violet-900/30 text-violet-200 hover:bg-violet-800/50"
-            >
-              Restore
-            </button>
-          </div>
+          <span class="text-[9px] tracking-widest opacity-50 w-9">SNAP</span>
+          <input type="text" name="snapshot_name" value="default" class="flex-1 text-xs" />
+          <button
+            id="snapshot-save-btn"
+            phx-hook="ActionFeedback"
+            data-fx="success"
+            type="submit"
+            name="action"
+            value="save"
+            class="text-xs px-2 py-1 border border-violet-500/60 bg-violet-900/30 text-violet-200 hover:bg-violet-800/50"
+          >
+            Save
+          </button>
+          <button
+            id="snapshot-restore-btn"
+            phx-hook="ActionFeedback"
+            data-fx="info"
+            type="submit"
+            name="action"
+            value="restore"
+            class="text-xs px-2 py-1 border border-violet-500/60 bg-violet-900/30 text-violet-200 hover:bg-violet-800/50"
+          >
+            Restore
+          </button>
         </form>
         <%= if @snapshot_status do %>
           <p class="text-[11px] text-violet-300 opacity-90 border-l-2 border-violet-500 pl-2">
