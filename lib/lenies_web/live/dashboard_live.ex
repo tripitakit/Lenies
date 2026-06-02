@@ -137,7 +137,7 @@ defmodule LeniesWeb.DashboardLive do
     >
       <Layouts.flash_group flash={@flash} />
       <header class="flex items-center justify-between px-2 shrink-0">
-        <h1 class="text-lg font-bold tracking-widest" title="Lenies · Sandbox">⬡</h1>
+        <h1 class="text-lg font-bold tracking-widest">⬡ LENIES · SANDBOX</h1>
         <% latest = @latest || %{population: 0, total_resource: 0, total_carcass: 0} %>
         <div class="flex items-center gap-4 text-xs">
           <span class="flex items-center gap-1.5">
