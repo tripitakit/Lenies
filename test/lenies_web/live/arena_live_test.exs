@@ -135,4 +135,16 @@ defmodule LeniesWeb.ArenaLiveTest do
       assert conn.status == 200
     end
   end
+
+  describe "canvas layers (no toggles)" do
+    test "canvas always renders all three layers", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/arena")
+      html = render(view)
+      assert html =~ ~r/data-show-lenies="true"/
+      assert html =~ ~r/data-show-resource="true"/
+      assert html =~ ~r/data-show-carcass="true"/
+      refute html =~ "phx-value-layer"
+      refute has_element?(view, "input[phx-click='toggle_layer']")
+    end
+  end
 end

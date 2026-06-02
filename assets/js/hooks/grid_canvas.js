@@ -1,7 +1,9 @@
 // GridCanvas hook: renders the world's 4 layers (lenies, resource,
 // carcass, carcass_hue) on the dashboard's full-height canvas, with:
 //
-//   - data-show-{lenies,resource,carcass} : per-layer visibility toggles
+//   - data-show-{lenies,resource,carcass} : which layers to draw (always true;
+//                                         both dashboards hardcode them — no
+//                                         user toggle exists)
 //   - data-highlight-hue                  : when > 0, dim every cell whose
 //                                           species byte ≠ highlight-hue
 //   - mouse wheel                         : zoom in/out at the cursor
@@ -165,10 +167,10 @@ const GridCanvas = {
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   },
 
-  // LiveView morphs data-highlight-hue and the data-show-* attributes
-  // when the user toggles a layer or selects a species. Re-render with
-  // the cached payload so the change takes effect immediately without
-  // waiting for the next server frame.
+  // LiveView morphs data-highlight-hue on species selection. The
+  // data-show-* attributes are static (always true). Re-render with the
+  // cached payload so the highlight change takes effect immediately
+  // without waiting for the next server frame.
   updated() {
     if (this.lastPayload) this.renderFrame();
   },
