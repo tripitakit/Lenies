@@ -276,6 +276,7 @@ defmodule LeniesWeb.StepperLive do
                   phx-value-ip={idx}
                   phx-target={@myself}
                 >
+                  <span class="stepper-codeome-bp-dot"></span>
                   <span class="stepper-codeome-pos">
                     {String.pad_leading(Integer.to_string(idx), 3, "0")}
                   </span>

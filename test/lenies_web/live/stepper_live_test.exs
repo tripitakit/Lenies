@@ -69,7 +69,19 @@ defmodule LeniesWeb.StepperLiveTest do
     html = view |> element(".stepper-codeome-row[phx-value-ip='3']") |> render_click()
 
     assert html =~ "stepper-codeome-bp"
+
+    # Every row carries a dedicated breakpoint-gutter span (the first grid
+    # track), so toggling a breakpoint fills that reserved cell instead of
+    # injecting an extra grid item that would shift the opcode column off the
+    # right edge of the panel. Invariant: one bp-dot + one pos + one op per row.
+    dots = count(html, "stepper-codeome-bp-dot")
+    assert dots > 0
+    assert count(html, "stepper-codeome-pos") == dots
+    assert count(html, "stepper-codeome-op") == dots
   end
+
+  defp count(haystack, needle),
+    do: haystack |> String.split(needle) |> length() |> Kernel.-(1)
 
   test "click ✕ closes the modal", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
