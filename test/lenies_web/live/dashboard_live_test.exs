@@ -111,20 +111,15 @@ defmodule LeniesWeb.DashboardLiveTest do
     refute Lenies.Worlds.paused?(world_id)
   end
 
-  test "toggling layer changes data attribute", %{conn: conn} do
+  test "canvas always renders all three layers (no toggles)", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/sandbox")
-
-    # When true, Phoenix renders boolean attrs as empty-string (e.g. data-show-lenies="")
-    html_before = render(view)
-    assert html_before =~ ~r/data-show-lenies=""/
-
-    view
-    |> element("input[phx-value-layer='lenies']")
-    |> render_click()
-
-    # When false, the attribute is omitted entirely
-    html_after = render(view)
-    refute html_after =~ ~r/data-show-lenies/
+    html = render(view)
+    assert html =~ ~r/data-show-lenies="true"/
+    assert html =~ ~r/data-show-resource="true"/
+    assert html =~ ~r/data-show-carcass="true"/
+    # The toggle controls are gone.
+    refute html =~ "phx-value-layer"
+    refute has_element?(view, "input[phx-click='toggle_layer']")
   end
 
   test "Species panel shows top-N species table from aggregator", %{conn: conn, handle: handle} do
@@ -553,21 +548,6 @@ defmodule LeniesWeb.DashboardLiveTest do
   end
 
   describe "event payload resilience — malformed inputs are no-ops" do
-    test "toggle_layer with unknown layer string survives", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/sandbox")
-      render_hook(view, "toggle_layer", %{"layer" => "bogus"})
-      assert render(view) =~ "id=\"grid-canvas\""
-    end
-
-    test "toggle_layer with valid layer still toggles", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/sandbox")
-      html_before = render(view)
-      assert html_before =~ ~r/data-show-lenies=""/
-      render_hook(view, "toggle_layer", %{"layer" => "lenies"})
-      html_after = render(view)
-      refute html_after =~ ~r/data-show-lenies/
-    end
-
     test "select_lenie_at_cell with non-integer coords survives", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/sandbox")
       render_hook(view, "select_lenie_at_cell", %{"x" => "5", "y" => 0})

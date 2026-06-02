@@ -62,7 +62,6 @@ defmodule LeniesWeb.DashboardLive do
       |> assign(:world_handle, world_handle)
       |> assign(:grid, grid)
       |> assign(:tick_count, 0)
-      |> assign(:layers_visible, %{lenies: true, resource: true, carcass: true})
       |> assign(:throttle_counter, 0)
       |> assign(:latest, nil)
       |> assign(:species, species)
@@ -175,9 +174,9 @@ defmodule LeniesWeb.DashboardLive do
           >
           </div>
           <%!-- phx-update="ignore" keeps morphdom from patching the canvas
-                BITMAP; the element's own attributes (data-show-*,
-                data-highlight-hue) are still morphed on every render so
-                the hook's updated() picks them up immediately. --%>
+                BITMAP; data-highlight-hue is still morphed on every render so
+                the hook's updated() picks it up immediately. data-show-* are
+                hardcoded true (all layers always visible). --%>
           <div class="dashboard-map-frame">
             <canvas
               id="grid-canvas"
@@ -185,47 +184,15 @@ defmodule LeniesWeb.DashboardLive do
               phx-update="ignore"
               data-grid-width={elem(@grid, 0)}
               data-grid-height={elem(@grid, 1)}
-              data-show-lenies={@layers_visible.lenies}
-              data-show-resource={@layers_visible.resource}
-              data-show-carcass={@layers_visible.carcass}
+              data-show-lenies="true"
+              data-show-resource="true"
+              data-show-carcass="true"
               data-highlight-hue={highlight_hue(handle_from_assigns(assigns), @selected_hash)}
               width={elem(@grid, 0) * 2}
               height={elem(@grid, 1) * 2}
               class="dashboard-map-canvas"
             >
             </canvas>
-          </div>
-          <div class="flex gap-3 text-xs">
-            <label class="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                phx-click="toggle_layer"
-                phx-value-layer="lenies"
-                checked={@layers_visible.lenies}
-                class="accent-cyan-400"
-              />
-              <span>Lenies</span>
-            </label>
-            <label class="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                phx-click="toggle_layer"
-                phx-value-layer="resource"
-                checked={@layers_visible.resource}
-                class="accent-emerald-400"
-              />
-              <span>Resources</span>
-            </label>
-            <label class="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                phx-click="toggle_layer"
-                phx-value-layer="carcass"
-                checked={@layers_visible.carcass}
-                class="accent-rose-400"
-              />
-              <span>Detritus</span>
-            </label>
           </div>
           <p class="dashboard-map-hint">
             scroll: zoom · drag: pan · click: focus · dblclick on a Lenie: edit codeome
@@ -442,15 +409,6 @@ defmodule LeniesWeb.DashboardLive do
 
     {:noreply, socket}
   end
-
-  def handle_event("toggle_layer", %{"layer" => layer}, socket)
-      when layer in ~w(lenies resource carcass) do
-    layer_atom = String.to_existing_atom(layer)
-    new_visible = Map.update!(socket.assigns.layers_visible, layer_atom, &(!&1))
-    {:noreply, assign(socket, :layers_visible, new_visible)}
-  end
-
-  def handle_event("toggle_layer", _params, socket), do: {:noreply, socket}
 
   def handle_event("sort_species", %{"col" => col}, socket) do
     case Map.fetch(@sortable_columns, col) do
