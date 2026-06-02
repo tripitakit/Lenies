@@ -1163,6 +1163,15 @@
   height: 18px;
   display: block;
 }
+.splash-footer-sep {
+  margin: 0 0.625rem;
+  color: rgba(148, 163, 184, 0.4);
+}
+.splash-footer-version {
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
 
 /* ============================================================ */
 /* Codeome Stepper modal — full-screen overlay debugger.        */
