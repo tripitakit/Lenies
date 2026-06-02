@@ -146,6 +146,35 @@ defmodule LeniesWeb.DashboardLiveTest do
     assert html =~ ~r/hashA[\s\S]+2/
   end
 
+  test "species table shows the plasmid count, not a hash list", %{conn: conn, handle: handle} do
+    :ets.insert(
+      handle.tables.lenies,
+      {"withp",
+       %{
+         id: "withp",
+         codeome_hash: "PLASMID-SP",
+         lineage: {nil, 0},
+         plasmids: [Lenies.Plasmid.new([:nop_0]), Lenies.Plasmid.new([:nop_1])]
+       }}
+    )
+
+    {:ok, _view, html} = live(conn, ~p"/sandbox")
+
+    assert html =~ "+ 2 plasmids"
+  end
+
+  test "species table omits the plasmid annotation when there are none",
+       %{conn: conn, handle: handle} do
+    :ets.insert(
+      handle.tables.lenies,
+      {"nop", %{id: "nop", codeome_hash: "NOPLASMID-SP", lineage: {nil, 0}}}
+    )
+
+    {:ok, _view, html} = live(conn, ~p"/sandbox")
+
+    refute html =~ ~r/NOPLASMID-SP[\s\S]{0,200}plasmid/
+  end
+
   test "select_lenie_at_cell on occupied cell navigates to the codeome editor",
        %{conn: conn, handle: handle} do
     [{key, cell}] = :ets.lookup(handle.tables.cells, {5, 5})

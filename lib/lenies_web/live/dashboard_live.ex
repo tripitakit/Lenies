@@ -308,9 +308,9 @@ defmodule LeniesWeb.DashboardLive do
                         </td>
                         <td class="py-0.5 opacity-80">
                           {format_seed_origin(sp)}<span
-                            :if={carried_plasmids(sp) != []}
+                            :if={sp.plasmid_count > 0}
                             class="ml-1 text-[9px] text-yellow-300/80"
-                          >+ {Enum.join(carried_plasmids(sp), ", ")}</span>
+                          >+ {sp.plasmid_count} {plasmid_word(sp.plasmid_count)}</span>
                         </td>
                         <td class="text-right pl-3 whitespace-nowrap">{sp.size}</td>
                         <td class="text-right pl-3 whitespace-nowrap text-rose-300">
@@ -612,22 +612,9 @@ defmodule LeniesWeb.DashboardLive do
   defp plasmid_label(@sprint_hash), do: "Sprint"
   defp plasmid_label(hash) when is_binary(hash), do: hash
 
-  # Human labels for the plasmids a species carries in its buffer (from the
-  # representative Lenie's snapshot). Used to annotate the species-table seed
-  # name with the conjugation-acquired plasmid(s).
-  defp carried_plasmids(%{plasmids: plasmids}) when is_list(plasmids) do
-    plasmids
-    |> Enum.map(&plasmid_label(plasmid_hash(&1)))
-    |> Enum.uniq()
-  end
-
-  defp carried_plasmids(_), do: []
-
-  defp plasmid_hash(opcodes) do
-    :erlang.phash2(opcodes, 16_777_216)
-    |> Integer.to_string(16)
-    |> String.pad_leading(6, "0")
-  end
+  # Singular/plural for the species-table plasmid count annotation.
+  defp plasmid_word(1), do: "plasmid"
+  defp plasmid_word(_), do: "plasmids"
 
   # Format large counters (resources / carcasses) so the user can read
   # them at a glance: thousand-separated below 1k, then k/M/B suffixes
