@@ -39,6 +39,14 @@ defmodule Lenies.WorldFrame do
   def encode_layers(handle, {w, h}) do
     cells = if handle, do: :ets.tab2list(handle.tables.cells) |> Map.new(), else: %{}
     hash_by_id = build_hash_index(handle)
+    # Lenie positions come from the World's CONSISTENT occupancy snapshot, NOT
+    # from `cell.lenie_id` in the `cells` map above. `cells` was read via a
+    # non-isolated `:ets.tab2list`, which during a concurrent move can show a
+    # lenie at a stale/duplicate/missing cell (the "drawn one cell off" bug).
+    # The snapshot is read with one atomic `:ets.lookup`, so it's coherent.
+    # `resource`/`carcass` stay on `cells` — they're smooth fields where a
+    # one-tick-stale value is invisible.
+    occupancy = read_occupancy(handle, cells)
 
     # Single pass, row-major. Each layer is accumulated as a reversed list of
     # bytes and turned into a binary once at the end — one `list_to_binary`
@@ -47,22 +55,74 @@ defmodule Lenies.WorldFrame do
     {ls, rs, cs, chs} =
       Enum.reduce((h - 1)..0//-1, {[], [], [], []}, fn y, outer ->
         Enum.reduce((w - 1)..0//-1, outer, fn x, {la, ra, ca, cha} ->
-          case Map.get(cells, {x, y}) do
-            nil ->
-              {[0 | la], [0 | ra], [0 | ca], [0 | cha]}
+          l = lenie_byte_at({x, y}, occupancy, hash_by_id, handle)
 
-            cell ->
-              l = lenies_byte(cell, hash_by_id, handle)
-              r = clamp_byte(cell.resource)
-              c = clamp_byte(cell.carcass)
-              ch = clamp_byte(cell.carcass_hue)
-              {[l | la], [r | ra], [c | ca], [ch | cha]}
-          end
+          {r, c, ch} =
+            case Map.get(cells, {x, y}) do
+              nil ->
+                {0, 0, 0}
+
+              cell ->
+                {clamp_byte(cell.resource), clamp_byte(cell.carcass),
+                 clamp_byte(cell.carcass_hue)}
+            end
+
+          {[l | la], [r | ra], [c | ca], [ch | cha]}
         end)
       end)
 
     {:erlang.list_to_binary(ls), :erlang.list_to_binary(rs), :erlang.list_to_binary(cs),
      :erlang.list_to_binary(chs)}
+  end
+
+  # Consistent lenie-occupancy map `%{ {x,y} => lenie_id }`. Prefers the
+  # World's atomically-written `:occupancy` snapshot. Falls back to deriving it
+  # from the already-loaded `cells` only when no populated snapshot exists
+  # (legacy handles, tests that poke `:cells` directly, or the brief window
+  # before the first snapshot) — callers in those cases are single-threaded, so
+  # there is no move race to worry about.
+  defp read_occupancy(nil, _cells), do: %{}
+
+  defp read_occupancy(handle, cells) do
+    snapshot =
+      case handle do
+        %{tables: %{occupancy: tid}} ->
+          case :ets.lookup(tid, :snapshot) do
+            [{:snapshot, m}] when is_map(m) -> m
+            _ -> nil
+          end
+
+        _ ->
+          nil
+      end
+
+    if is_map(snapshot) and map_size(snapshot) > 0 do
+      snapshot
+    else
+      derive_occupancy_from_cells(cells)
+    end
+  end
+
+  defp derive_occupancy_from_cells(cells) do
+    Enum.reduce(cells, %{}, fn {key, cell}, acc ->
+      case Map.get(cell, :lenie_id) do
+        id when is_binary(id) -> Map.put(acc, key, id)
+        _ -> acc
+      end
+    end)
+  end
+
+  defp lenie_byte_at(key, occupancy, hash_by_id, handle) do
+    case Map.get(occupancy, key) do
+      id when is_binary(id) ->
+        case Map.get(hash_by_id, id) do
+          hash when is_binary(hash) -> SpeciesColor.hue_byte(handle, hash)
+          _ -> 0
+        end
+
+      _ ->
+        0
+    end
   end
 
   @doc "Encode the grid for transport: base64-encoded layers + dimensions."
@@ -88,17 +148,6 @@ defmodule Lenies.WorldFrame do
     :ets.tab2list(handle.tables.lenies)
     |> Map.new(fn {id, record} -> {id, Map.get(record, :codeome_hash)} end)
   end
-
-  defp lenies_byte(%{lenie_id: nil}, _index, _handle), do: 0
-
-  defp lenies_byte(%{lenie_id: id}, index, handle) when is_binary(id) do
-    case Map.get(index, id) do
-      hash when is_binary(hash) -> SpeciesColor.hue_byte(handle, hash)
-      _ -> 0
-    end
-  end
-
-  defp lenies_byte(_, _, _), do: 0
 
   defp clamp_byte(n) when is_integer(n) and n >= 0 and n <= 255, do: n
   defp clamp_byte(n) when is_integer(n) and n < 0, do: 0

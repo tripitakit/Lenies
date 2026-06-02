@@ -109,6 +109,7 @@ defmodule Lenies.World do
     state = %{state | total_resource: r, total_carcass: c}
     state = maybe_schedule_tick(state)
     state = schedule_reconcile(state)
+    state = rebuild_occupancy(state)
     {:ok, state}
   end
 
@@ -165,12 +166,17 @@ defmodule Lenies.World do
         # them after ~130 ticks. Respawn a fresh Lenie GenServer for
         # each ghost so the world is actually populated post-restore.
         respawned = respawn_lenies_from_snapshots(state)
+
         Logger.info(
           "World #{inspect(state.world_id)} restored from snapshot \"#{name}\" — respawned #{respawned} Lenies"
         )
 
         {r, c} = sum_cells(state.tables)
         new_state = %{state | total_resource: r, total_carcass: c}
+
+        # Restore can run while paused: refresh the occupancy snapshot so the
+        # restored lenies appear on the canvas without waiting for a tick.
+        new_state = rebuild_occupancy(new_state)
 
         # Stats payload: gives Telemetry + Dashboards everything they
         # need to refresh `:latest` without waiting for the next tick.
@@ -288,6 +294,10 @@ defmodule Lenies.World do
         [{key, cell}] = :ets.lookup(state.tables.cells, pos)
         :ets.insert(state.tables.cells, {key, %{cell | lenie_id: lenie_id}})
 
+        # User spawn can happen while paused: refresh the snapshot so the new
+        # lenie appears immediately (no tick to refresh it otherwise).
+        rebuild_occupancy(state)
+
         {:reply, {:ok, {lenie_id, pos}}, state}
 
       :no_free_cell ->
@@ -381,7 +391,10 @@ defmodule Lenies.World do
     {r, c} = sum_cells(state.tables)
     new_state = %{new_state | total_resource: r, total_carcass: c}
     new_state = maybe_schedule_tick(new_state)
-    schedule_reconcile(new_state)
+    new_state = schedule_reconcile(new_state)
+    # Sterilize can run while paused (no tick to refresh): reset the occupancy
+    # snapshot so the canvas clears immediately.
+    rebuild_occupancy(new_state)
   end
 
   # Runtime source of truth for per-world tunables. The 9 keys previously
@@ -482,22 +495,63 @@ defmodule Lenies.World do
     rate = cfg(state, :carcass_decay)
     cells = state.tables.cells
 
-    :ets.foldl(
-      fn {key, cell}, {sum_r, sum_c} ->
-        effective_cell =
-          if rate > 0 and cell.carcass > 0 do
-            decayed = Cell.decay_carcass(cell, rate)
-            :ets.insert(cells, {key, decayed})
-            decayed
-          else
-            cell
-          end
+    # Single pass: apply carcass decay, sum resource/carcass, AND collect a
+    # CONSISTENT occupancy snapshot. The fold runs inside the World (the sole
+    # `:cells` writer) so no concurrent move can split a lenie across cells —
+    # unlike the renderer's `:ets.tab2list`, which is the root cause of the
+    # "lenie drawn one cell off" artifact. We store the snapshot under a single
+    # ETS key the renderer reads atomically.
+    {sum_r, sum_c, occ} =
+      :ets.foldl(
+        fn {key, cell}, {sum_r, sum_c, occ} ->
+          effective_cell =
+            if rate > 0 and cell.carcass > 0 do
+              decayed = Cell.decay_carcass(cell, rate)
+              :ets.insert(cells, {key, decayed})
+              decayed
+            else
+              cell
+            end
 
-        {sum_r + effective_cell.resource, sum_c + effective_cell.carcass}
-      end,
-      {0, 0},
-      cells
-    )
+          occ =
+            if is_binary(effective_cell.lenie_id),
+              do: [{key, effective_cell.lenie_id} | occ],
+              else: occ
+
+          {sum_r + effective_cell.resource, sum_c + effective_cell.carcass, occ}
+        end,
+        {0, 0, []},
+        cells
+      )
+
+    store_occupancy(state, Map.new(occ))
+    {sum_r, sum_c}
+  end
+
+  # Persist the occupancy snapshot under a single ETS key. A single-key
+  # `:ets.insert` is atomic, so the renderer's single-key `:ets.lookup` always
+  # reads a coherent whole-map snapshot (never a half-applied move).
+  defp store_occupancy(state, occupancy_map) when is_map(occupancy_map) do
+    :ets.insert(state.tables.occupancy, {:snapshot, occupancy_map})
+  end
+
+  # Full rebuild of the occupancy snapshot from `:cells`. Used on init and on
+  # the occupancy-changing paths that can run while the world is PAUSED (no
+  # tick to refresh): sterilize, restore, and user spawn. During active
+  # ticking, `decay_and_sum_cells/1` refreshes it every tick instead.
+  defp rebuild_occupancy(state) do
+    occ =
+      :ets.foldl(
+        fn {key, cell}, acc ->
+          if is_binary(cell.lenie_id), do: [{key, cell.lenie_id} | acc], else: acc
+        end,
+        [],
+        state.tables.cells
+      )
+      |> Map.new()
+
+    store_occupancy(state, occ)
+    state
   end
 
   # Background mutations are configured as a RATE — N mutations per 1000

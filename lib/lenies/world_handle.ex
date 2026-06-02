@@ -9,7 +9,8 @@ defmodule Lenies.WorldHandle do
   @enforce_keys [:id, :pid, :tables, :pubsub_prefix]
   defstruct [:id, :pid, :tables, :pubsub_prefix]
 
-  @type table_key :: :cells | :lenies | :child_slots | :history | :color_overrides
+  @type table_key ::
+          :cells | :lenies | :child_slots | :history | :color_overrides | :occupancy
 
   @type t :: %__MODULE__{
           id: term(),

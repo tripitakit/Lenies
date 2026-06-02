@@ -61,6 +61,28 @@ defmodule LeniesWeb.GridRendererTest do
     end
   end
 
+  test "lenie layer follows the consistent occupancy snapshot, not racy cells.lenie_id",
+       %{handle: handle} do
+    grid = {4, 4}
+    reset_cells(handle, grid)
+
+    # The World's atomic occupancy snapshot says the lenie is at (1, 2).
+    :ets.insert(handle.tables.occupancy, {:snapshot, %{{1, 2} => "L1"}})
+
+    # But a non-isolated `:ets.tab2list` of `:cells` shows it at a STALE cell
+    # (3, 3) — exactly the mid-move artifact the snapshot exists to mask.
+    :ets.insert(handle.tables.cells, {{3, 3}, %Lenies.World.Cell{lenie_id: "L1"}})
+    :ets.insert(handle.tables.lenies, {"L1", %{id: "L1", codeome_hash: "hash-A"}})
+
+    expected = Lenies.SpeciesColor.hue_byte(handle, "hash-A")
+    {lenies_bin, _, _, _} = GridRenderer.encode_layers(handle, grid)
+
+    # Rendered at the SNAPSHOT cell (1, 2) = index 2*4+1 = 9 …
+    assert :binary.at(lenies_bin, 9) == expected
+    # … and NOT at the stale cells cell (3, 3) = index 3*4+3 = 15.
+    assert :binary.at(lenies_bin, 15) == 0
+  end
+
   test "encode_layers/1 emits 0 for an occupied cell whose lenie has no snapshot yet",
        %{handle: handle} do
     grid = {4, 4}
