@@ -197,7 +197,7 @@ defmodule LeniesWeb.ArenaLive do
       </header>
 
       <div class="flex-1 flex gap-3 min-h-0">
-        <section class="panel p-3 flex flex-col gap-2 min-h-0 shrink-0 dashboard-map-pane">
+        <section class="panel p-2 flex flex-col gap-2 min-h-0 shrink-0 dashboard-map-pane">
           <h2 class="text-xs flex items-center gap-1.5">
             <span>▮ Arena</span>
             <span
@@ -236,10 +236,10 @@ defmodule LeniesWeb.ArenaLive do
           </div>
         </section>
 
-        <div class="flex-1 grid grid-rows-[minmax(0,1fr)_auto] gap-3 min-h-0 min-w-0">
+        <div class="flex-1 grid grid-rows-[minmax(0,1fr)_auto] gap-2 min-h-0 min-w-0">
           <div class="flex gap-3 min-h-0 min-w-0">
             <div class="flex-1 flex flex-col min-h-0 min-w-0">
-              <div class="panel p-3 flex flex-col gap-2 min-h-0">
+              <div class="panel p-2 flex flex-col gap-2 min-h-0">
                 <h2 class="text-xs">▮ {@species_total} species</h2>
                 <div class="flex-1 min-h-0 overflow-auto">
                   <table class="w-full text-[11px] tabular-nums">
