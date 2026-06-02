@@ -122,8 +122,8 @@ defmodule LeniesWeb.ControlsPanelComponent do
           sit in, so Controls and Tuning stack vertically here. Each is
           full width of the right column; Tuning's internal slider grid
           remains 2-col. --%>
-    <div class="grid grid-rows-[auto_minmax(0,1fr)] gap-3 min-h-0">
-      <div class="panel p-3 flex flex-col gap-3">
+    <div class="grid grid-rows-[auto_minmax(0,1fr)] gap-2 min-h-0">
+      <div class="panel p-2 flex flex-col gap-2">
         <h2 class="text-xs">▮ Controls</h2>
 
         <div class="flex gap-2">
@@ -289,7 +289,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
         <% end %>
       </div>
 
-      <div class="panel p-3 flex flex-col gap-2 min-h-0">
+      <div class="panel p-2 flex flex-col gap-2 min-h-0">
         <h2 class="text-xs">▮ Tuning Live</h2>
         <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
           <%= for p <- tunable_params() do %>
