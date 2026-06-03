@@ -144,6 +144,28 @@ defmodule Lenies.World do
     {:reply, :ok, new_state}
   end
 
+  # Reset the distributed energy (per-cell resource + carcass) back to the flat
+  # baseline, WITHOUT touching the Lenies (lenie_id is preserved). Used by the
+  # Arena when it goes unobserved so the world doesn't restore saturated with
+  # accumulated radiation. Carcass is cleared too — it's distributed energy that
+  # would otherwise persist across the dormancy snapshot.
+  def handle_call(:reset_energy, _from, state) do
+    initial = Application.get_env(:lenies, :initial_resource_per_cell, 30)
+    cells = state.tables.cells
+
+    :ets.foldl(
+      fn {key, cell}, _acc ->
+        :ets.insert(cells, {key, %{cell | resource: initial, carcass: 0, carcass_hue: 0}})
+        :ok
+      end,
+      :ok,
+      cells
+    )
+
+    {r, c} = sum_cells(state.tables)
+    {:reply, :ok, %{state | total_resource: r, total_carcass: c}}
+  end
+
   def handle_call({:save_snapshot, name}, _from, state) do
     result = Lenies.Snapshot.save(state.handle, name)
     {:reply, result, state}

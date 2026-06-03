@@ -217,6 +217,40 @@ defmodule Lenies.ArenaTest do
     end
 
     @tag :tmp_dir
+    test "on dormancy the distributed energy is reset to baseline before snapshot",
+         %{tmp_dir: tmp} do
+      Application.put_env(:lenies, :snapshot_root, tmp)
+      on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
+
+      :ok = Lenies.Arena.attach_viewer(self())
+      {:ok, handle1} = Lenies.Worlds.handle(:arena)
+
+      # Saturate a cell with radiation, as accumulates over a long session.
+      :ets.insert(
+        handle1.tables.cells,
+        {{3, 3}, %Lenies.World.Cell{resource: 255, carcass: 99, carcass_hue: 40}}
+      )
+
+      :ok = Lenies.Arena.detach_viewer(self())
+      # grace (50 ms) → reset_energy → auto_save → stop
+      Process.sleep(1_000)
+      refute Lenies.Worlds.alive?(:arena)
+
+      # Re-attach restores; the saturated cell must come back de-saturated.
+      :ok = Lenies.Arena.attach_viewer(self())
+      {:ok, handle2} = Lenies.Worlds.handle(:arena)
+      [{_, cell}] = :ets.lookup(handle2.tables.cells, {3, 3})
+
+      # Carcass is reset (radiation never re-adds it); resource is no longer
+      # saturated (it was 255). A couple of ticks may add a little radiation
+      # between reset and snapshot, so we assert de-saturation, not exact 0.
+      assert cell.carcass == 0
+      assert cell.resource < 100
+
+      :ok = Lenies.Worlds.stop_world(:arena)
+    end
+
+    @tag :tmp_dir
     test "corrupt auto snapshot is quarantined, world starts empty", %{tmp_dir: tmp} do
       Application.put_env(:lenies, :snapshot_root, tmp)
       on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)

@@ -18,6 +18,30 @@ defmodule Lenies.WorldTest do
     assert cell.carcass == 0
   end
 
+  test "reset_energy/1 resets per-cell resource+carcass to baseline, preserving Lenies",
+       %{world_id: world_id} do
+    cells = Lenies.WorldTestHelpers.cells(world_id)
+    initial = Application.get_env(:lenies, :initial_resource_per_cell, 30)
+
+    # Saturate cells; one is occupied by a Lenie.
+    :ets.insert(cells, {{1, 1}, %Lenies.World.Cell{resource: 250, carcass: 120, carcass_hue: 77}})
+    :ets.insert(cells, {{2, 2}, %Lenies.World.Cell{resource: 200, carcass: 0, lenie_id: "L"}})
+
+    :ok = Lenies.Worlds.reset_energy(world_id)
+
+    [{_, c11}] = :ets.lookup(cells, {1, 1})
+    [{_, c22}] = :ets.lookup(cells, {2, 2})
+
+    assert c11.resource == initial
+    assert c11.carcass == 0
+    assert c11.carcass_hue == 0
+
+    assert c22.resource == initial
+    assert c22.carcass == 0
+    # Lenie occupancy is preserved — only the distributed energy is reset.
+    assert c22.lenie_id == "L"
+  end
+
   test "snapshot_stats/0 returns basic counts on empty world", %{world_id: world_id} do
     stats = Lenies.Worlds.snapshot_stats(world_id)
     assert stats.cells == 65_536

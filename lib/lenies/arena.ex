@@ -253,10 +253,22 @@ defmodule Lenies.Arena do
         {:noreply, state}
 
       true ->
+        # Nobody is observing: reset the distributed energy to baseline BEFORE
+        # snapshotting, so the Arena doesn't restore saturated with radiation
+        # accumulated over past sessions. Lineages (Lenies) are preserved.
+        reset_energy()
         auto_save()
         _ = Lenies.Worlds.stop_world(@world_id)
         {:noreply, initial_state()}
     end
+  end
+
+  defp reset_energy do
+    _ = Lenies.Worlds.reset_energy(@world_id)
+    :ok
+  catch
+    # World may be mid-teardown in a race with a manual stop — best effort.
+    :exit, _ -> :ok
   end
 
   defp auto_save do

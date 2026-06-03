@@ -111,6 +111,14 @@ defmodule Lenies.Worlds do
   end
 
   def sterilize(target), do: call(target, :sterilize)
+
+  @doc """
+  Reset the distributed energy (per-cell resource + carcass) of `target` back to
+  the flat baseline, preserving the Lenies. Used by the Arena to avoid restoring
+  a world saturated with accumulated radiation.
+  """
+  def reset_energy(target), do: call(target, :reset_energy)
+
   def pause(target), do: call(target, :pause)
   def resume(target), do: call(target, :resume)
   def paused?(target), do: call(target, :paused?)
