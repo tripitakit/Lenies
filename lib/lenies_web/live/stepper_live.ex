@@ -82,13 +82,7 @@ defmodule LeniesWeb.StepperLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div
-      id={@id}
-      phx-window-keydown="key"
-      phx-target={@myself}
-      class="stepper-modal-backdrop"
-      data-stepper-modal="true"
-    >
+    <div id={@id} class="stepper-modal-backdrop" data-stepper-modal="true">
       <div class="stepper-modal" role="dialog" aria-labelledby="stepper-title">
         <header class="stepper-header">
           <div class="stepper-header-title">
@@ -98,14 +92,14 @@ defmodule LeniesWeb.StepperLive do
             </span>
           </div>
           <div class="stepper-controls">
-            <button phx-click="reset" phx-target={@myself} class="stepper-btn" title="Reset (R)">
+            <button phx-click="reset" phx-target={@myself} class="stepper-btn" title="Reset">
               ⏮
             </button>
             <button
               phx-click="step_back"
               phx-target={@myself}
               class="stepper-btn"
-              title="Step back (F11)"
+              title="Step back"
             >
               ⬅
             </button>
@@ -113,16 +107,16 @@ defmodule LeniesWeb.StepperLive do
               phx-click="step"
               phx-target={@myself}
               class="stepper-btn stepper-btn-primary"
-              title="Step (F10)"
+              title="Step"
             >
               ▶ Step
             </button>
             <%= if @session.status == :running do %>
-              <button phx-click="pause" phx-target={@myself} class="stepper-btn" title="Pause (F5)">
+              <button phx-click="pause" phx-target={@myself} class="stepper-btn" title="Pause">
                 ⏸ Pause
               </button>
             <% else %>
-              <button phx-click="run" phx-target={@myself} class="stepper-btn" title="Run (F5)">
+              <button phx-click="run" phx-target={@myself} class="stepper-btn" title="Run">
                 ▶▶ Run
               </button>
             <% end %>
@@ -164,12 +158,7 @@ defmodule LeniesWeb.StepperLive do
               <span class="stepper-seed-active">click on the canvas</span>
             <% end %>
           </form>
-          <button
-            phx-click="close"
-            phx-target={@myself}
-            class="stepper-close"
-            aria-label="Close (Esc)"
-          >
+          <button phx-click="close" phx-target={@myself} class="stepper-close" aria-label="Close">
             ✕
           </button>
         </header>
@@ -313,7 +302,6 @@ defmodule LeniesWeb.StepperLive do
           <% else %>
             halt reason: —
           <% end %>
-          ·  ⌨ F10 step  F11 back  F5 run  R reset  Esc close
         </footer>
       </div>
     </div>
@@ -397,42 +385,6 @@ defmodule LeniesWeb.StepperLive do
                 {:noreply, socket}
             end
         end
-    end
-  end
-
-  def handle_event("key", %{"key" => key}, socket) do
-    case key do
-      "F10" ->
-        handle_event("step", %{}, socket)
-
-      "F11" ->
-        handle_event("step_back", %{}, socket)
-
-      "F5" ->
-        if socket.assigns.session.status == :running do
-          handle_event("pause", %{}, socket)
-        else
-          handle_event("run", %{}, socket)
-        end
-
-      "r" ->
-        handle_event("reset", %{}, socket)
-
-      "R" ->
-        handle_event("reset", %{}, socket)
-
-      "Escape" ->
-        handle_event("close", %{}, socket)
-
-      " " ->
-        if socket.assigns.session.status == :running do
-          handle_event("pause", %{}, socket)
-        else
-          handle_event("run", %{}, socket)
-        end
-
-      _ ->
-        {:noreply, socket}
     end
   end
 

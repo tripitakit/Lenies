@@ -243,10 +243,10 @@ dropdown of your Sandbox AND in the seed dropdown of the Arena.
 
 **Debug** (next to Spawn / Save) opens the **Codeome Stepper** — a full-screen
 modal debugger for the buffer you're editing, with no effect on your live
-Sandbox (it runs an isolated session). Single-step forward (`Step`, F10) or
-backward (`Step back`, F11) through the program, or `Run` (F5) it at ~10
-ops/sec; **click any opcode row to toggle a breakpoint** (red gutter dot) and a
-run halts there. A left rail shows the VM state as it executes — energy,
+Sandbox (it runs an isolated session). Single-step forward (`Step`) or
+backward (`Step back`) through the program, or `Run` it at ~10 ops/sec;
+**click any opcode row to toggle a breakpoint** (red gutter dot) and a run
+halts there. A left rail shows the VM state as it executes — energy,
 instruction pointer, age, position and direction, the data stack, the four
 memory slots, and the call stack. A **64×64 mini-world** lets you drop seed
 Lenies (built-in or from your saved collection) via the **Place** picker and a
