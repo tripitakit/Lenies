@@ -118,9 +118,13 @@ defmodule Lenies.StepperTest do
 
     test "history is capped at 50 entries" do
       codeome = Codeome.from_list([:push1])
-      s = Enum.reduce(1..60, Stepper.start_session(codeome, energy: 100_000.0), fn _, acc ->
-            {:ok, n} = Stepper.step(acc); n
-          end)
+
+      s =
+        Enum.reduce(1..60, Stepper.start_session(codeome, energy: 100_000.0), fn _, acc ->
+          {:ok, n} = Stepper.step(acc)
+          n
+        end)
+
       assert length(s.history) == 50
       assert s.step_count == 60
     end

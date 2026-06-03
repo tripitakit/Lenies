@@ -67,9 +67,11 @@ defmodule Lenies.SnapshotRespawnTest do
     # which broke pattern matching in codeome_from_snap/1.
     pre_save = :ets.tab2list(h(world_id).tables.lenies)
     assert length(pre_save) == 5
+
     Enum.each(pre_save, fn {_id, snap} ->
       assert is_pid(snap.pid) and Process.alive?(snap.pid),
              "pre-save pid is not alive: #{inspect(snap.pid)}"
+
       assert is_list(snap.codeome) and snap.codeome == opcodes,
              "pre-save :codeome must be a plain list, got: #{inspect(snap[:codeome])}"
     end)
@@ -148,8 +150,12 @@ defmodule Lenies.SnapshotRespawnTest do
     history =
       Enum.reduce_while(1..20, [], fn _, _ ->
         case Lenies.Telemetry.history(world_id, :last_n, 1) do
-          [_ | _] = h -> {:halt, h}
-          _ -> Process.sleep(10) ; {:cont, []}
+          [_ | _] = h ->
+            {:halt, h}
+
+          _ ->
+            Process.sleep(10)
+            {:cont, []}
         end
       end)
 

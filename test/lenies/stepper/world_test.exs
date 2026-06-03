@@ -58,7 +58,9 @@ defmodule Lenies.Stepper.WorldTest do
       }
 
       {:ok, world1} = World.place_lenie(world, "seed-1", lenie)
-      assert {:error, :cell_occupied} = World.place_lenie(world1, "seed-2", %{lenie | pos: {5, 5}})
+
+      assert {:error, :cell_occupied} =
+               World.place_lenie(world1, "seed-2", %{lenie | pos: {5, 5}})
     end
   end
 
