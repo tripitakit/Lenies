@@ -5,7 +5,7 @@ where digital organisms — Lenies — live, eat, reproduce, mutate, fight, die,
 and gradually evolve under selection pressure. Each Lenie is a BEAM process
 animated by its own tiny program (its *codeome*).
 
-The world is **shared**: a single 256×256 toroidal grid called the **Arena**
+The world is **shared**: a single 128×128 toroidal grid called the **Arena**
 is the publicly-viewable homepage where any visitor can watch the ecosystem
 drift in real time, and logged-in users can seed their own creatures into it
 — **one alive lineage per player at a time**. Codeomes thrive, get eaten, or
@@ -274,5 +274,5 @@ between functioning systems. A particularly persistent strain learns to
 propagate by riding the cultural meme of the trilogy's protagonist,
 **Lenie Clarke**, and ends up nicknamed after her. The bytecode organisms in
 this project are a much smaller, much friendlier homage: stack-machine
-creatures eating and replicating inside a 256×256 toroidal grid instead of a
+creatures eating and replicating inside a 128×128 toroidal grid instead of a
 planetary network, but driven by the same minimal-replicator logic.

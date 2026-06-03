@@ -9,9 +9,9 @@ defmodule Lenies.WorldTest do
     {:ok, world_id: world_id}
   end
 
-  test "starts and initializes ETS tables with 65_536 empty cells",
+  test "starts and initializes ETS tables with 16_384 empty cells (128×128)",
        %{world_id: world_id} do
-    assert :ets.info(Lenies.WorldTestHelpers.cells(world_id), :size) == 65_536
+    assert :ets.info(Lenies.WorldTestHelpers.cells(world_id), :size) == 16_384
     [{{0, 0}, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {0, 0})
     assert cell.resource == 0
     assert cell.lenie_id == nil
@@ -44,7 +44,7 @@ defmodule Lenies.WorldTest do
 
   test "snapshot_stats/0 returns basic counts on empty world", %{world_id: world_id} do
     stats = Lenies.Worlds.snapshot_stats(world_id)
-    assert stats.cells == 65_536
+    assert stats.cells == 16_384
     assert stats.population == 0
     assert stats.total_resource == 0
     assert stats.total_carcass == 0
@@ -63,7 +63,7 @@ defmodule Lenies.WorldTest do
 
   test "tick_now/0 caps total resource at grid_size × cell_resource_cap",
        %{world_id: world_id} do
-    max_total = 65_536 * 100
+    max_total = 16_384 * 100
 
     # 1000 ticks → 100_000 units poured (well below the global cap)
     for _ <- 1..1000, do: Lenies.Worlds.tick_now(world_id)

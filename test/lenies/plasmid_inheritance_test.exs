@@ -44,12 +44,12 @@ defmodule Lenies.PlasmidInheritanceTest do
 
   test "child inherits parent's plasmid through divide",
        %{world_id: world_id, handle: handle} do
-    for x <- 0..254, y <- 0..254 do
+    for x <- 0..127, y <- 0..127 do
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, y})
       :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 200}})
     end
 
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "PARENT"}})
 
     parent_plasmid = Plasmid.new([:eat, :move, :turn_left])
@@ -61,7 +61,7 @@ defmodule Lenies.PlasmidInheritanceTest do
            id: "PARENT",
            codeome: MinimalReplicator.codeome(),
            energy: 10_000.0,
-           pos: {128, 128},
+           pos: {64, 64},
            dir: :e,
            lineage: {nil, 0},
            plasmids: [parent_plasmid]

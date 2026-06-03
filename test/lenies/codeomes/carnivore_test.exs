@@ -47,7 +47,7 @@ defmodule Lenies.Codeomes.CarnivoreTest do
     # Use 2000 resource: the Sprint plasmid fires an extra move+eat every forage
     # iter, which depletes local food faster than vanilla MR — 2000 prevents
     # starvation before the duel outcome is observed.
-    for x <- 0..254, y <- 0..254 do
+    for x <- 0..127, y <- 0..127 do
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, y})
       :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 2000}})
     end

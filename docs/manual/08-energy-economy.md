@@ -148,7 +148,7 @@ gain per cycle = 128 x 20 x hit_rate = 2560 x hit_rate
 
 At 50% hit rate the replicator starves. At 80% it survives with a moderate surplus. Hit rate is
 not a free parameter — it emerges from radiation replenishment (`radiation_per_tick = 500` across
-a 256×256 grid) and population pressure. A crowded world collapses hit rate and triggers crashes.
+a 128×128 grid) and population pressure. A crowded world collapses hit rate and triggers crashes.
 
 ---
 

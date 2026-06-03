@@ -57,7 +57,7 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
     # offspring do a random walk rather than a straight march, so the colony
     # clusters near the origin instead of spreading linearly. Use a higher resource
     # (2000 vs 200) to prevent local depletion in the cluster area.
-    for x <- 0..254, y <- 0..254 do
+    for x <- 0..127, y <- 0..127 do
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, y})
       :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 2000}})
     end
@@ -127,13 +127,13 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
     Application.put_env(:lenies, :eat_amount, 2000)
 
     # Seed the full grid with abundant food so each eat() can draw 2000 units
-    for x <- 0..254, y <- 0..254 do
+    for x <- 0..127, y <- 0..127 do
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, y})
       :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 100_000}})
     end
 
     # Spawn original replicator at center
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "ORIGIN"}})
 
     {:ok, pid} =
@@ -143,7 +143,7 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
            id: "ORIGIN",
            codeome: MinimalReplicator.codeome(),
            energy: 10_000.0,
-           pos: {128, 128},
+           pos: {64, 64},
            dir: :e,
            lineage: {nil, 0}
          ]}

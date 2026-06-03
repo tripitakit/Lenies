@@ -30,8 +30,8 @@ defmodule Lenies.WorldSpawnTest do
 
     assert {:ok, {lenie_id, {x, y}}} = result
     assert is_binary(lenie_id)
-    assert x in 0..255
-    assert y in 0..255
+    assert x in 0..127
+    assert y in 0..127
 
     [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, y})
     assert cell.lenie_id == lenie_id
@@ -43,7 +43,7 @@ defmodule Lenies.WorldSpawnTest do
   end
 
   test "spawn_lenie/2 returns :no_free_cell when grid is full", %{world_id: world_id} do
-    for x <- 0..255, y <- 0..255 do
+    for x <- 0..127, y <- 0..127 do
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, y})
       :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "FAKE"}})
     end

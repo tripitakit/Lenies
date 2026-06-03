@@ -37,6 +37,12 @@ defmodule Lenies.Application do
       ])
     end
 
+    # If the world grid dimensions changed since the last boot, the on-disk
+    # snapshots (raw {x,y} cell dumps) are incompatible — drop the whole store
+    # so worlds cold-start fresh at the new size instead of restoring off-grid
+    # cells/Lenies. Idempotent (no-op when dimensions are unchanged).
+    Lenies.Snapshot.wipe_if_grid_changed()
+
     children = [
       Lenies.Repo,
       LeniesWeb.Telemetry,

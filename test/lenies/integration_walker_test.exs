@@ -14,8 +14,8 @@ defmodule Lenies.IntegrationWalkerTest do
   end
 
   test "walker moves on the grid and eats biomass", %{world_id: world_id, handle: handle} do
-    # seed cells {10..200, 10} with biomass (wide enough to feed the walker for 500ms)
-    for x <- 10..200 do
+    # seed cells {10..127, 10} with biomass (wide enough to feed the walker for 500ms)
+    for x <- 10..127 do
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, 10})
       :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 100}})
     end

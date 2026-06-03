@@ -48,12 +48,12 @@ defmodule Lenies.Codeomes.HunterTest do
 
   test "hunter reaches generation >= 3 in 30 seconds (alone, sweep finds no prey)",
        %{world_id: world_id, handle: handle} do
-    for x <- 0..254, y <- 0..254 do
+    for x <- 0..127, y <- 0..127 do
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, y})
       :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 200}})
     end
 
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "HUN-ORIGIN"}})
 
     {:ok, pid} =
@@ -63,7 +63,7 @@ defmodule Lenies.Codeomes.HunterTest do
            id: "HUN-ORIGIN",
            codeome: Hunter.codeome(),
            energy: 10_000.0,
-           pos: {128, 128},
+           pos: {64, 64},
            dir: :e,
            lineage: {nil, 0}
          ]}
@@ -90,20 +90,20 @@ defmodule Lenies.Codeomes.HunterTest do
   test "hunter damages a stationary prey directly in front within 10 seconds",
        %{world_id: world_id, handle: handle} do
     # Fill the grid with resource so Hunter has energy to advance.
-    for x <- 0..254, y <- 0..254 do
+    for x <- 0..127, y <- 0..127 do
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, y})
       :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 200}})
     end
 
     # Place Hunter at (128, 128) facing east; prey at (129, 128).
-    [{key_h, cell_h}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key_h, cell_h}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
 
     :ets.insert(
       Lenies.WorldTestHelpers.cells(world_id),
       {key_h, %{cell_h | lenie_id: "HUN-ORIGIN"}}
     )
 
-    [{key_p, cell_p}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {129, 128})
+    [{key_p, cell_p}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {65, 64})
 
     :ets.insert(
       Lenies.WorldTestHelpers.cells(world_id),
@@ -117,7 +117,7 @@ defmodule Lenies.Codeomes.HunterTest do
            id: "HUN-ORIGIN",
            codeome: Hunter.codeome(),
            energy: 10_000.0,
-           pos: {128, 128},
+           pos: {64, 64},
            dir: :e,
            lineage: {nil, 0}
          ]}
@@ -135,7 +135,7 @@ defmodule Lenies.Codeomes.HunterTest do
            id: "PREY",
            codeome: MinimalReplicator.codeome(),
            energy: 5_000.0,
-           pos: {129, 128},
+           pos: {65, 64},
            dir: :w,
            lineage: {nil, 0}
          ]}

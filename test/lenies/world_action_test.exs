@@ -66,10 +66,10 @@ defmodule Lenies.WorldActionTest do
     end
 
     test "wraps around toroidal boundary", %{world_id: world_id} do
-      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {255, 0})
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {127, 0})
       :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "L1"}})
 
-      result = Lenies.Worlds.action(world_id, {:move, {255, 0}, :e, "L1"})
+      result = Lenies.Worlds.action(world_id, {:move, {127, 0}, :e, "L1"})
       assert {:ok, {:moved, {0, 0}}} = result
     end
   end

@@ -54,7 +54,7 @@ defmodule Lenies.ConjugationTest do
 
   test "receive_plasmid appends to codeome and adds to the plasmid list",
        %{world_id: world_id, handle: handle} do
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "RX"}})
 
     {:ok, recipient_pid} =
@@ -64,7 +64,7 @@ defmodule Lenies.ConjugationTest do
            id: "RX",
            codeome: Codeome.from_list([:eat, :move, :turn_left, :eat, :move]),
            energy: 5_000.0,
-           pos: {128, 128},
+           pos: {64, 64},
            dir: :n,
            lineage: {nil, 0}
          ]}
@@ -88,7 +88,7 @@ defmodule Lenies.ConjugationTest do
        %{world_id: world_id, handle: handle} do
     Application.put_env(:lenies, :codeome_length_bounds, {3, 10})
 
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "RX"}})
 
     {:ok, recipient_pid} =
@@ -99,7 +99,7 @@ defmodule Lenies.ConjugationTest do
            codeome:
              Codeome.from_list([:eat, :move, :turn_left, :eat, :move, :turn_right, :eat, :move]),
            energy: 5_000.0,
-           pos: {128, 128},
+           pos: {64, 64},
            dir: :n,
            lineage: {nil, 0}
          ]}
@@ -117,7 +117,7 @@ defmodule Lenies.ConjugationTest do
 
   test ":conjugate with no plasmid pushes 0 and pays base cost",
        %{world_id: world_id, handle: handle} do
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "SOLO"}})
 
     {:ok, pid} =
@@ -127,7 +127,7 @@ defmodule Lenies.ConjugationTest do
            id: "SOLO",
            codeome: Codeome.from_list([:conjugate, :nop_0]),
            energy: 5_000.0,
-           pos: {128, 128},
+           pos: {64, 64},
            dir: :e,
            lineage: {nil, 0}
          ]}
@@ -149,9 +149,9 @@ defmodule Lenies.ConjugationTest do
     # succeeds (2 + 3 = 5 ≤ 5); subsequent attempts return {:error, :too_large}.
     Application.put_env(:lenies, :codeome_length_bounds, {3, 5})
 
-    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key1, %{c1 | lenie_id: "TX"}})
-    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {129, 128})
+    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {65, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key2, %{c2 | lenie_id: "RX"}})
 
     {:ok, recipient_pid} =
@@ -161,7 +161,7 @@ defmodule Lenies.ConjugationTest do
            id: "RX",
            codeome: Codeome.from_list([:eat, :move]),
            energy: 5_000.0,
-           pos: {129, 128},
+           pos: {65, 64},
            dir: :w,
            lineage: {nil, 0}
          ]}
@@ -176,7 +176,7 @@ defmodule Lenies.ConjugationTest do
            id: "TX",
            codeome: Codeome.from_list([:conjugate, :nop_0]),
            energy: 5_000.0,
-           pos: {128, 128},
+           pos: {64, 64},
            dir: :e,
            lineage: {nil, 0},
            plasmids: [plasmid]
@@ -213,9 +213,9 @@ defmodule Lenies.ConjugationTest do
        %{world_id: world_id, handle: handle} do
     Phoenix.PubSub.subscribe(Lenies.PubSub, handle.pubsub_prefix <> ":fx")
 
-    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key1, %{c1 | lenie_id: "TX"}})
-    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {129, 128})
+    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {65, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key2, %{c2 | lenie_id: "RX"}})
 
     {:ok, recipient_pid} =
@@ -225,7 +225,7 @@ defmodule Lenies.ConjugationTest do
            id: "RX",
            codeome: Codeome.from_list([:eat, :move]),
            energy: 5_000.0,
-           pos: {129, 128},
+           pos: {65, 64},
            dir: :w,
            lineage: {nil, 0}
          ]}
@@ -240,7 +240,7 @@ defmodule Lenies.ConjugationTest do
            id: "TX",
            codeome: Codeome.from_list([:conjugate, :nop_0]),
            energy: 5_000.0,
-           pos: {128, 128},
+           pos: {64, 64},
            dir: :e,
            lineage: {nil, 0},
            plasmids: [plasmid]
@@ -250,12 +250,12 @@ defmodule Lenies.ConjugationTest do
     Process.unlink(donor_pid)
     Process.unlink(recipient_pid)
 
-    assert_receive {:conjugation, %{sender_pos: {128, 128}, receiver_pos: {129, 128}}}, 1000
+    assert_receive {:conjugation, %{sender_pos: {64, 64}, receiver_pos: {65, 64}}}, 1000
   end
 
   test "background_mutate also touches the plasmid buffer (after multiple cycles)",
        %{world_id: world_id, handle: handle} do
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "BG"}})
 
     original_ops = List.duplicate(:eat, 30)
@@ -268,7 +268,7 @@ defmodule Lenies.ConjugationTest do
            id: "BG",
            codeome: Codeome.from_list([:nop_0, :nop_0, :nop_0]),
            energy: 5_000.0,
-           pos: {128, 128},
+           pos: {64, 64},
            dir: :n,
            lineage: {nil, 0},
            plasmids: [original_plasmid]
@@ -298,7 +298,7 @@ defmodule Lenies.ConjugationTest do
 
   test "receive_plasmid accumulates distinct plasmids (multi-plasmid carry)",
        %{world_id: world_id, handle: handle} do
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "RX"}})
 
     {:ok, pid} =
@@ -308,7 +308,7 @@ defmodule Lenies.ConjugationTest do
            id: "RX",
            codeome: Codeome.from_list([:eat, :move, :turn_left]),
            energy: 5_000.0,
-           pos: {128, 128},
+           pos: {64, 64},
            dir: :n,
            lineage: {nil, 0}
          ]}
@@ -332,7 +332,7 @@ defmodule Lenies.ConjugationTest do
 
   test "receive_plasmid is a no-op for an already-carried plasmid (:already_present)",
        %{world_id: world_id, handle: handle} do
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "RX"}})
 
     {:ok, pid} =
@@ -342,7 +342,7 @@ defmodule Lenies.ConjugationTest do
            id: "RX",
            codeome: Codeome.from_list([:eat, :move, :turn_left]),
            energy: 5_000.0,
-           pos: {128, 128},
+           pos: {64, 64},
            dir: :n,
            lineage: {nil, 0}
          ]}
@@ -363,9 +363,9 @@ defmodule Lenies.ConjugationTest do
 
   test ":conjugate transfers one of the donor's carried plasmids (random pick within the set)",
        %{world_id: world_id, handle: handle} do
-    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key1, %{c1 | lenie_id: "TX"}})
-    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {129, 128})
+    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {65, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key2, %{c2 | lenie_id: "RX"}})
 
     {:ok, recipient_pid} =
@@ -375,7 +375,7 @@ defmodule Lenies.ConjugationTest do
            id: "RX",
            codeome: Codeome.from_list([:eat, :move]),
            energy: 5_000.0,
-           pos: {129, 128},
+           pos: {65, 64},
            dir: :w,
            lineage: {nil, 0}
          ]}
@@ -388,7 +388,7 @@ defmodule Lenies.ConjugationTest do
            id: "TX",
            codeome: Codeome.from_list([:conjugate, :nop_0]),
            energy: 5_000.0,
-           pos: {128, 128},
+           pos: {64, 64},
            dir: :e,
            lineage: {nil, 0},
            plasmids: [Plasmid.new([:turn_left, :defend]), Plasmid.new([:turn_right, :eat])]
@@ -425,9 +425,9 @@ defmodule Lenies.ConjugationTest do
     # when lenie_metabolize_delay_ms is 0 and the conjugation fires immediately.
     Phoenix.PubSub.subscribe(Lenies.PubSub, handle.pubsub_prefix <> ":fx")
 
-    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key1, %{c1 | lenie_id: "TX2"}})
-    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {129, 128})
+    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {65, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key2, %{c2 | lenie_id: "RX2"}})
 
     plasmid_ops = [:turn_left, :defend, :eat]
@@ -441,7 +441,7 @@ defmodule Lenies.ConjugationTest do
            id: "RX2",
            codeome: Codeome.from_list([:eat, :move]),
            energy: 5_000.0,
-           pos: {129, 128},
+           pos: {65, 64},
            dir: :w,
            lineage: {nil, 0}
          ]}
@@ -459,7 +459,7 @@ defmodule Lenies.ConjugationTest do
          # We only care about the FIRST iteration which succeeds.
          codeome: Codeome.from_list([:conjugate, :nop_0]),
          energy: start_energy,
-         pos: {128, 128},
+         pos: {64, 64},
          dir: :e,
          lineage: {nil, 0},
          plasmids: [plasmid]

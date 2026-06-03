@@ -78,7 +78,7 @@ silently treated as a no-op.
 
 ## The world
 
-All Lenies share a single **world**: a 256 × 256 grid of cells. The grid
+All Lenies share a single **world**: a 128 × 128 grid of cells. The grid
 wraps at every edge — moving north off the top brings you out at the bottom,
 moving east off the right edge brings you out at the left. Topologically it
 is a torus, like the surface of a donut. There is no boundary, no corner, no

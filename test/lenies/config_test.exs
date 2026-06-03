@@ -4,7 +4,7 @@ defmodule Lenies.ConfigTest do
   alias Lenies.Config
 
   test "grid_size/0 returns configured size" do
-    assert Config.grid_size() == {256, 256}
+    assert Config.grid_size() == {128, 128}
   end
 
   test "tick_interval_ms/0 returns configured value" do
@@ -49,7 +49,7 @@ defmodule Lenies.ConfigTest do
 
   describe "configuration override" do
     setup do
-      on_exit(fn -> Application.put_env(:lenies, :grid_size, {256, 256}) end)
+      on_exit(fn -> Application.put_env(:lenies, :grid_size, {128, 128}) end)
       :ok
     end
 

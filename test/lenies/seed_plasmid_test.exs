@@ -46,12 +46,12 @@ defmodule Lenies.SeedPlasmidTest do
        %{world_id: world_id, handle: handle} do
     # Use 2000 resource so the Lenie (which random-walks due to Twitch) does not
     # deplete local food before it has a chance to move off-axis.
-    for x <- 0..254, y <- 0..254 do
+    for x <- 0..127, y <- 0..127 do
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, y})
       :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 2000}})
     end
 
-    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "TWITCH"}})
 
     plasmid = Plasmid.new(MinimalReplicator.plasmid())
@@ -64,7 +64,7 @@ defmodule Lenies.SeedPlasmidTest do
          # Large energy so the Twitch Lenie (random-walk) doesn't starve before
          # it leaves the starting row.
          energy: 100_000.0,
-         pos: {128, 128},
+         pos: {64, 64},
          dir: :e,
          lineage: {nil, 0},
          plasmids: [plasmid]
@@ -90,14 +90,14 @@ defmodule Lenies.SeedPlasmidTest do
        %{world_id: world_id, handle: handle} do
     # Use 2000 resource so the Twitch Lenie (random-walk) and vanilla MR both
     # survive long enough to meet and perform conjugation.
-    for x <- 0..254, y <- 0..254 do
+    for x <- 0..127, y <- 0..127 do
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, y})
       :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 2000}})
     end
 
-    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key1, %{c1 | lenie_id: "TWITCH"}})
-    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {129, 128})
+    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {65, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key2, %{c2 | lenie_id: "VANILLA"}})
 
     plasmid = Plasmid.new(MinimalReplicator.plasmid())
@@ -111,7 +111,7 @@ defmodule Lenies.SeedPlasmidTest do
          # Twitch opcodes for transfer — that is what we are testing here.
          codeome: Codeome.from_list(MinimalReplicator.opcodes()),
          energy: 10_000.0,
-         pos: {128, 128},
+         pos: {64, 64},
          dir: :e,
          lineage: {nil, 0},
          plasmids: [plasmid]
@@ -124,7 +124,7 @@ defmodule Lenies.SeedPlasmidTest do
            id: "VANILLA",
            codeome: Codeome.from_list(MinimalReplicator.opcodes()),
            energy: 10_000.0,
-           pos: {129, 128},
+           pos: {65, 64},
            dir: :n,
            lineage: {nil, 0}
          ]}
@@ -158,14 +158,14 @@ defmodule Lenies.SeedPlasmidTest do
        %{world_id: world_id, handle: handle} do
     # Use 2000 resource: both Lenies random-walk (Twitch) and need enough food
     # to survive the 2.5s observation window without starving.
-    for x <- 0..254, y <- 0..254 do
+    for x <- 0..127, y <- 0..127 do
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {x, y})
       :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 2000}})
     end
 
-    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {128, 128})
+    [{key1, c1}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key1, %{c1 | lenie_id: "A"}})
-    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {129, 128})
+    [{key2, c2}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {65, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key2, %{c2 | lenie_id: "B"}})
 
     plasmid = Plasmid.new(MinimalReplicator.plasmid())
@@ -179,7 +179,7 @@ defmodule Lenies.SeedPlasmidTest do
          # so `:conjugate` triggers the symmetric-donor scenario.
          codeome: Codeome.from_list(MinimalReplicator.opcodes()),
          energy: 10_000.0,
-         pos: {128, 128},
+         pos: {64, 64},
          dir: :e,
          lineage: {nil, 0},
          plasmids: [plasmid]
@@ -192,7 +192,7 @@ defmodule Lenies.SeedPlasmidTest do
            id: "B",
            codeome: Codeome.from_list(MinimalReplicator.opcodes()),
            energy: 10_000.0,
-           pos: {129, 128},
+           pos: {65, 64},
            dir: :w,
            lineage: {nil, 0},
            plasmids: [plasmid]

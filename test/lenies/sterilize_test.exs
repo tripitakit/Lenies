@@ -19,7 +19,7 @@ defmodule Lenies.SterilizeTest do
     after_stats = Lenies.Worlds.snapshot_stats(world_id)
     assert after_stats.tick_count == 0
     assert after_stats.total_resource == 0
-    assert after_stats.cells == 65_536
+    assert after_stats.cells == 16_384
   end
 
   test "sterilize/0 is idempotent" do

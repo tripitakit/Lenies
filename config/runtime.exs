@@ -17,7 +17,7 @@ import Config
 # Alternatively, you can use `mix phx.gen.release` to generate a `bin/server`
 # script that automatically sets the env var above.
 config :lenies,
-  grid_size: {256, 256},
+  grid_size: {128, 128},
   dashboard_throttle_ticks: 5,
   # Population is bounded by two mechanisms (see :spawn_cap / :replication_cap
   # at the bottom of this block): explicit per-world caps are the primary

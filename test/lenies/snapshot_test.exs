@@ -196,4 +196,25 @@ defmodule Lenies.SnapshotTest do
       assert cells_count > 0, "World should have cells after recovery"
     end
   end
+
+  describe "wipe_if_grid_changed/0" do
+    test "drops the store when the grid dimensions changed; idempotent otherwise" do
+      root = Snapshot.snapshot_root()
+
+      # A snapshot left over from a different grid + a stale marker.
+      File.mkdir_p!(Path.join(root, "stale-world"))
+      File.write!(Path.join(root, ".grid_dims"), "256x256")
+
+      :ok = Snapshot.wipe_if_grid_changed()
+
+      # Wiped, and the marker now reflects the current (128×128) grid.
+      refute File.dir?(Path.join(root, "stale-world"))
+      assert File.read!(Path.join(root, ".grid_dims")) == "128x128"
+
+      # Idempotent: same grid → a freshly written snapshot survives a re-run.
+      File.mkdir_p!(Path.join(root, "fresh-world"))
+      :ok = Snapshot.wipe_if_grid_changed()
+      assert File.dir?(Path.join(root, "fresh-world"))
+    end
+  end
 end

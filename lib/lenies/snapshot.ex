@@ -198,6 +198,61 @@ defmodule Lenies.Snapshot do
     )
   end
 
+  # File at the snapshot root recording the grid dimensions the snapshots were
+  # written with. Hidden (leading dot) and not a world dir, so the per-world
+  # path helpers never collide with it.
+  @grid_marker ".grid_dims"
+
+  @doc """
+  Wipe ALL snapshots when the world grid dimensions have changed.
+
+  Snapshots are raw cell dumps keyed by `{x, y}`; restoring a dump from a
+  different grid into the current world leaves off-grid cells and Lenies at
+  coordinates outside the new bounds. Rather than partially restore an
+  incompatible snapshot, we drop the whole store and let worlds cold-start
+  fresh at the new size.
+
+  Idempotent: a marker at the snapshot root records the current dimensions, so
+  this only wipes when they actually differ (e.g. a one-off grid change). Run
+  once at application start, before any world can restore.
+  """
+  @spec wipe_if_grid_changed() :: :ok
+  def wipe_if_grid_changed do
+    {w, h} = Lenies.Config.grid_size()
+    current = "#{w}x#{h}"
+    root = snapshot_root()
+    marker = Path.join(root, @grid_marker)
+
+    stored =
+      case File.read(marker) do
+        {:ok, content} -> String.trim(content)
+        {:error, _} -> nil
+      end
+
+    if stored == current do
+      :ok
+    else
+      if File.dir?(root) do
+        require Logger
+
+        Logger.info(
+          "Lenies.Snapshot: grid changed (#{stored || "unknown"} -> #{current}); wiping #{root}"
+        )
+
+        File.rm_rf!(root)
+      end
+
+      File.mkdir_p!(root)
+      File.write!(marker, current)
+      :ok
+    end
+  rescue
+    e ->
+      require Logger
+      Logger.error("Lenies.Snapshot.wipe_if_grid_changed failed: #{inspect(e)}")
+      :ok
+  end
+
   defp snapshot_dir(world_id, name) do
     Path.join([snapshot_root(), Lenies.Worlds.id_to_path(world_id), name])
   end
