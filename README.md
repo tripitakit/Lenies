@@ -241,6 +241,18 @@ into your Sandbox or **Save** as a named entry in your **personal collection**
 Postgres scoped to your user; they appear with a star prefix in the spawn
 dropdown of your Sandbox AND in the seed dropdown of the Arena.
 
+**Debug** (next to Spawn / Save) opens the **Codeome Stepper** — a full-screen
+modal debugger for the buffer you're editing, with no effect on your live
+Sandbox (it runs an isolated session). Single-step forward (`Step`, F10) or
+backward (`Step back`, F11) through the program, or `Run` (F5) it at ~10
+ops/sec; **click any opcode row to toggle a breakpoint** (red gutter dot) and a
+run halts there. A left rail shows the VM state as it executes — energy,
+instruction pointer, age, position and direction, the data stack, the four
+memory slots, and the call stack. A **64×64 mini-world** lets you drop seed
+Lenies (built-in or from your saved collection) via the **Place** picker and a
+click, then watch your codeome eat, move, attack, or conjugate against them. A
+run stops on a breakpoint, on `halt`, or at a 10 000-step safety cap.
+
 The editor opens from the **+ New Seed** button (empty buffer), from the
 **Edit** button on the species inspector (pre-loaded), and from a **double
 click on a Lenie cell** on the Sandbox map.
