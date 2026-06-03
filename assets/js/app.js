@@ -41,6 +41,8 @@ import AudioToggle from "./hooks/audio_toggle"
 import SliderValue from "./hooks/slider_value"
 import SnippetDrag from "./hooks/snippet_drag"
 import StepperCanvas from "./hooks/stepper_canvas"
+// Landing-page animated background (plain module; no-ops if the canvas is absent).
+import "./landing_background"
 
 const Hooks = {GridCanvas, ActionFeedback, CodeomeSortable, ConfirmAction, CodeomePalette, RememberManualState, ManualLinkInterceptor, EditorKeyboard, AudioToggle, SliderValue, SnippetDrag, StepperCanvas, ...colocatedHooks}
 

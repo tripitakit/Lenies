@@ -38,6 +38,16 @@ defmodule LeniesWeb.PageControllerTest do
       assert html =~ "Seed a creature, watch it evolve"
     end
 
+    test "GET / includes the animated background canvas", %{conn: conn} do
+      conn = get(conn, ~p"/")
+      html = html_response(conn, 200)
+
+      # The landing background animation (assets/js/landing_background.js) binds
+      # to this canvas; absent it, the module no-ops.
+      assert html =~ ~s(id="landing-bg")
+      assert html =~ ~s(class="splash-scrim")
+    end
+
     test "GET / renders a footer with the GitHub repo link", %{conn: conn} do
       conn = get(conn, ~p"/")
       html = html_response(conn, 200)
