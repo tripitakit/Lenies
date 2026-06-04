@@ -403,6 +403,24 @@ defmodule LeniesWeb.DashboardLiveTest do
                |> element("#open-codeome-editor")
                |> render_click()
     end
+
+    test "EDIT button links to the seed currently selected in the SPAWN dropdown",
+         %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/sandbox")
+
+      default_id = Lenies.Seeds.all() |> hd() |> Map.fetch!(:id) |> Atom.to_string()
+
+      assert has_element?(view, "a#seed-edit-btn[href$='/sandbox/editor/seed/#{default_id}']")
+
+      [_first, second | _] = Lenies.Seeds.all()
+      second_id = Atom.to_string(second.id)
+
+      view
+      |> element("form[phx-submit='spawn_seed']")
+      |> render_change(%{"seed_id" => second_id})
+
+      assert has_element?(view, "a#seed-edit-btn[href$='/sandbox/editor/seed/#{second_id}']")
+    end
   end
 
   describe "map highlight driven by selected species" do
