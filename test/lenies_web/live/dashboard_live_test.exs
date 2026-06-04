@@ -144,6 +144,13 @@ defmodule LeniesWeb.DashboardLiveTest do
     assert html =~ "hashB"
     # Population column for hashA = 2
     assert html =~ ~r/hashA[\s\S]+2/
+
+    # Disambiguated economics columns: per-pass cost, optimistic max gain, and
+    # the derived net (sortable).
+    assert html =~ "Cost/pass"
+    assert html =~ "Max gain"
+    assert html =~ ~r/phx-value-col="net"/
+    assert html =~ "Net"
   end
 
   test "species table shows the plasmid count, not a hash list", %{conn: conn, handle: handle} do

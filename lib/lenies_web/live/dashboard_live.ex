@@ -26,6 +26,7 @@ defmodule LeniesWeb.DashboardLive do
     "size" => :size,
     "cost" => :cost,
     "gain" => :gain,
+    "net" => :net,
     "population" => :population,
     "avg_generation" => :avg_generation
   }
@@ -253,17 +254,25 @@ defmodule LeniesWeb.DashboardLive do
                           class="text-right py-1 pl-3 whitespace-nowrap cursor-pointer select-none hover:text-cyan-200"
                           phx-click="sort_species"
                           phx-value-col="cost"
-                          title="Static energy cost for one linear pass through the codeome. Click to sort."
+                          title="Energy to run the codeome once top-to-bottom, no loops taken (one linear pass). Click to sort."
                         >
-                          Cost{sort_arrow(@sort_by, @sort_dir, :cost)}
+                          Cost/pass{sort_arrow(@sort_by, @sort_dir, :cost)}
                         </th>
                         <th
                           class="text-right py-1 pl-3 whitespace-nowrap cursor-pointer select-none hover:text-cyan-200"
                           phx-click="sort_species"
                           phx-value-col="gain"
-                          title="Max energy gain for one linear pass (all eat/attack succeed). Click to sort."
+                          title="Best-case energy from that single pass if EVERY eat/attack lands — real gain is lower. Click to sort."
                         >
-                          Gain{sort_arrow(@sort_by, @sort_dir, :gain)}
+                          Max gain{sort_arrow(@sort_by, @sort_dir, :gain)}
+                        </th>
+                        <th
+                          class="text-right py-1 pl-3 whitespace-nowrap cursor-pointer select-none hover:text-cyan-200"
+                          phx-click="sort_species"
+                          phx-value-col="net"
+                          title="Max gain − Cost for one linear pass. Positive (green) = the pass pays for itself in the best case; negative (red) = it can't. Click to sort."
+                        >
+                          Net{sort_arrow(@sort_by, @sort_dir, :net)}
                         </th>
                         <th
                           class="text-right py-1 pl-3 whitespace-nowrap cursor-pointer select-none hover:text-cyan-200"
@@ -318,6 +327,9 @@ defmodule LeniesWeb.DashboardLive do
                         </td>
                         <td class="text-right pl-3 whitespace-nowrap text-emerald-300">
                           {format_energy(sp.max_gain)}
+                        </td>
+                        <td class={["text-right pl-3 whitespace-nowrap", net_color(sp.max_gain - sp.cost)]}>
+                          {format_net(sp.max_gain - sp.cost)}
                         </td>
                         <td class="text-right pl-3 whitespace-nowrap">{sp.population}</td>
                         <td class="text-right pl-3 whitespace-nowrap">
@@ -690,6 +702,7 @@ defmodule LeniesWeb.DashboardLive do
   defp sort_key_fun(:size), do: & &1.size
   defp sort_key_fun(:cost), do: & &1.cost
   defp sort_key_fun(:gain), do: & &1.max_gain
+  defp sort_key_fun(:net), do: &(&1.max_gain - &1.cost)
   defp sort_key_fun(:population), do: & &1.population
   defp sort_key_fun(:avg_generation), do: & &1.avg_generation
 
@@ -710,6 +723,14 @@ defmodule LeniesWeb.DashboardLive do
   # Compact energy display for the species table: integer when whole,
   # one decimal otherwise. Avoids `0.0` clutter for codeomes with no
   # eat/attack opcodes and keeps the column width predictable.
+  # Net = max_gain − cost for one linear pass. "+" prefix on positive so the
+  # sign reads at a glance (color carries it too: green ≥ 0, red < 0).
+  defp format_net(net) when net > 0, do: "+" <> format_energy(net)
+  defp format_net(net), do: format_energy(net)
+
+  defp net_color(net) when net < 0, do: "text-rose-300"
+  defp net_color(_net), do: "text-emerald-300"
+
   defp format_energy(n) when is_integer(n), do: Integer.to_string(n)
 
   defp format_energy(n) when is_float(n) do
