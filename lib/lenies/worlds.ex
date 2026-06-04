@@ -113,6 +113,13 @@ defmodule Lenies.Worlds do
   def sterilize(target), do: call(target, :sterilize)
 
   @doc """
+  Cull every live Lenie whose codeome hash matches `hash` from the target world.
+  Returns `{:ok, count}` of Lenies removed. No-op `{:ok, 0}` if none match.
+  """
+  def cull_species(target, hash) when is_binary(hash),
+    do: call(target, {:cull_species, hash})
+
+  @doc """
   Reset the distributed energy (per-cell resource + carcass) of `target` back to
   the flat baseline, preserving the Lenies. Used by the Arena to avoid restoring
   a world saturated with accumulated radiation.
