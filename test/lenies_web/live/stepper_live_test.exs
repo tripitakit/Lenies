@@ -80,6 +80,14 @@ defmodule LeniesWeb.StepperLiveTest do
     assert count(html, "stepper-codeome-op") == dots
   end
 
+  test "the codeome panel renders a loop-arc gutter", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+    populate_buffer(view)
+    html = view |> element("button", "Debug") |> render_click()
+
+    assert html =~ ~s(stepper-loop-gutter)
+  end
+
   defp count(haystack, needle),
     do: haystack |> String.split(needle) |> length() |> Kernel.-(1)
 

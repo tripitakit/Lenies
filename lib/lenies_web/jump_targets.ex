@@ -35,4 +35,19 @@ defmodule LeniesWeb.JumpTargets do
       {i, Template.find_complement(codeome, template, i, radius)}
     end)
   end
+
+  @doc """
+  Backward jumps only: `[{jump_ip, target_ip}, ...]` where `target_ip < jump_ip`.
+  These are the loops drawn as arcs in the debugger. Derived from `targets/1`.
+  """
+  @spec loops([atom()]) :: [{non_neg_integer(), non_neg_integer()}]
+  def loops(buffer) when is_list(buffer) do
+    buffer
+    |> targets()
+    |> Enum.flat_map(fn
+      {jump, {:ok, target}} when target < jump -> [{jump, target}]
+      _ -> []
+    end)
+    |> Enum.sort()
+  end
 end
