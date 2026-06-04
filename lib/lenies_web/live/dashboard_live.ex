@@ -415,6 +415,28 @@ defmodule LeniesWeb.DashboardLive do
     {:noreply, socket}
   end
 
+  @impl true
+  def handle_event("kill_species", %{"hash" => hash}, socket) do
+    target = socket.assigns.world_handle
+    _ = Lenies.Worlds.cull_species(target, hash)
+
+    # cull_species queues async :lenie_died casts; a synchronous world call
+    # flushes the mailbox so the re-aggregation below sees the removal.
+    _ = Lenies.Worlds.snapshot_stats(target)
+
+    {_species, all_species, species_total} =
+      aggregate_with_top(socket.assigns.world_handle, 10)
+
+    {:noreply,
+     socket
+     |> assign(:species_total, species_total)
+     |> assign(:all_species, all_species)
+     |> assign(:selected_hash, nil)
+     |> assign(:selected_species_record, nil)
+     |> assign(:inspector_dirty, false)
+     |> maybe_stream_species(all_species)}
+  end
+
   def handle_event("sort_species", %{"col" => col}, socket) do
     case Map.fetch(@sortable_columns, col) do
       {:ok, new_by} ->

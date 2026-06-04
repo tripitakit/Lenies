@@ -9,9 +9,14 @@ defmodule LeniesWeb.StepperLive do
   use LeniesWeb, :live_component
 
   alias Lenies.Stepper
+  alias LeniesWeb.Disassembler
+  alias LeniesWeb.JumpTargets
 
   @impl true
   def update(%{tick: true}, socket) do
+    # Ensure @loops is always present; it is set in the codeome update path
+    # but guard here in case of unexpected call ordering.
+    socket = assign_new(socket, :loops, fn -> [] end)
     session = socket.assigns.session
 
     if session.status == :running do
@@ -30,9 +35,10 @@ defmodule LeniesWeb.StepperLive do
           # stays visible). Without this, Run advances exactly one opcode and
           # the button flickers Pause → Run on the next render.
           running_session = %{new_session | status: :running}
-          # Delay the next tick so the animation is visible to the user.
-          # 100ms ≈ 10 ops/sec, slow enough to follow state changes by eye.
-          Process.send_after(self(), {:stepper_tick, socket.assigns.id}, 100)
+          # Delay the next tick based on the chosen run speed.
+          # Default 10/s ≈ 100ms, slow enough to follow state changes by eye.
+          delay = Lenies.Stepper.delay_ms_for(Map.get(socket.assigns, :run_speed, 10))
+          Process.send_after(self(), {:stepper_tick, socket.assigns.id}, delay)
           {:ok, assign_session(socket, running_session)}
       end
     else
@@ -76,7 +82,9 @@ defmodule LeniesWeb.StepperLive do
      socket
      |> assign(assigns)
      |> assign_session(session)
-     |> assign_new(:current_user, fn -> nil end)}
+     |> assign(:loops, JumpTargets.loops(Lenies.Codeome.to_list(codeome)))
+     |> assign_new(:current_user, fn -> nil end)
+     |> assign_new(:run_speed, fn -> 10 end)}
   end
 
   @impl true
@@ -120,6 +128,22 @@ defmodule LeniesWeb.StepperLive do
                 ▶▶ Run
               </button>
             <% end %>
+            <form phx-change="set_run_speed" phx-target={@myself} class="stepper-speed-form">
+              <label class="stepper-speed-label" for="stepper-run-speed">
+                {@run_speed}/s
+              </label>
+              <input
+                id="stepper-run-speed"
+                type="range"
+                name="value"
+                min="1"
+                max={Lenies.Stepper.world_ops_per_sec()}
+                value={@run_speed}
+                phx-change="set_run_speed"
+                phx-target={@myself}
+                class="stepper-speed-slider"
+              />
+            </form>
           </div>
           <form phx-change="select_seed" phx-target={@myself} class="stepper-seed-picker">
             <label class="stepper-seed-label">Place:</label>
@@ -253,29 +277,52 @@ defmodule LeniesWeb.StepperLive do
 
           <section class="stepper-codeome">
             <h3 class="stepper-panel-title">Codeome ({Lenies.Codeome.size(@session.codeome)} ops)</h3>
-            <ol class="stepper-codeome-list">
-              <%= for {op, idx} <- Enum.with_index(Lenies.Codeome.to_list(@session.codeome)) do %>
-                <li
-                  class={[
-                    "stepper-codeome-row",
-                    idx == @session.interp.ip && "stepper-codeome-ip",
-                    MapSet.member?(@session.breakpoints, idx) && "stepper-codeome-bp"
-                  ]}
-                  phx-click="toggle_bp"
-                  phx-value-ip={idx}
-                  phx-target={@myself}
-                >
-                  <span class="stepper-codeome-bp-dot"></span>
-                  <span class="stepper-codeome-pos">
-                    {String.pad_leading(Integer.to_string(idx), 3, "0")}
-                  </span>
-                  <span class="stepper-codeome-op">{op}</span>
-                  <%= if idx == @session.interp.ip do %>
-                    <span class="stepper-codeome-arrow">▸</span>
+            <div class="stepper-codeome-panel">
+              <div class="stepper-codeome-inner">
+                <svg class="stepper-loop-gutter">
+                  <%= for {{jump, target}, lane} <- lanes(@loops) do %>
+                    <% row_h = 20 %>
+                    <%!-- Cap the lane offset at 4 so deeply-nested loops stay within the
+                         gutter width instead of drifting to negative x (which the
+                         scroll container would clip). Beyond 4, arcs stack on the leftmost lane. --%>
+                    <% x = 16 - min(lane, 4) * 4 %>
+                    <% y1 = target * row_h + div(row_h, 2) %>
+                    <% y2 = jump * row_h + div(row_h, 2) %>
+                    <% active? = target <= @session.interp.ip and @session.interp.ip <= jump %>
+                    <path
+                      class={["stepper-loop-arc", active? && "stepper-loop-arc--active"]}
+                      d={"M #{x + 4} #{y1} H #{x} V #{y2} H #{x + 4}"}
+                    />
                   <% end %>
-                </li>
-              <% end %>
-            </ol>
+                </svg>
+                <ol id="stepper-codeome-list" class="stepper-codeome-list" phx-hook="StepperFollowIP">
+                  <%= for {op, idx} <- Enum.with_index(Lenies.Codeome.to_list(@session.codeome)) do %>
+                    <li
+                      class={[
+                        "stepper-codeome-row",
+                        idx == @session.interp.ip && "stepper-codeome-ip",
+                        MapSet.member?(@session.breakpoints, idx) && "stepper-codeome-bp"
+                      ]}
+                      data-current={idx == @session.interp.ip && "true"}
+                      phx-click="toggle_bp"
+                      phx-value-ip={idx}
+                      phx-target={@myself}
+                    >
+                      <span class="stepper-codeome-bp-dot"></span>
+                      <span class="stepper-codeome-pos">
+                        {String.pad_leading(Integer.to_string(idx), 3, "0")}
+                      </span>
+                      <span class={"stepper-codeome-op op op-" <> Atom.to_string(Disassembler.opcode_class(op))}>
+                        {op}
+                      </span>
+                      <%= if idx == @session.interp.ip do %>
+                        <span class="stepper-codeome-arrow">▸</span>
+                      <% end %>
+                    </li>
+                  <% end %>
+                </ol>
+              </div>
+            </div>
           </section>
 
           <aside class="stepper-world">
@@ -344,6 +391,11 @@ defmodule LeniesWeb.StepperLive do
   def handle_event("close", _params, socket) do
     send(self(), :close_stepper)
     {:noreply, socket}
+  end
+
+  def handle_event("set_run_speed", %{"value" => value}, socket) do
+    speed = value |> to_speed() |> max(1)
+    {:noreply, assign(socket, :run_speed, speed)}
   end
 
   def handle_event("select_seed", %{"value" => ""}, socket) do
@@ -431,6 +483,15 @@ defmodule LeniesWeb.StepperLive do
     end
   end
 
+  defp to_speed(value) when is_integer(value), do: value
+
+  defp to_speed(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {n, _} -> n
+      :error -> 1
+    end
+  end
+
   defp parse_int(s) when is_binary(s) do
     case Integer.parse(s) do
       {n, ""} -> n
@@ -440,6 +501,27 @@ defmodule LeniesWeb.StepperLive do
 
   defp parse_int(n) when is_integer(n), do: n
   defp parse_int(_), do: nil
+
+  # Assign each loop a "lane" (0,1,2,...) so overlapping spans don't draw on top
+  # of each other. Greedy: reuse the lowest lane whose last span ended before
+  # this loop starts.
+  defp lanes(loops) do
+    loops
+    |> Enum.sort_by(fn {jump, target} -> {target, jump} end)
+    |> Enum.reduce({[], []}, fn {jump, target} = loop, {acc, lane_ends} ->
+      lane = Enum.find_index(lane_ends, fn last_jump -> last_jump < target end)
+
+      {lane, lane_ends} =
+        case lane do
+          nil -> {length(lane_ends), lane_ends ++ [jump]}
+          i -> {i, List.replace_at(lane_ends, i, jump)}
+        end
+
+      {[{loop, lane} | acc], lane_ends}
+    end)
+    |> elem(0)
+    |> Enum.reverse()
+  end
 
   defp status_label(:ready), do: "ready"
   defp status_label(:running), do: "running"

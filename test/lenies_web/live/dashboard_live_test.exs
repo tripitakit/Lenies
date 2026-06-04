@@ -403,6 +403,24 @@ defmodule LeniesWeb.DashboardLiveTest do
                |> element("#open-codeome-editor")
                |> render_click()
     end
+
+    test "EDIT button links to the seed currently selected in the SPAWN dropdown",
+         %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/sandbox")
+
+      default_id = Lenies.Seeds.all() |> hd() |> Map.fetch!(:id) |> Atom.to_string()
+
+      assert has_element?(view, "a#seed-edit-btn[href$='/sandbox/editor/seed/#{default_id}']")
+
+      [_first, second | _] = Lenies.Seeds.all()
+      second_id = Atom.to_string(second.id)
+
+      view
+      |> element("form[phx-submit='spawn_seed']")
+      |> render_change(%{"seed_id" => second_id})
+
+      assert has_element?(view, "a#seed-edit-btn[href$='/sandbox/editor/seed/#{second_id}']")
+    end
   end
 
   describe "map highlight driven by selected species" do
@@ -970,6 +988,25 @@ defmodule LeniesWeb.DashboardLiveTest do
     assert html =~ "DET"
     # …and the standalone "World totals" panel is gone.
     refute html =~ "World totals"
+  end
+
+  describe "KILL button — cull selected species" do
+    test "KILL culls the selected species and clears the selection",
+         %{conn: conn, handle: handle} do
+      :ets.insert(
+        handle.tables.lenies,
+        {"K1", %{id: "K1", codeome_hash: "HASH-KILL", lineage: {nil, 0}}}
+      )
+
+      {:ok, view, _html} = live(conn, ~p"/sandbox")
+
+      render_click(view, "select_species", %{"hash" => "HASH-KILL"})
+      assert has_element?(view, "#species-inspector")
+
+      render_click(view, "kill_species", %{"hash" => "HASH-KILL"})
+
+      refute has_element?(view, "#species-inspector")
+    end
   end
 
   describe "spawn cap UI (Task 4)" do

@@ -223,4 +223,19 @@ defmodule Lenies.StepperTest do
       assert s2.place_seed_mode == nil
     end
   end
+
+  describe "delay_ms_for/1" do
+    test "converts opcodes/sec to a tick delay, clamping at >= 1/sec" do
+      assert Lenies.Stepper.delay_ms_for(1) == 1000
+      assert Lenies.Stepper.delay_ms_for(100) == 10
+      assert Lenies.Stepper.delay_ms_for(0) == 1000
+      assert Lenies.Stepper.delay_ms_for(-5) == 1000
+    end
+  end
+
+  describe "world_ops_per_sec/0" do
+    test "returns a positive opcode rate" do
+      assert Lenies.Stepper.world_ops_per_sec() > 0
+    end
+  end
 end

@@ -62,6 +62,7 @@ defmodule LeniesWeb.Router do
       live "/sandbox/species/:hash", SpeciesLive, :show
       live "/sandbox/editor/new", EditorLive, :new
       live "/sandbox/editor/edit/:hash", EditorLive, :edit
+      live "/sandbox/editor/seed/:seed_id", EditorLive, :seed
 
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email

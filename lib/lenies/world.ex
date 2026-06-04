@@ -144,6 +144,36 @@ defmodule Lenies.World do
     {:reply, :ok, new_state}
   end
 
+  def handle_call({:cull_species, hash}, _from, state) do
+    # Mirror Lenies.Arena apoptosis: select matching Lenies straight from the
+    # :lenies ETS table, terminate each process, then replay the :lenie_died
+    # cast on its behalf. Lenies do not trap exits, so a supervisor shutdown
+    # bypasses Lenie.terminate/2 — replaying keeps the cell grid + carcass
+    # bookkeeping consistent (frees the cell, deletes the :lenies row).
+    ms = [
+      {{:"$1", %{pos: :"$2", energy: :"$3", codeome_hash: :"$4", seeder_user_id: :"$5"}},
+       [{:==, :"$4", hash}], [{{:"$1", :"$2", :"$3", :"$5"}}]}
+    ]
+
+    rows = :ets.select(state.tables.lenies, ms)
+    sup = Lenies.LenieSupervisor.via(state.world_id)
+
+    count =
+      Enum.reduce(rows, 0, fn {id, pos, energy, seeder_user_id}, acc ->
+        case Registry.lookup(Lenies.Registry, {:lenie, state.world_id, id}) do
+          [{pid, _}] ->
+            _ = DynamicSupervisor.terminate_child(sup, pid)
+            GenServer.cast(self(), {:lenie_died, id, pos, energy, hash, seeder_user_id})
+            acc + 1
+
+          [] ->
+            acc
+        end
+      end)
+
+    {:reply, {:ok, count}, state}
+  end
+
   # Reset the distributed energy (per-cell resource + carcass) back to the flat
   # baseline, WITHOUT touching the Lenies (lenie_id is preserved). Used by the
   # Arena when it goes unobserved so the world doesn't restore saturated with

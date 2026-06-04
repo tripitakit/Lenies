@@ -14,8 +14,8 @@ defmodule Lenies.Worlds do
   ## Facade entry points
 
   - Lifecycle: `start_world/2`, `stop_world/1`, `handle/1`, `list/0`, `alive?/1`
-  - Per-world ops: `spawn_lenie/3`, `action/2`, `sterilize/1`, `pause/1`,
-    `resume/1`, `paused?/1`, `tune/3`, `snapshot_stats/1`
+  - Per-world ops: `spawn_lenie/3`, `action/2`, `sterilize/1`, `cull_species/2`,
+    `pause/1`, `resume/1`, `paused?/1`, `tune/3`, `snapshot_stats/1`
 
   All per-world ops accept either a world id (`:arena`, `{:sandbox, 1}`, ...)
   OR an already-resolved `%Lenies.WorldHandle{}` for callers that can cache
@@ -111,6 +111,17 @@ defmodule Lenies.Worlds do
   end
 
   def sterilize(target), do: call(target, :sterilize)
+
+  @spec cull_species(term() | Lenies.WorldHandle.t(), String.t()) :: {:ok, non_neg_integer()}
+  @doc """
+  Cull every live Lenie whose codeome hash matches `hash` from the target world.
+
+  Returns `{:ok, count}` of Lenies terminated. No-op `{:ok, 0}` if none match.
+  Rows whose process is already dead at call time are skipped (not counted) and
+  reaped by the next reconcile cycle.
+  """
+  def cull_species(target, hash) when is_binary(hash),
+    do: call(target, {:cull_species, hash})
 
   @doc """
   Reset the distributed energy (per-cell resource + carcass) of `target` back to

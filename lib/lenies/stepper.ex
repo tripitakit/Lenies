@@ -217,4 +217,23 @@ defmodule Lenies.Stepper do
 
   def set_place_seed_mode(%__MODULE__{} = session, seed_id),
     do: %{session | place_seed_mode: %{seed_id: seed_id}}
+
+  @doc "Tick delay (ms) for a RUN speed in opcodes/sec. Clamps speed to >= 1."
+  @spec delay_ms_for(integer()) :: pos_integer()
+  def delay_ms_for(speed) do
+    round(1000 / max(speed, 1))
+  end
+
+  @doc """
+  The live world's effective execution rate in opcodes/sec, derived from config
+  (`interpreter_steps_per_batch` over `lenie_metabolize_delay_ms`). Used as the
+  RUN slider's maximum ("world speed"). Falls back to 100 when the inter-batch
+  delay is 0 (dev/test), so the slider has a stable, finite max.
+  """
+  @spec world_ops_per_sec() :: pos_integer()
+  def world_ops_per_sec do
+    steps = Application.get_env(:lenies, :interpreter_steps_per_batch, 10)
+    delay = Application.get_env(:lenies, :lenie_metabolize_delay_ms, 0)
+    if delay > 0, do: round(steps * 1000 / delay), else: 100
+  end
 end

@@ -80,6 +80,27 @@ defmodule LeniesWeb.StepperLiveTest do
     assert count(html, "stepper-codeome-op") == dots
   end
 
+  test "the codeome panel renders a loop-arc gutter", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+    populate_buffer(view)
+    html = view |> element("button", "Debug") |> render_click()
+
+    assert html =~ ~s(stepper-loop-gutter)
+  end
+
+  test "a backward jump renders a loop arc in the gutter", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+
+    view
+    |> element("form[phx-submit='submit_opcode_text']")
+    |> render_submit(%{"opcodes" => "nop_1 add jmp_t nop_0 eat"})
+
+    html = view |> element("button", "Debug") |> render_click()
+
+    assert html =~ ~s(stepper-loop-gutter)
+    assert html =~ ~s(stepper-loop-arc)
+  end
+
   defp count(haystack, needle),
     do: haystack |> String.split(needle) |> length() |> Kernel.-(1)
 
@@ -141,11 +162,43 @@ defmodule LeniesWeb.StepperLiveTest do
     assert html =~ "Step #" or html =~ "Halted"
   end
 
+  test "opcodes in the stepper listing carry category color classes", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+    populate_buffer(view)
+
+    html = view |> element("button", "Debug") |> render_click()
+
+    # The stepper codeome listing must have op-category spans.
+    # push1/dup → :stack, add → :arith.
+    assert html =~ ~s(class="stepper-codeome-op op op-stack)
+    assert html =~ ~s(class="stepper-codeome-op op op-arith)
+  end
+
   test "halt status renders the red banner", %{conn: _conn} do
     # Hand-craft via send_update isn't easy via LiveViewTest. The simplest path
     # is to push enough opcodes that the default energy depletes within run().
     # `run` is async-tick now — for testability we just trust the banner
     # renders the right markup when halted. Skip if cumbersome.
     :ok
+  end
+
+  test "the codeome list is followable and marks the current IP row", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+    populate_buffer(view)
+    html = view |> element("button", "Debug") |> render_click()
+
+    assert html =~ ~s(phx-hook="StepperFollowIP")
+    assert html =~ ~s(data-current="true")
+  end
+
+  test "RUN-speed slider is present and updates on change", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+    populate_buffer(view)
+    view |> element("button", "Debug") |> render_click()
+
+    assert has_element?(view, "#stepper-run-speed[type='range']")
+
+    view |> element("#stepper-run-speed") |> render_change(%{"value" => "50"})
+    assert has_element?(view, "#stepper-run-speed[value='50']")
   end
 end

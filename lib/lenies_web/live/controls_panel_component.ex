@@ -84,6 +84,13 @@ defmodule LeniesWeb.ControlsPanelComponent do
           assign(socket, :paused?, paused?)
       end
 
+    # Default the selected seed to the first builtin seed on first render;
+    # preserve the existing selection on subsequent re-renders.
+    socket =
+      assign_new(socket, :selected_seed_id, fn ->
+        Lenies.Seeds.all() |> hd() |> Map.fetch!(:id) |> Atom.to_string()
+      end)
+
     # Spawn cap status — read the world's current population vs configured
     # cap. Used by the template to disable the Spawn button when at cap.
     # :sys.get_state is acceptable here because update/2 runs only on
@@ -203,14 +210,29 @@ defmodule LeniesWeb.ControlsPanelComponent do
           </button>
         </div>
 
-        <form phx-submit="spawn_seed" phx-target={@myself} class="flex items-center gap-2 text-[11px]">
+        <form
+          phx-submit="spawn_seed"
+          phx-change="select_seed"
+          phx-target={@myself}
+          class="flex items-center gap-2 text-[11px]"
+        >
           <span class="text-[9px] tracking-widest opacity-50 w-9">SEED</span>
           <select name="seed_id" class="flex-1 text-xs">
             <%= for s <- Lenies.Seeds.all() do %>
-              <option value={Atom.to_string(s.id)}>{s.name}</option>
+              <option
+                value={Atom.to_string(s.id)}
+                selected={Atom.to_string(s.id) == @selected_seed_id}
+              >
+                {s.name}
+              </option>
             <% end %>
             <%= for s <- @custom_seeds do %>
-              <option value={"custom:" <> to_string(s.id)}>★ {s.name}</option>
+              <option
+                value={"custom:" <> to_string(s.id)}
+                selected={"custom:" <> to_string(s.id) == @selected_seed_id}
+              >
+                ★ {s.name}
+              </option>
             <% end %>
           </select>
           <button
@@ -226,6 +248,13 @@ defmodule LeniesWeb.ControlsPanelComponent do
           >
             Spawn
           </button>
+          <.link
+            id="seed-edit-btn"
+            navigate={~p"/sandbox/editor/seed/#{@selected_seed_id}"}
+            class="text-xs px-3 py-1 border border-cyan-500/60 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/50"
+          >
+            Edit
+          </.link>
         </form>
 
         <%= if @show_custom_manage do %>
@@ -403,6 +432,10 @@ defmodule LeniesWeb.ControlsPanelComponent do
       nil ->
         {:noreply, socket}
     end
+  end
+
+  def handle_event("select_seed", %{"seed_id" => seed_id}, socket) do
+    {:noreply, assign(socket, :selected_seed_id, seed_id)}
   end
 
   def handle_event("tune_param", %{"key" => key_str, "value" => value_str}, socket) do

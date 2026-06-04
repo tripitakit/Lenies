@@ -753,4 +753,15 @@ defmodule LeniesWeb.EditorLiveTest do
       assert_redirect(view, "/sandbox")
     end
   end
+
+  test "the SAVE form is right-aligned under the SAVE button", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+
+    # Open the save form directly (the handler sets show_save_form: true
+    # without re-checking validation, so this works without a valid buffer).
+    html = render_hook(view, "open_save_form", %{})
+
+    assert html =~ ~s(id="save-seed-form")
+    assert has_element?(view, "form#save-seed-form.justify-end")
+  end
 end

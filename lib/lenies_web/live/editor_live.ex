@@ -8,6 +8,7 @@ defmodule LeniesWeb.EditorLive do
     /editor/new          — empty buffer (new seed)
     /editor/edit/:hash   — buffer pre-loaded from a representative
                            Lenie of the given species hash
+    /editor/seed/:seed_id — buffer pre-loaded from a builtin or custom seed
   """
 
   use LeniesWeb, :live_view
@@ -34,8 +35,10 @@ defmodule LeniesWeb.EditorLive do
       Phoenix.PubSub.subscribe(Lenies.PubSub, "sandboxes:manager_up")
     end
 
+    scope = socket.assigns.current_scope
+
     {mode, selected_hash, buffer} =
-      init_for_route(socket.assigns.live_action, params, world_id, world_handle)
+      init_for_route(socket.assigns.live_action, params, world_id, world_handle, scope)
 
     socket =
       socket
@@ -70,11 +73,11 @@ defmodule LeniesWeb.EditorLive do
     {:ok, socket}
   end
 
-  defp init_for_route(:new, _params, _world_id, _handle) do
+  defp init_for_route(:new, _params, _world_id, _handle, _scope) do
     {:new_seed, nil, []}
   end
 
-  defp init_for_route(:edit, %{"hash" => hash}, world_id, handle) do
+  defp init_for_route(:edit, %{"hash" => hash}, world_id, handle, _scope) do
     buffer =
       case Lenies.Species.for_hash(handle, hash) do
         [{sample_id, _} | _] ->
@@ -88,6 +91,42 @@ defmodule LeniesWeb.EditorLive do
       end
 
     {:edit, hash, buffer}
+  end
+
+  # Custom seed: "custom:<id>" — scoped to the current user.
+  defp init_for_route(:seed, %{"seed_id" => "custom:" <> id}, _world_id, _handle, scope) do
+    buffer =
+      case Lenies.Collection.get_codeome(scope.user, id) do
+        %Lenies.Collection.Codeome{} = entry -> Lenies.Collection.to_opcode_atoms(entry)
+        _ -> []
+      end
+
+    {:new_seed, nil, buffer}
+  end
+
+  # Builtin seed by id atom.
+  defp init_for_route(:seed, %{"seed_id" => sid}, _world_id, _handle, _scope) do
+    buffer =
+      case safe_seed_atom(sid) do
+        nil ->
+          []
+
+        atom ->
+          case Lenies.Seeds.get(atom) do
+            %{codeome: codeome} -> Lenies.Codeome.to_list(codeome)
+            _ -> []
+          end
+      end
+
+    {:new_seed, nil, buffer}
+  end
+
+  defp safe_seed_atom(sid) do
+    try do
+      String.to_existing_atom(sid)
+    rescue
+      ArgumentError -> nil
+    end
   end
 
   defp safe_get_codeome(world_id, id) do
@@ -718,8 +757,9 @@ defmodule LeniesWeb.EditorLive do
 
       <%= if @show_save_form do %>
         <form
+          id="save-seed-form"
           phx-submit="submit_save_seed"
-          class="flex gap-2 items-center text-[11px] p-2 border-b border-violet-500/30"
+          class="flex flex-wrap gap-2 items-center justify-end text-[11px] p-2 border-b border-violet-500/30"
         >
           <label class="flex gap-1 items-center">
             <span class="opacity-70">name</span>
