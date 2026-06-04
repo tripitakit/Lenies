@@ -46,7 +46,10 @@ defmodule LeniesWeb.JumpTargetsTest do
     expected =
       buffer
       |> JumpTargets.targets()
-      |> Enum.flat_map(fn {j, {:ok, t}} when t < j -> [{j, t}]; _ -> [] end)
+      |> Enum.flat_map(fn
+        {j, {:ok, t}} when t < j -> [{j, t}]
+        _ -> []
+      end)
       |> Enum.sort()
 
     assert loops == expected
