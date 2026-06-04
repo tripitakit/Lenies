@@ -278,43 +278,45 @@ defmodule LeniesWeb.StepperLive do
           <section class="stepper-codeome">
             <h3 class="stepper-panel-title">Codeome ({Lenies.Codeome.size(@session.codeome)} ops)</h3>
             <div class="stepper-codeome-panel">
-              <svg class="stepper-loop-gutter">
-                <%= for {{jump, target}, lane} <- lanes(@loops) do %>
-                  <% row_h = 20 %>
-                  <% x = 16 - lane * 4 %>
-                  <% y1 = target * row_h + div(row_h, 2) %>
-                  <% y2 = jump * row_h + div(row_h, 2) %>
-                  <% active? = target <= @session.interp.ip and @session.interp.ip <= jump %>
-                  <path
-                    class={["stepper-loop-arc", active? && "stepper-loop-arc--active"]}
-                    d={"M #{x + 4} #{y1} H #{x} V #{y2} H #{x + 4}"}
-                  />
-                <% end %>
-              </svg>
-              <ol id="stepper-codeome-list" class="stepper-codeome-list" phx-hook="StepperFollowIP">
-                <%= for {op, idx} <- Enum.with_index(Lenies.Codeome.to_list(@session.codeome)) do %>
-                  <li
-                    class={[
-                      "stepper-codeome-row",
-                      idx == @session.interp.ip && "stepper-codeome-ip",
-                      MapSet.member?(@session.breakpoints, idx) && "stepper-codeome-bp"
-                    ]}
-                    data-current={idx == @session.interp.ip && "true"}
-                    phx-click="toggle_bp"
-                    phx-value-ip={idx}
-                    phx-target={@myself}
-                  >
-                    <span class="stepper-codeome-bp-dot"></span>
-                    <span class="stepper-codeome-pos">
-                      {String.pad_leading(Integer.to_string(idx), 3, "0")}
-                    </span>
-                    <span class={"stepper-codeome-op op op-" <> Atom.to_string(Disassembler.opcode_class(op))}>{op}</span>
-                    <%= if idx == @session.interp.ip do %>
-                      <span class="stepper-codeome-arrow">▸</span>
-                    <% end %>
-                  </li>
-                <% end %>
-              </ol>
+              <div class="stepper-codeome-inner">
+                <svg class="stepper-loop-gutter">
+                  <%= for {{jump, target}, lane} <- lanes(@loops) do %>
+                    <% row_h = 20 %>
+                    <% x = 16 - lane * 4 %>
+                    <% y1 = target * row_h + div(row_h, 2) %>
+                    <% y2 = jump * row_h + div(row_h, 2) %>
+                    <% active? = target <= @session.interp.ip and @session.interp.ip <= jump %>
+                    <path
+                      class={["stepper-loop-arc", active? && "stepper-loop-arc--active"]}
+                      d={"M #{x + 4} #{y1} H #{x} V #{y2} H #{x + 4}"}
+                    />
+                  <% end %>
+                </svg>
+                <ol id="stepper-codeome-list" class="stepper-codeome-list" phx-hook="StepperFollowIP">
+                  <%= for {op, idx} <- Enum.with_index(Lenies.Codeome.to_list(@session.codeome)) do %>
+                    <li
+                      class={[
+                        "stepper-codeome-row",
+                        idx == @session.interp.ip && "stepper-codeome-ip",
+                        MapSet.member?(@session.breakpoints, idx) && "stepper-codeome-bp"
+                      ]}
+                      data-current={idx == @session.interp.ip && "true"}
+                      phx-click="toggle_bp"
+                      phx-value-ip={idx}
+                      phx-target={@myself}
+                    >
+                      <span class="stepper-codeome-bp-dot"></span>
+                      <span class="stepper-codeome-pos">
+                        {String.pad_leading(Integer.to_string(idx), 3, "0")}
+                      </span>
+                      <span class={"stepper-codeome-op op op-" <> Atom.to_string(Disassembler.opcode_class(op))}>{op}</span>
+                      <%= if idx == @session.interp.ip do %>
+                        <span class="stepper-codeome-arrow">▸</span>
+                      <% end %>
+                    </li>
+                  <% end %>
+                </ol>
+              </div>
             </div>
           </section>
 
