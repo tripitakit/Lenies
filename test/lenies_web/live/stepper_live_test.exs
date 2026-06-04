@@ -88,6 +88,19 @@ defmodule LeniesWeb.StepperLiveTest do
     assert html =~ ~s(stepper-loop-gutter)
   end
 
+  test "a backward jump renders a loop arc in the gutter", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+
+    view
+    |> element("form[phx-submit='submit_opcode_text']")
+    |> render_submit(%{"opcodes" => "nop_1 add jmp_t nop_0 eat"})
+
+    html = view |> element("button", "Debug") |> render_click()
+
+    assert html =~ ~s(stepper-loop-gutter)
+    assert html =~ ~s(stepper-loop-arc)
+  end
+
   defp count(haystack, needle),
     do: haystack |> String.split(needle) |> length() |> Kernel.-(1)
 

@@ -282,7 +282,10 @@ defmodule LeniesWeb.StepperLive do
                 <svg class="stepper-loop-gutter">
                   <%= for {{jump, target}, lane} <- lanes(@loops) do %>
                     <% row_h = 20 %>
-                    <% x = 16 - lane * 4 %>
+                    <%!-- Cap the lane offset at 4 so deeply-nested loops stay within the
+                         gutter width instead of drifting to negative x (which the
+                         scroll container would clip). Beyond 4, arcs stack on the leftmost lane. --%>
+                    <% x = 16 - min(lane, 4) * 4 %>
                     <% y1 = target * row_h + div(row_h, 2) %>
                     <% y2 = jump * row_h + div(row_h, 2) %>
                     <% active? = target <= @session.interp.ip and @session.interp.ip <= jump %>
