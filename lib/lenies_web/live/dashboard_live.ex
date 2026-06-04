@@ -433,6 +433,7 @@ defmodule LeniesWeb.DashboardLive do
      |> assign(:all_species, all_species)
      |> assign(:selected_hash, nil)
      |> assign(:selected_species_record, nil)
+     |> assign(:inspector_dirty, false)
      |> maybe_stream_species(all_species)}
   end
 
