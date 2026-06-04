@@ -78,6 +78,17 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
           </.link>
         <% end %>
         <button
+          :if={@selected_hash}
+          id={"inspector-kill-#{@selected_hash}"}
+          phx-click="kill_species"
+          phx-value-hash={@selected_hash}
+          data-confirm="Kill this species? All its living Lenies will be removed."
+          class="px-2 text-rose-300 hover:text-rose-200 hover:bg-rose-500/10"
+          title="Kill species"
+        >
+          ✕
+        </button>
+        <button
           id={"inspector-close-#{@selected_hash}"}
           phx-click="select_species"
           phx-value-hash={@selected_hash}
