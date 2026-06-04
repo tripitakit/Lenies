@@ -9,6 +9,7 @@ defmodule LeniesWeb.StepperLive do
   use LeniesWeb, :live_component
 
   alias Lenies.Stepper
+  alias LeniesWeb.Disassembler
 
   @impl true
   def update(%{tick: true}, socket) do
@@ -269,7 +270,7 @@ defmodule LeniesWeb.StepperLive do
                   <span class="stepper-codeome-pos">
                     {String.pad_leading(Integer.to_string(idx), 3, "0")}
                   </span>
-                  <span class="stepper-codeome-op">{op}</span>
+                  <span class={"stepper-codeome-op op op-" <> Atom.to_string(Disassembler.opcode_class(op))}>{op}</span>
                   <%= if idx == @session.interp.ip do %>
                     <span class="stepper-codeome-arrow">▸</span>
                   <% end %>

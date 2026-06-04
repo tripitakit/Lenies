@@ -141,6 +141,18 @@ defmodule LeniesWeb.StepperLiveTest do
     assert html =~ "Step #" or html =~ "Halted"
   end
 
+  test "opcodes in the stepper listing carry category color classes", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+    populate_buffer(view)
+
+    html = view |> element("button", "Debug") |> render_click()
+
+    # The stepper codeome listing must have op-category spans.
+    # push1/dup → :stack, add → :arith.
+    assert html =~ ~s(class="stepper-codeome-op op op-stack)
+    assert html =~ ~s(class="stepper-codeome-op op op-arith)
+  end
+
   test "halt status renders the red banner", %{conn: _conn} do
     # Hand-craft via send_update isn't easy via LiveViewTest. The simplest path
     # is to push enough opcodes that the default energy depletes within run().
