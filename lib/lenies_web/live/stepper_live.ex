@@ -272,7 +272,7 @@ defmodule LeniesWeb.StepperLive do
 
           <section class="stepper-codeome">
             <h3 class="stepper-panel-title">Codeome ({Lenies.Codeome.size(@session.codeome)} ops)</h3>
-            <ol class="stepper-codeome-list">
+            <ol id="stepper-codeome-list" class="stepper-codeome-list" phx-hook="StepperFollowIP">
               <%= for {op, idx} <- Enum.with_index(Lenies.Codeome.to_list(@session.codeome)) do %>
                 <li
                   class={[
@@ -280,6 +280,7 @@ defmodule LeniesWeb.StepperLive do
                     idx == @session.interp.ip && "stepper-codeome-ip",
                     MapSet.member?(@session.breakpoints, idx) && "stepper-codeome-bp"
                   ]}
+                  data-current={idx == @session.interp.ip && "true"}
                   phx-click="toggle_bp"
                   phx-value-ip={idx}
                   phx-target={@myself}

@@ -161,6 +161,15 @@ defmodule LeniesWeb.StepperLiveTest do
     :ok
   end
 
+  test "the codeome list is followable and marks the current IP row", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+    populate_buffer(view)
+    html = view |> element("button", "Debug") |> render_click()
+
+    assert html =~ ~s(phx-hook="StepperFollowIP")
+    assert html =~ ~s(data-current="true")
+  end
+
   test "RUN-speed slider is present and updates on change", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
     populate_buffer(view)
