@@ -160,4 +160,15 @@ defmodule LeniesWeb.StepperLiveTest do
     # renders the right markup when halted. Skip if cumbersome.
     :ok
   end
+
+  test "RUN-speed slider is present and updates on change", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+    populate_buffer(view)
+    view |> element("button", "Debug") |> render_click()
+
+    assert has_element?(view, "#stepper-run-speed[type='range']")
+
+    view |> element("#stepper-run-speed") |> render_change(%{"value" => "50"})
+    assert has_element?(view, "#stepper-run-speed[value='50']")
+  end
 end

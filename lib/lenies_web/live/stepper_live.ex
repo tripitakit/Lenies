@@ -31,9 +31,10 @@ defmodule LeniesWeb.StepperLive do
           # stays visible). Without this, Run advances exactly one opcode and
           # the button flickers Pause → Run on the next render.
           running_session = %{new_session | status: :running}
-          # Delay the next tick so the animation is visible to the user.
-          # 100ms ≈ 10 ops/sec, slow enough to follow state changes by eye.
-          Process.send_after(self(), {:stepper_tick, socket.assigns.id}, 100)
+          # Delay the next tick based on the chosen run speed.
+          # Default 10/s ≈ 100ms, slow enough to follow state changes by eye.
+          delay = Lenies.Stepper.delay_ms_for(Map.get(socket.assigns, :run_speed, 10))
+          Process.send_after(self(), {:stepper_tick, socket.assigns.id}, delay)
           {:ok, assign_session(socket, running_session)}
       end
     else
@@ -77,7 +78,8 @@ defmodule LeniesWeb.StepperLive do
      socket
      |> assign(assigns)
      |> assign_session(session)
-     |> assign_new(:current_user, fn -> nil end)}
+     |> assign_new(:current_user, fn -> nil end)
+     |> assign_new(:run_speed, fn -> 10 end)}
   end
 
   @impl true
@@ -121,6 +123,22 @@ defmodule LeniesWeb.StepperLive do
                 ▶▶ Run
               </button>
             <% end %>
+            <form phx-change="set_run_speed" phx-target={@myself} class="stepper-speed-form">
+              <label class="stepper-speed-label" for="stepper-run-speed">
+                {@run_speed}/s
+              </label>
+              <input
+                id="stepper-run-speed"
+                type="range"
+                name="value"
+                min="1"
+                max={Lenies.Stepper.world_ops_per_sec()}
+                value={@run_speed}
+                phx-change="set_run_speed"
+                phx-target={@myself}
+                class="stepper-speed-slider"
+              />
+            </form>
           </div>
           <form phx-change="select_seed" phx-target={@myself} class="stepper-seed-picker">
             <label class="stepper-seed-label">Place:</label>
@@ -347,6 +365,11 @@ defmodule LeniesWeb.StepperLive do
     {:noreply, socket}
   end
 
+  def handle_event("set_run_speed", %{"value" => value}, socket) do
+    speed = value |> to_speed() |> max(1)
+    {:noreply, assign(socket, :run_speed, speed)}
+  end
+
   def handle_event("select_seed", %{"value" => ""}, socket) do
     {:noreply, assign_session(socket, Stepper.set_place_seed_mode(socket.assigns.session, nil))}
   end
@@ -429,6 +452,15 @@ defmodule LeniesWeb.StepperLive do
       %Lenies.Collection.Codeome{} = c ->
         opcodes = Lenies.Collection.to_opcode_atoms(c)
         %{codeome: Lenies.Codeome.from_list(opcodes), plasmids: []}
+    end
+  end
+
+  defp to_speed(value) when is_integer(value), do: value
+
+  defp to_speed(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {n, _} -> n
+      :error -> 1
     end
   end
 
