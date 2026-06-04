@@ -3,12 +3,8 @@ defmodule Lenies.World.CellTest do
 
   alias Lenies.World.Cell
 
-  test "new/0 returns an empty cell" do
-    assert %Cell{lenie_id: nil, resource: 0, carcass: 0} = Cell.new()
-  end
-
   test "add_resource/2 caps at cell_resource_cap" do
-    cell = Cell.new()
+    cell = %Cell{}
     cell = Cell.add_resource(cell, 80)
     assert cell.resource == 80
     cell = Cell.add_resource(cell, 50)

@@ -8,13 +8,14 @@ defmodule Lenies.Interpreter.State do
   - `slots`: 4 local memory slots (`%{0..3 => integer}`)
   - `dir`: current orientation `:n | :e | :s | :w`
   - `energy`: remaining energy (float, decremented by opcode costs)
-  - `age`: incremented by 1 on each batch of K instructions (metabolic tick)
+  - `age`: incremented by 1 on each batch of K instructions (metabolic tick),
+    not per instruction; exposed to programs via the `:sense_age` opcode
   - `pos`: position `{x, y}` on the grid
   - `call_stack`: IP history for `:call_t` / `:ret`
-  - `plasmids`: list of `%Lenies.Plasmid{}` (MVP holds 0 or 1; forward-
-    compatible with multi-plasmid). Mutated by `:make_plasmid` and
-    `:conjugate`; the host Lenie process mirrors this into its own
-    `state.plasmids` field via `age_and_continue/2`.
+  - `plasmids`: list of `%Lenies.Plasmid{}` (a Lenie may carry several —
+    `:make_plasmid` appends without limit and `:conjugate` spreads each).
+    Mutated by `:make_plasmid` and `:conjugate`; the host Lenie process
+    mirrors this into its own `state.plasmids` field via `age_and_continue/2`.
   """
 
   @type t :: %__MODULE__{
@@ -80,10 +81,6 @@ defmodule Lenies.Interpreter.State do
   @spec pop(t()) :: {integer(), t()}
   def pop(%__MODULE__{stack: []} = s), do: {0, s}
   def pop(%__MODULE__{stack: [top | rest]} = s), do: {top, %{s | stack: rest}}
-
-  @spec peek(t()) :: integer()
-  def peek(%__MODULE__{stack: []}), do: 0
-  def peek(%__MODULE__{stack: [top | _]}), do: top
 
   @spec store(t(), integer(), integer()) :: t()
   def store(%__MODULE__{slots: slots} = s, slot_idx, value) do

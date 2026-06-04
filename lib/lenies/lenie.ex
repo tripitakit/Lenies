@@ -23,6 +23,11 @@ defmodule Lenies.Lenie do
   defstruct [
     :id,
     :codeome,
+    # Cached `Codeome.hash/1` of `:codeome`. The hash is invariant for a given
+    # codeome, so we compute it once wherever the codeome is set (init and the
+    # two mutation points) instead of re-hashing the whole opcode tuple on every
+    # snapshot write and on termination.
+    :codeome_hash,
     :interp,
     :lineage,
     :seed_origin,
@@ -31,8 +36,8 @@ defmodule Lenies.Lenie do
     # The handle of the world this Lenie belongs to. Carries the world
     # GenServer pid (for `:action`/`:lenie_died` calls), the ETS tids
     # (for fast-path reads/writes on `:cells`/`:lenies`), and the
-    # scoped PubSub prefix (for `:lenie_update` / `:fx` broadcasts and
-    # the `:control` subscription).
+    # scoped PubSub prefix (for `:fx` broadcasts and the `:control`
+    # subscription).
     :world,
     batch_count: 0,
     # When true, in-flight :metabolize messages are dropped and no
@@ -84,7 +89,11 @@ defmodule Lenies.Lenie do
     Process.flag(:priority, :low)
 
     id = Keyword.fetch!(opts, :id)
-    codeome = Keyword.fetch!(opts, :codeome)
+    # Precompute the template-jump targets once: this Lenie will run the same
+    # codeome for many batches, so caching the jump index turns each jump from
+    # an O(radius) complement search into an O(1) lookup. Re-indexed on every
+    # codeome mutation below (background mutation / conjugation).
+    codeome = Keyword.fetch!(opts, :codeome) |> Interpreter.index_jumps()
     energy = Keyword.fetch!(opts, :energy)
     pos = Keyword.fetch!(opts, :pos)
     dir = Keyword.get(opts, :dir, :n)
@@ -131,6 +140,7 @@ defmodule Lenies.Lenie do
     state = %__MODULE__{
       id: id,
       codeome: codeome,
+      codeome_hash: Codeome.hash(codeome),
       interp: interp,
       lineage: lineage,
       seed_origin: seed_origin,
@@ -142,7 +152,7 @@ defmodule Lenies.Lenie do
     }
 
     maybe_write_snapshot(state)
-    cache_codeome_by_hash(state.codeome)
+    cache_codeome_by_hash(state.codeome, state.codeome_hash)
     unless paused?, do: schedule_metabolize()
     {:ok, state}
   end
@@ -152,10 +162,8 @@ defmodule Lenies.Lenie do
   # `GenServer.call` round-trip for every species on every dashboard
   # render. Subsequent Lenies of the same hash skip the insert (hash →
   # codeome is invariant by definition).
-  defp cache_codeome_by_hash(codeome) do
+  defp cache_codeome_by_hash(codeome, hash) do
     if :ets.info(:species_codeomes) != :undefined do
-      hash = Codeome.hash(codeome)
-
       case :ets.lookup(:species_codeomes, hash) do
         [] -> :ets.insert(:species_codeomes, {hash, Codeome.to_list(codeome)})
         _ -> :ok
@@ -194,7 +202,7 @@ defmodule Lenies.Lenie do
 
     current_size = Lenies.Codeome.size(state.codeome)
     new_size = current_size + length(plasmid_opcodes)
-    {_min, max} = Application.get_env(:lenies, :codeome_length_bounds, {3, 1024})
+    {_min, max} = Lenies.Config.codeome_length_bounds()
 
     cond do
       already_carries ->
@@ -212,6 +220,7 @@ defmodule Lenies.Lenie do
           |> Lenies.Codeome.to_list()
           |> Kernel.++(plasmid_opcodes)
           |> Lenies.Codeome.from_list()
+          |> Interpreter.index_jumps()
 
         new_plasmid = Lenies.Plasmid.new(plasmid_opcodes)
         # Accumulate: a Lenie can carry several distinct plasmids. The
@@ -220,9 +229,17 @@ defmodule Lenies.Lenie do
         # outgoing pick in `:conjugate`.
         new_plasmids = state.plasmids ++ [new_plasmid]
         new_interp = %{state.interp | plasmids: new_plasmids}
-        new_state = %{state | codeome: new_codeome, plasmids: new_plasmids, interp: new_interp}
+        new_hash = Codeome.hash(new_codeome)
 
-        cache_codeome_by_hash(new_codeome)
+        new_state = %{
+          state
+          | codeome: new_codeome,
+            codeome_hash: new_hash,
+            plasmids: new_plasmids,
+            interp: new_interp
+        }
+
+        cache_codeome_by_hash(new_codeome, new_hash)
 
         {:reply, :ok, new_state}
     end
@@ -241,13 +258,13 @@ defmodule Lenies.Lenie do
     case Interpreter.run_k_instructions(state.interp, state.codeome, batch) do
       {:cont, new_interp} ->
         new_state = age_and_continue(state, new_interp)
-        {:noreply, new_state}
+        noreply_between_batches(new_state)
 
       {:wait_world, action, new_interp} ->
         case apply_world_action(action, state, new_interp) do
           {:ok, updated_interp} ->
             new_state = age_and_continue(state, updated_interp)
-            {:noreply, new_state}
+            noreply_between_batches(new_state)
         end
 
       {:halt, reason, _new_interp} ->
@@ -268,11 +285,10 @@ defmodule Lenies.Lenie do
   # paused (e.g. spawned post-resume); leave the metabolize loop alone.
   def handle_info(:world_resumed, state), do: {:noreply, state}
 
-  def handle_info(:sterilize, state), do: {:stop, :sterilized, state}
-
   def handle_info(:background_mutate, state) do
-    new_codeome = Lenies.Mutator.background_mutation(state.codeome)
-    cache_codeome_by_hash(new_codeome)
+    new_codeome = Lenies.Mutator.background_mutation(state.codeome) |> Interpreter.index_jumps()
+    new_hash = Codeome.hash(new_codeome)
+    cache_codeome_by_hash(new_codeome, new_hash)
 
     new_plasmids =
       Enum.map(state.plasmids, fn %Lenies.Plasmid{opcodes: ops} = p ->
@@ -281,7 +297,14 @@ defmodule Lenies.Lenie do
 
     new_interp = %{state.interp | plasmids: new_plasmids}
 
-    {:noreply, %{state | codeome: new_codeome, plasmids: new_plasmids, interp: new_interp}}
+    {:noreply,
+     %{
+       state
+       | codeome: new_codeome,
+         codeome_hash: new_hash,
+         plasmids: new_plasmids,
+         interp: new_interp
+     }}
   end
 
   def handle_info({:take_damage, amount, attacker_id}, state) do
@@ -320,7 +343,7 @@ defmodule Lenies.Lenie do
 
   @impl true
   def terminate(_reason, state) do
-    hash = Lenies.Codeome.hash(state.codeome)
+    hash = state.codeome_hash
     # Cast to the world pid directly. World handles `{:lenie_died, id, pos,
     # energy, hash, seeder_user_id}` (see lib/lenies/world.ex handle_cast).
     # The trailing `seeder_user_id` (nil for non-Arena Lenies) lets the World
@@ -335,6 +358,20 @@ defmodule Lenies.Lenie do
   end
 
   # ----- internals -----
+
+  # Between batches a Lenie sits idle for `lenie_metabolize_delay_ms` (100ms in
+  # prod) until the next `:metabolize`. Optionally hibernate so the BEAM GCs and
+  # shrinks each idle worker's heap — meaningful memory relief for a large swarm
+  # on a small VPS. It costs a GC per wake, so it only pays off when the delay is
+  # long relative to the per-batch work; left OFF by default pending measurement
+  # under real load (enable with `config :lenies, lenie_hibernate_after_batch: true`).
+  defp noreply_between_batches(state) do
+    if Application.get_env(:lenies, :lenie_hibernate_after_batch, false) do
+      {:noreply, state, :hibernate}
+    else
+      {:noreply, state}
+    end
+  end
 
   defp schedule_metabolize do
     delay = Application.get_env(:lenies, :lenie_metabolize_delay_ms, 0)
@@ -387,7 +424,7 @@ defmodule Lenies.Lenie do
         # on `is_list` without knowing the Codeome module's internal
         # tuple representation.
         codeome: Codeome.to_list(state.codeome),
-        codeome_hash: Lenies.Codeome.hash(state.codeome),
+        codeome_hash: state.codeome_hash,
         lineage: state.lineage,
         seed_origin: state.seed_origin,
         seeder_user_id: state.seeder_user_id,
@@ -402,12 +439,6 @@ defmodule Lenies.Lenie do
 
       merged = Map.merge(existing, new_snap)
       :ets.insert(state.world.tables.lenies, {state.id, merged})
-
-      Phoenix.PubSub.broadcast(
-        Lenies.PubSub,
-        "#{state.world.pubsub_prefix}:lenie:#{state.id}",
-        {:lenie_update, merged}
-      )
     end
   end
 
@@ -416,6 +447,8 @@ defmodule Lenies.Lenie do
       {:ok, :empty} -> {:ok, State.push(interp, 0)}
       {:ok, {:resource, n}} -> {:ok, State.push(interp, n)}
       {:ok, {:lenie, _id}} -> {:ok, State.push(interp, -1)}
+      # Unknown tag / world unavailable: treat as empty so the stack stays balanced.
+      _ -> {:ok, State.push(interp, 0)}
     end
   end
 
@@ -423,12 +456,14 @@ defmodule Lenies.Lenie do
     case world_call(state, {:move, interp.pos, interp.dir, state.id}) do
       {:ok, {:moved, new_pos}} -> {:ok, %{interp | pos: new_pos}}
       {:ok, :blocked} -> {:ok, interp}
+      _ -> {:ok, interp}
     end
   end
 
   defp apply_world_action({:eat, _pos} = action, state, interp) do
     case world_call(state, action) do
       {:ok, {:ate, amount}} -> {:ok, %{interp | energy: interp.energy + amount}}
+      _ -> {:ok, interp}
     end
   end
 
@@ -440,6 +475,9 @@ defmodule Lenies.Lenie do
       {:ok, _failure_reason} ->
         # blocked, already_allocated, invalid_size
         {:ok, State.push(interp, 0)}
+
+      _ ->
+        {:ok, State.push(interp, 0)}
     end
   end
 
@@ -447,6 +485,7 @@ defmodule Lenies.Lenie do
     case world_call(state, {:write_child, opcode_int, child_addr, state.id}) do
       {:ok, :written} -> {:ok, State.push(interp, 1)}
       {:ok, :no_slot} -> {:ok, State.push(interp, 0)}
+      _ -> {:ok, State.push(interp, 0)}
     end
   end
 
@@ -464,6 +503,9 @@ defmodule Lenies.Lenie do
 
       {:ok, _failure} ->
         # Failed: stillborn, target_blocked, no_slot — energy already deducted by opcode cost
+        {:ok, interp}
+
+      _ ->
         {:ok, interp}
     end
   end
@@ -484,6 +526,9 @@ defmodule Lenies.Lenie do
 
       {:ok, :no_target} ->
         {:ok, interp}
+
+      _ ->
+        {:ok, interp}
     end
   end
 
@@ -491,6 +536,7 @@ defmodule Lenies.Lenie do
     case world_call(state, {:defend, state.id}) do
       {:ok, :defending} -> {:ok, interp}
       {:ok, :no_lenie} -> {:ok, interp}
+      _ -> {:ok, interp}
     end
   end
 
@@ -531,8 +577,17 @@ defmodule Lenies.Lenie do
   # Direct GenServer call to the per-world pid (multi-world refactor T6).
   # Replaces the long-gone module-level `Lenies.World.action/1` singleton
   # delegator (removed in Task 11).
+  #
+  # Guards against the World being gone/restarting: under the `rest_for_one`
+  # world supervisor a World crash leaves a window where surviving Lenies fire
+  # this call into a dead pid. Catch the exit and report it as a neutral
+  # `{:error, :world_unavailable}` so the caller degrades gracefully instead of
+  # crashing with a noisy `(EXIT) no process` (the rest_for_one restart will
+  # take this Lenie down anyway). Mirrors the defensive call in attempt_transfer/6.
   defp world_call(state, action_spec) do
     GenServer.call(state.world.pid, {:action, action_spec})
+  catch
+    :exit, _reason -> {:error, :world_unavailable}
   end
 
   defp front_cell({x, y}, dir) do

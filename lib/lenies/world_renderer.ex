@@ -7,7 +7,7 @@ defmodule Lenies.WorldRenderer do
 
   ## Why a dedicated process
 
-  Encoding a 256×256 grid is the single most expensive operation on the UI
+  Encoding a 128×128 grid is the single most expensive operation on the UI
   path. Doing it inside each LiveView socket meant **N** independent encodes
   per frame (one per viewer) — on the Arena, with several spectators, that
   saturated the scheduler and made every click queue behind a heavy encode

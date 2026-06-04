@@ -67,9 +67,6 @@ defmodule Lenies.World.ChildSlots do
     :ok
   end
 
-  @spec opcodes_to_list(slot()) :: [atom()]
-  def opcodes_to_list(slot), do: Tuple.to_list(slot.opcodes)
-
   defp generate_slot_id do
     # ULID-like prefix + random
     :crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)

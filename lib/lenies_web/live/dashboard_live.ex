@@ -45,7 +45,7 @@ defmodule LeniesWeb.DashboardLive do
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:control")
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:fx")
       # Canvas frames are encoded once per world by Lenies.WorldRenderer and
-      # broadcast here — the socket no longer encodes the 256×256 grid itself.
+      # broadcast here — the socket no longer encodes the full grid itself.
       Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:frame")
       Phoenix.PubSub.subscribe(Lenies.PubSub, "sandboxes:manager_up")
     end

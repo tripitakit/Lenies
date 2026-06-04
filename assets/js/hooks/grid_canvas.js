@@ -15,7 +15,7 @@
 //                                           push `select_lenie_at_cell`
 //                                           (server navigates to editor)
 //
-// Wire format (per Lenies.SpeciesColor / LeniesWeb.GridRenderer):
+// Wire format (per Lenies.SpeciesColor / Lenies.WorldFrame):
 //   - lenies      : 1 byte/cell. 0 = empty, 1..255 = species hue byte
 //   - resource    : 1 byte/cell, 0..100 (clamped)
 //   - carcass     : 1 byte/cell, 0..50 (clamped intensity)

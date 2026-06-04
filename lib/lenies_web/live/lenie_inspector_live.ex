@@ -2,9 +2,11 @@ defmodule LeniesWeb.LenieInspectorLive do
   @moduledoc """
   Inspector view for an individual Lenie at `/lenie/:id`.
 
-  Shows current state and Codeome disassembled with IP highlighted.
-  Subscribes to `"lenie:<id>"` PubSub topic and re-renders on each
-  `{:lenie_update, snap}` broadcast.
+  Shows current state and Codeome disassembled with IP highlighted. Polls the
+  Lenie process via `Lenies.Lenie.inspect_state/1` on a timer to refresh — the
+  Lenie no longer broadcasts per-tick updates (that fired thousands of
+  no-subscriber PubSub messages/sec on a populated world; only this single,
+  optional inspector ever cared).
 
   See spec §7.2.
   """
@@ -12,6 +14,12 @@ defmodule LeniesWeb.LenieInspectorLive do
   use LeniesWeb, :live_view
 
   alias LeniesWeb.Disassembler
+
+  # Human-inspector refresh cadence. Comparable to the old broadcast cadence
+  # (~snapshot_every_batches × metabolize delay ≈ 1s) but driven by the viewer,
+  # so an open inspector costs one GenServer.call per interval instead of every
+  # Lenie broadcasting every tick.
+  @refresh_interval_ms 750
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -23,10 +31,8 @@ defmodule LeniesWeb.LenieInspectorLive do
     {:ok, world_handle} = Lenies.Worlds.handle(world_id)
 
     if connected?(socket) do
-      # Subscribe to the per-Lenie scoped topic on the user's sandbox prefix.
-      prefix = world_handle.pubsub_prefix
-      Phoenix.PubSub.subscribe(Lenies.PubSub, "#{prefix}:lenie:#{id}")
       Phoenix.PubSub.subscribe(Lenies.PubSub, "sandboxes:manager_up")
+      Process.send_after(self(), :refresh, @refresh_interval_ms)
     end
 
     socket =
@@ -102,23 +108,9 @@ defmodule LeniesWeb.LenieInspectorLive do
   end
 
   @impl true
-  def handle_info({:lenie_update, snap}, socket) do
-    if snap.id == socket.assigns.id do
-      socket =
-        socket
-        |> assign(:snap, snap)
-        |> assign(:found?, true)
-
-      socket =
-        case Registry.lookup(Lenies.Registry, {:lenie, socket.assigns.world_id, snap.id}) do
-          [{pid, _}] -> assign(socket, :codeome_lines, fetch_codeome_lines(pid, snap))
-          [] -> socket
-        end
-
-      {:noreply, socket}
-    else
-      {:noreply, socket}
-    end
+  def handle_info(:refresh, socket) do
+    Process.send_after(self(), :refresh, @refresh_interval_ms)
+    {:noreply, load_lenie(socket)}
   end
 
   def handle_info(:sandboxes_manager_up, socket) do

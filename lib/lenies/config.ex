@@ -9,7 +9,7 @@ defmodule Lenies.Config do
 
   @app :lenies
 
-  def grid_size, do: get(:grid_size, {256, 256})
+  def grid_size, do: get(:grid_size, {128, 128})
   def tick_interval_ms, do: get(:tick_interval_ms, 100)
   def radiation_per_tick, do: get(:radiation_per_tick, 100)
   def radiation_uniform_ratio, do: get(:radiation_uniform_ratio, 0.7)

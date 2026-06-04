@@ -24,8 +24,6 @@ defmodule Lenies.World.Config do
             copy_delete_rate: 0.0005,
             background_mutation_rate_per_1000_ticks: 1,
             attack_damage: 10,
-            grid_width: 256,
-            grid_height: 256,
             spawn_cap: 10,
             replication_cap: 50
 
@@ -48,8 +46,6 @@ defmodule Lenies.World.Config do
       copy_delete_rate: get(:copy_delete_rate, 0.0005),
       background_mutation_rate_per_1000_ticks: get(:background_mutation_rate_per_1000_ticks, 1),
       attack_damage: get(:attack_damage, 10),
-      grid_width: get(:grid_width, 256),
-      grid_height: get(:grid_height, 256),
       spawn_cap: get(:spawn_cap, 10),
       replication_cap: get(:replication_cap, 50)
     }

@@ -17,7 +17,7 @@ defmodule Lenies.WorldFrame do
   ## Performance
 
   This is the single most expensive read in the UI path (one byte produced
-  per cell — 65 536 cells on a 256×256 grid). It lives in the domain layer
+  per cell — 16 384 cells on a 128×128 grid). It lives in the domain layer
   (not `lib/lenies_web`) so `Lenies.WorldRenderer` — a per-world process —
   can encode **once** per frame and broadcast the result to every viewer,
   instead of each LiveView socket recomputing it independently. The encoder

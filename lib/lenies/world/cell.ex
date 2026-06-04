@@ -20,8 +20,6 @@ defmodule Lenies.World.Cell do
 
   defstruct lenie_id: nil, resource: 0, carcass: 0, carcass_hue: 0
 
-  def new, do: %__MODULE__{}
-
   def add_resource(%__MODULE__{} = cell, amount) when amount > 0 do
     cap = Config.cell_resource_cap()
     %{cell | resource: min(cap, cell.resource + amount)}

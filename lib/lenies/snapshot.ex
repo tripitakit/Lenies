@@ -64,19 +64,8 @@ defmodule Lenies.Snapshot do
   # like "foo\n" from slipping through the validation.
   @name_regex ~r/\A[A-Za-z0-9_-]+\z/
 
-  @doc """
-  The full list of snapshot-tracked tables (required ++ optional).
-
-  Kept for legacy callers; for the on-disk layout decision use
-  `required_tables/0` and `optional_tables/0` separately.
-  """
+  @doc "The full list of snapshot-tracked tables (required ++ optional)."
   def tables, do: @all_tables
-
-  @doc "Tables that MUST exist in a snapshot directory (else restore aborts)."
-  def required_tables, do: @required_tables
-
-  @doc "Tables that MAY be missing (legacy 4-table snapshots have no color_overrides)."
-  def optional_tables, do: @optional_tables
 
   @doc """
   Save all 5 ETS tables of `handle` to `<snapshot_root>/<id_to_path(id)>/<name>/`.

@@ -53,6 +53,33 @@ defmodule Lenies.LenieSnapshotTest do
     GenServer.stop(pid)
   end
 
+  test "still metabolizes with hibernation enabled between batches",
+       %{world_id: world_id, handle: handle} do
+    Application.put_env(:lenies, :lenie_hibernate_after_batch, true)
+    on_exit(fn -> Application.delete_env(:lenies, :lenie_hibernate_after_batch) end)
+
+    [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {6, 6})
+    :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "HIB"}})
+
+    codeome = Codeome.from_list([:nop_0, :nop_1])
+
+    {:ok, pid} =
+      Lenie.start_link(
+        {handle,
+         [id: "HIB", codeome: codeome, energy: 100_000.0, pos: {6, 6}, dir: :n, lineage: {nil, 0}]}
+      )
+
+    Process.unlink(pid)
+    Process.sleep(200)
+
+    # The Lenie woke from hibernation, ran batches, and persisted a snapshot.
+    assert [{"HIB", snap}] = :ets.lookup(Lenies.WorldTestHelpers.lenies(world_id), "HIB")
+    assert snap.age >= 1
+    assert Process.alive?(pid)
+
+    GenServer.stop(pid)
+  end
+
   test "snapshot is removed on death (via World.lenie_died)",
        %{world_id: world_id, handle: handle} do
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 5})

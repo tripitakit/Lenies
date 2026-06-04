@@ -85,10 +85,12 @@ defmodule Lenies.Interpreter.Template do
     end
   end
 
-  defp matches_at?(c, at, target) do
-    Enum.with_index(target)
-    |> Enum.all?(fn {expected, offset} ->
-      Codeome.at(c, at + offset) == expected
-    end)
+  # Walk the (constant) target list against the codeome without allocating an
+  # indexed list per candidate position — this runs at every scanned position
+  # of every template search, so it is the hottest allocation in the jump path.
+  defp matches_at?(_c, _at, []), do: true
+
+  defp matches_at?(c, at, [expected | rest]) do
+    Codeome.at(c, at) == expected and matches_at?(c, at + 1, rest)
   end
 end

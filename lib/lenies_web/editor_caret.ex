@@ -13,9 +13,6 @@ defmodule LeniesWeb.EditorCaret do
 
   @type t :: {non_neg_integer(), non_neg_integer()}
 
-  @spec collapsed?(t()) :: boolean()
-  def collapsed?({c, a}), do: c == a
-
   @doc "Inclusive block range `{lo, hi}` for the selection, or `nil` if collapsed."
   @spec derive_range(t()) :: {non_neg_integer(), non_neg_integer()} | nil
   def derive_range({c, a}) when c == a, do: nil

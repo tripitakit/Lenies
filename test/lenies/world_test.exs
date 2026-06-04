@@ -87,9 +87,11 @@ defmodule Lenies.WorldTest do
   test "tick_now/0 decays carcasses by configured rate", %{world_id: world_id} do
     :ok = Lenies.Worlds.tune(world_id, :carcass_decay, 0.05)
 
-    # manually inject a carcass into a cell
+    # manually inject a carcass into a cell, then reconcile so the engine's
+    # incremental carcass index picks up the out-of-band ETS write.
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {10, 10})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | carcass: 100}})
+    _ = Lenies.Worlds.reconcile(world_id)
 
     Lenies.Worlds.tick_now(world_id)
 
@@ -103,6 +105,7 @@ defmodule Lenies.WorldTest do
 
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 5})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | carcass: 10}})
+    _ = Lenies.Worlds.reconcile(world_id)
 
     for _ <- 1..200, do: Lenies.Worlds.tick_now(world_id)
 
@@ -163,6 +166,7 @@ defmodule Lenies.WorldTest do
 
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {7, 7})
       :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | carcass: 200}})
+      _ = Lenies.Worlds.reconcile(world_id)
 
       for _ <- 1..3, do: Lenies.Worlds.tick_now(world_id)
 
@@ -179,6 +183,7 @@ defmodule Lenies.WorldTest do
 
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {3, 3})
       :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | carcass: 1000}})
+      _ = Lenies.Worlds.reconcile(world_id)
 
       # One tick to seed the cached total with the injected carcass.
       Lenies.Worlds.tick_now(world_id)
@@ -200,6 +205,7 @@ defmodule Lenies.WorldTest do
 
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {15, 15})
       :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | carcass: 500}})
+      _ = Lenies.Worlds.reconcile(world_id)
 
       Lenies.Worlds.tick_now(world_id)
 

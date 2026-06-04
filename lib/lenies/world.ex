@@ -15,7 +15,7 @@ defmodule Lenies.World do
     `Application.get_env(:lenies, …)` at `init/1` and then never re-read
     from app env (except for live-tuning paths we haven't migrated yet).
   - `tables` — a map of unnamed ETS tids (`%{cells, lenies, child_slots,
-    history}`) owned by THIS GenServer.
+    history, color_overrides, occupancy}`) owned by THIS GenServer.
   - `handle` — a `%Lenies.WorldHandle{}` rendered once in `init/1` and
     exposed via `handle_call(:get_handle, …)`.
 
@@ -86,7 +86,6 @@ defmodule Lenies.World do
     hotspots = Hotspots.initial(grid, Config.hotspot_count())
 
     init_cells(grid, tables)
-    {total_resource, total_carcass} = sum_cells(tables)
 
     state = %{
       world_id: world_id,
@@ -99,17 +98,18 @@ defmodule Lenies.World do
       tick_count: 0,
       paused?: false,
       reconcile_ref: nil,
-      total_resource: total_resource,
-      total_carcass: total_carcass
+      # Incrementally-maintained indices (see put_cell/4). Seeded authoritatively
+      # by reseed_indices/1 below.
+      occupancy: %{},
+      carcass_cells: MapSet.new(),
+      total_resource: 0,
+      total_carcass: 0
     }
 
     state = prewarm_radiation(state)
-    # After prewarm, recompute totals to reflect the radiation deposited.
-    {r, c} = sum_cells(tables)
-    state = %{state | total_resource: r, total_carcass: c}
+    state = reseed_indices(state)
     state = maybe_schedule_tick(state)
     state = schedule_reconcile(state)
-    state = rebuild_occupancy(state)
     {:ok, state}
   end
 
@@ -119,9 +119,9 @@ defmodule Lenies.World do
   end
 
   def handle_call(:snapshot_stats, _from, state) do
-    # total_resource and total_carcass are maintained as cached values in state,
-    # updated once per tick in decay_and_sum_cells/0. Between ticks the values
-    # may be up to one tick stale, which is acceptable for a stats display.
+    # total_resource and total_carcass are maintained incrementally in state by
+    # put_cell/4 (radiation, eat, death, decay), so they are always current here
+    # without folding the grid.
     stats = %{
       cells: :ets.info(state.tables.cells, :size),
       population: :ets.info(state.tables.lenies, :size),
@@ -162,8 +162,8 @@ defmodule Lenies.World do
       cells
     )
 
-    {r, c} = sum_cells(state.tables)
-    {:reply, :ok, %{state | total_resource: r, total_carcass: c}}
+    # Bulk rewrite bypassed put_cell/4 — rebuild the indices from the result.
+    {:reply, :ok, reseed_indices(state)}
   end
 
   def handle_call({:save_snapshot, name}, _from, state) do
@@ -193,12 +193,10 @@ defmodule Lenies.World do
           "World #{inspect(state.world_id)} restored from snapshot \"#{name}\" — respawned #{respawned} Lenies"
         )
 
-        {r, c} = sum_cells(state.tables)
-        new_state = %{state | total_resource: r, total_carcass: c}
-
-        # Restore can run while paused: refresh the occupancy snapshot so the
-        # restored lenies appear on the canvas without waiting for a tick.
-        new_state = rebuild_occupancy(new_state)
+        # Bulk reload bypassed put_cell/4 — rebuild indices from the loaded
+        # cells and publish the occupancy snapshot so the restored lenies appear
+        # on the canvas without waiting for a tick (restore can run while paused).
+        new_state = reseed_indices(state)
 
         # Stats payload: gives Telemetry + Dashboards everything they
         # need to refresh `:latest` without waiting for the next tick.
@@ -207,8 +205,8 @@ defmodule Lenies.World do
         stats = %{
           tick: new_state.tick_count,
           population: :ets.info(new_state.tables.lenies, :size) || 0,
-          total_resource: r,
-          total_carcass: c
+          total_resource: new_state.total_resource,
+          total_carcass: new_state.total_carcass
         }
 
         broadcast(new_state, "control", {:restored, System.system_time(:millisecond), stats})
@@ -216,10 +214,8 @@ defmodule Lenies.World do
 
       {:error, _} = err ->
         # Sterilize already ran in a previous call. The simulation tables
-        # are empty; recompute the cached totals so they reflect reality.
-        {r, c} = sum_cells(state.tables)
-        new_state = %{state | total_resource: r, total_carcass: c}
-        {:reply, err, new_state}
+        # are empty; rebuild the cached indices so they reflect reality.
+        {:reply, err, reseed_indices(state)}
     end
   end
 
@@ -255,8 +251,8 @@ defmodule Lenies.World do
   end
 
   def handle_call(:reconcile, _from, state) do
-    result = do_reconcile(state)
-    {:reply, result, state}
+    {result, new_state} = do_reconcile(state)
+    {:reply, result, new_state}
   end
 
   @impl true
@@ -314,11 +310,11 @@ defmodule Lenies.World do
           )
 
         [{key, cell}] = :ets.lookup(state.tables.cells, pos)
-        :ets.insert(state.tables.cells, {key, %{cell | lenie_id: lenie_id}})
+        state = put_cell(state, key, cell, %{cell | lenie_id: lenie_id})
 
-        # User spawn can happen while paused: refresh the snapshot so the new
+        # User spawn can happen while paused: publish the snapshot so the new
         # lenie appears immediately (no tick to refresh it otherwise).
-        rebuild_occupancy(state)
+        state = store_occupancy(state)
 
         {:reply, {:ok, {lenie_id, pos}}, state}
 
@@ -332,19 +328,24 @@ defmodule Lenies.World do
         {:lenie_died, id, {x, y}, energy_at_death, codeome_hash, seeder_user_id},
         state
       ) do
-    case :ets.lookup(state.tables.cells, {x, y}) do
-      [{key, cell}] ->
-        carcass_value = max(0, trunc(energy_at_death * 0.5))
-        hue = Lenies.SpeciesColor.hue_byte(state.handle, codeome_hash)
+    state =
+      case :ets.lookup(state.tables.cells, {x, y}) do
+        [{key, cell}] ->
+          carcass_value = max(0, trunc(energy_at_death * 0.5))
+          hue = Lenies.SpeciesColor.hue_byte(state.handle, codeome_hash)
 
-        :ets.insert(state.tables.cells, {
-          key,
-          %{cell | lenie_id: nil, carcass: cell.carcass + carcass_value, carcass_hue: hue}
-        })
+          new_cell = %{
+            cell
+            | lenie_id: nil,
+              carcass: cell.carcass + carcass_value,
+              carcass_hue: hue
+          }
 
-      _ ->
-        :ok
-    end
+          put_cell(state, key, cell, new_cell)
+
+        _ ->
+          state
+      end
 
     :ets.delete(state.tables.lenies, id)
 
@@ -371,7 +372,7 @@ defmodule Lenies.World do
   end
 
   def handle_info(:reconcile, state) do
-    do_reconcile(state)
+    {_counts, state} = do_reconcile(state)
     state = schedule_reconcile(%{state | reconcile_ref: nil})
     {:noreply, state}
   end
@@ -396,7 +397,6 @@ defmodule Lenies.World do
     Tables.clear_all(Map.drop(state.tables, [:color_overrides]))
     init_cells(state.grid, state.tables)
     hotspots = Hotspots.initial(state.grid, Config.hotspot_count())
-    {total_resource, total_carcass} = sum_cells(state.tables)
 
     new_state = %{
       state
@@ -404,19 +404,18 @@ defmodule Lenies.World do
         tick_count: 0,
         tick_ref: nil,
         reconcile_ref: nil,
-        total_resource: total_resource,
-        total_carcass: total_carcass
+        occupancy: %{},
+        carcass_cells: MapSet.new(),
+        total_resource: 0,
+        total_carcass: 0
     }
 
     new_state = prewarm_radiation(new_state)
-    # Recompute totals after prewarm radiation has deposited resources.
-    {r, c} = sum_cells(state.tables)
-    new_state = %{new_state | total_resource: r, total_carcass: c}
+    # Rebuild indices + publish the (now empty-of-lenies) occupancy snapshot so
+    # the canvas clears immediately — sterilize can run while paused (no tick).
+    new_state = reseed_indices(new_state)
     new_state = maybe_schedule_tick(new_state)
-    new_state = schedule_reconcile(new_state)
-    # Sterilize can run while paused (no tick to refresh): reset the occupancy
-    # snapshot so the canvas clears immediately.
-    rebuild_occupancy(new_state)
+    schedule_reconcile(new_state)
   end
 
   # Runtime source of truth for per-world tunables. The 9 keys previously
@@ -447,7 +446,7 @@ defmodule Lenies.World do
 
     if n > 0 do
       Enum.reduce(1..n, state, fn _i, acc ->
-        apply_radiation(acc)
+        acc = apply_radiation(acc)
         hotspots = Hotspots.drift(acc.hotspots, acc.grid)
         %{acc | hotspots: hotspots}
       end)
@@ -457,29 +456,27 @@ defmodule Lenies.World do
   end
 
   defp do_tick(state) do
-    apply_radiation(state)
-    # Single fold: apply carcass decay AND accumulate {total_resource, total_carcass}.
-    # Runs AFTER radiation so total_resource reflects post-radiation state.
-    {total_resource, total_carcass} = decay_and_sum_cells(state)
+    # Resource/carcass totals and the occupancy/carcass indices are maintained
+    # incrementally via put_cell/4, so a tick no longer folds the whole grid:
+    # radiation touches ~`radiation_per_tick` cells, decay only the carcass set.
+    state = apply_radiation(state)
+    state = decay_carcasses(state)
     maybe_background_mutation(state)
+
+    # Publish the occupancy snapshot the renderer reads (one atomic key write).
+    state = store_occupancy(state)
 
     hotspots = Hotspots.drift(state.hotspots, state.grid)
 
     stats = %{
       population: :ets.info(state.tables.lenies, :size),
-      total_resource: total_resource,
-      total_carcass: total_carcass
+      total_resource: state.total_resource,
+      total_carcass: state.total_carcass
     }
 
     broadcast(state, "tick", {:tick, state.tick_count + 1, stats})
 
-    %{
-      state
-      | hotspots: hotspots,
-        tick_count: state.tick_count + 1,
-        total_resource: total_resource,
-        total_carcass: total_carcass
-    }
+    %{state | hotspots: hotspots, tick_count: state.tick_count + 1}
   end
 
   defp apply_radiation(state) do
@@ -491,89 +488,104 @@ defmodule Lenies.World do
         uniform_ratio: Config.radiation_uniform_ratio()
       )
 
-    Enum.each(deposit, fn {{x, y}, amount} ->
-      case :ets.lookup(state.tables.cells, {x, y}) do
-        [{key, cell}] ->
-          :ets.insert(state.tables.cells, {key, Cell.add_resource(cell, amount)})
-
-        [] ->
-          :ok
+    Enum.reduce(deposit, state, fn {{x, y}, amount}, acc ->
+      case :ets.lookup(acc.tables.cells, {x, y}) do
+        [{key, cell}] -> put_cell(acc, key, cell, Cell.add_resource(cell, amount))
+        [] -> acc
       end
     end)
   end
 
-  # Single fold over :cells that:
-  #   1. Applies carcass decay (when rate > 0, only to cells with carcass > 0).
-  #   2. Accumulates {total_resource, total_carcass} in one pass.
+  # The single choke point for EVERY `:cells` write. It updates the cell in ETS
+  # and keeps the in-state indices exact by diffing old vs new:
+  #   - `occupancy`     — `%{ {x,y} => lenie_id }` of occupied cells
+  #   - `carcass_cells` — `MapSet` of cells with `carcass > 0`
+  #   - `total_resource` / `total_carcass` — running grid sums
   #
-  # The carcass total is accumulated from the POST-decay value so the cached
-  # total reflects what a fresh sum would return immediately after decay.
-  # Resource is unchanged by decay, so it is summed as-is.
-  #
-  # Inserting into :cells during the foldl (for a :set table, updating the
-  # same key) is the established pattern here — this is safe for a :set as
-  # long as we are only updating existing keys, not inserting new ones.
-  defp decay_and_sum_cells(state) do
+  # Because deltas are derived from old→new (never hand-computed per call site),
+  # the indices cannot drift as long as every cell write goes through here. The
+  # rare bulk paths (init / sterilize / reset_energy / restore) skip this and
+  # call `reseed_indices/1` to rebuild from a full scan instead.
+  defp put_cell(state, key, old_cell, new_cell) do
+    :ets.insert(state.tables.cells, {key, new_cell})
+
+    occupancy =
+      cond do
+        old_cell.lenie_id == new_cell.lenie_id -> state.occupancy
+        is_binary(new_cell.lenie_id) -> Map.put(state.occupancy, key, new_cell.lenie_id)
+        true -> Map.delete(state.occupancy, key)
+      end
+
+    carcass_cells =
+      cond do
+        (old_cell.carcass > 0) == (new_cell.carcass > 0) -> state.carcass_cells
+        new_cell.carcass > 0 -> MapSet.put(state.carcass_cells, key)
+        true -> MapSet.delete(state.carcass_cells, key)
+      end
+
+    %{
+      state
+      | occupancy: occupancy,
+        carcass_cells: carcass_cells,
+        total_resource: state.total_resource + (new_cell.resource - old_cell.resource),
+        total_carcass: state.total_carcass + (new_cell.carcass - old_cell.carcass)
+    }
+  end
+
+  # Carcass decay, per tick. Iterates ONLY the carcass-cell index (typically a
+  # few dozen cells) instead of folding all 16 384 cells. `put_cell/4` keeps the
+  # index and `total_carcass` exact (cells decayed to 0 drop out of the set).
+  defp decay_carcasses(state) do
     rate = cfg(state, :carcass_decay)
-    cells = state.tables.cells
 
-    # Single pass: apply carcass decay, sum resource/carcass, AND collect a
-    # CONSISTENT occupancy snapshot. The fold runs inside the World (the sole
-    # `:cells` writer) so no concurrent move can split a lenie across cells —
-    # unlike the renderer's `:ets.tab2list`, which is the root cause of the
-    # "lenie drawn one cell off" artifact. We store the snapshot under a single
-    # ETS key the renderer reads atomically.
-    {sum_r, sum_c, occ} =
-      :ets.foldl(
-        fn {key, cell}, {sum_r, sum_c, occ} ->
-          effective_cell =
-            if rate > 0 and cell.carcass > 0 do
-              decayed = Cell.decay_carcass(cell, rate)
-              :ets.insert(cells, {key, decayed})
-              decayed
-            else
-              cell
-            end
+    if rate > 0 do
+      Enum.reduce(MapSet.to_list(state.carcass_cells), state, fn key, acc ->
+        case :ets.lookup(acc.tables.cells, key) do
+          [{^key, %{carcass: c} = cell}] when c > 0 ->
+            put_cell(acc, key, cell, Cell.decay_carcass(cell, rate))
 
-          occ =
-            if is_binary(effective_cell.lenie_id),
-              do: [{key, effective_cell.lenie_id} | occ],
-              else: occ
-
-          {sum_r + effective_cell.resource, sum_c + effective_cell.carcass, occ}
-        end,
-        {0, 0, []},
-        cells
-      )
-
-    store_occupancy(state, Map.new(occ))
-    {sum_r, sum_c}
+          _ ->
+            acc
+        end
+      end)
+    else
+      state
+    end
   end
 
   # Persist the occupancy snapshot under a single ETS key. A single-key
   # `:ets.insert` is atomic, so the renderer's single-key `:ets.lookup` always
   # reads a coherent whole-map snapshot (never a half-applied move).
-  defp store_occupancy(state, occupancy_map) when is_map(occupancy_map) do
-    :ets.insert(state.tables.occupancy, {:snapshot, occupancy_map})
+  defp store_occupancy(state) do
+    :ets.insert(state.tables.occupancy, {:snapshot, state.occupancy})
+    state
   end
 
-  # Full rebuild of the occupancy snapshot from `:cells`. Used on init and on
-  # the occupancy-changing paths that can run while the world is PAUSED (no
-  # tick to refresh): sterilize, restore, and user spawn. During active
-  # ticking, `decay_and_sum_cells/1` refreshes it every tick instead.
-  defp rebuild_occupancy(state) do
-    occ =
+  # Authoritative rebuild of ALL cached indices from a full `:cells` scan, and
+  # publish the occupancy snapshot. Used by the bulk paths (init / sterilize /
+  # reset_energy / restore) and as the periodic self-heal inside `do_reconcile/1`
+  # — so any drift from a missed `put_cell/4` site is corrected within one
+  # reconcile cycle (~30 s).
+  defp reseed_indices(state) do
+    {occ, carc, total_r, total_c} =
       :ets.foldl(
-        fn {key, cell}, acc ->
-          if is_binary(cell.lenie_id), do: [{key, cell.lenie_id} | acc], else: acc
+        fn {key, cell}, {occ, carc, total_r, total_c} ->
+          occ = if is_binary(cell.lenie_id), do: Map.put(occ, key, cell.lenie_id), else: occ
+          carc = if cell.carcass > 0, do: MapSet.put(carc, key), else: carc
+          {occ, carc, total_r + cell.resource, total_c + cell.carcass}
         end,
-        [],
+        {%{}, MapSet.new(), 0, 0},
         state.tables.cells
       )
-      |> Map.new()
 
-    store_occupancy(state, occ)
-    state
+    %{
+      state
+      | occupancy: occ,
+        carcass_cells: carc,
+        total_resource: total_r,
+        total_carcass: total_c
+    }
+    |> store_occupancy()
   end
 
   # Background mutations are configured as a RATE — N mutations per 1000
@@ -611,15 +623,6 @@ defmodule Lenies.World do
     end
   end
 
-  # One fold returning {total_resource, total_carcass} without side effects.
-  # Used at init, sterilize, and restore_tables to seed the cached totals.
-  defp sum_cells(tables) do
-    :ets.foldl(
-      fn {_key, cell}, {r, c} -> {r + cell.resource, c + cell.carcass} end,
-      {0, 0},
-      tables.cells
-    )
-  end
 
   defp maybe_schedule_tick(%{paused?: true} = state), do: state
 
@@ -656,7 +659,7 @@ defmodule Lenies.World do
     # Guard: if the Registry is not available (e.g. supervisor not started)
     # return immediately without crashing World.
     if Process.whereis(Lenies.Registry) == nil do
-      {0, 0}
+      {{0, 0}, state}
     else
       cells = state.tables.cells
       lenies = state.tables.lenies
@@ -703,7 +706,12 @@ defmodule Lenies.World do
       # Apply: delete each orphaned record
       Enum.each(stale_lenie_ids, fn id -> :ets.delete(lenies, id) end)
 
-      {length(stale_cell_keys), length(stale_lenie_ids)}
+      # Self-heal: rebuild all cached indices from the now-corrected cells. This
+      # both reflects the freed stale cells AND repairs any drift that could have
+      # crept into the incremental indices since the last reconcile.
+      new_state = reseed_indices(state)
+
+      {{length(stale_cell_keys), length(stale_lenie_ids)}, new_state}
     end
   end
 
@@ -748,10 +756,14 @@ defmodule Lenies.World do
 
     case :ets.lookup(state.tables.cells, front) do
       [{_, %{lenie_id: nil} = front_cell}] ->
-        # move successful
+        # move successful: clear the source cell, occupy the front cell
         [{src_key, src_cell}] = :ets.lookup(state.tables.cells, {x, y})
-        :ets.insert(state.tables.cells, {src_key, %{src_cell | lenie_id: nil}})
-        :ets.insert(state.tables.cells, {front, %{front_cell | lenie_id: lenie_id}})
+
+        state =
+          state
+          |> put_cell(src_key, src_cell, %{src_cell | lenie_id: nil})
+          |> put_cell(front, front_cell, %{front_cell | lenie_id: lenie_id})
+
         {{:ok, {:moved, front}}, state}
 
       _ ->
@@ -764,7 +776,7 @@ defmodule Lenies.World do
       [{key, cell}] ->
         eat_amount = cfg(state, :eat_amount)
         {energy_gained, new_cell} = consume_eat(cell, eat_amount)
-        :ets.insert(state.tables.cells, {key, new_cell})
+        state = put_cell(state, key, cell, new_cell)
         {{:ok, {:ate, energy_gained}}, state}
 
       _ ->
@@ -773,8 +785,7 @@ defmodule Lenies.World do
   end
 
   defp do_action({:allocate, size, {x, y}, dir, parent_id}, state) do
-    bounds = Application.get_env(:lenies, :codeome_length_bounds, {5, 1024})
-    {min_size, max_size} = bounds
+    {min_size, max_size} = Lenies.Config.codeome_length_bounds()
 
     cond do
       size < min_size or size > max_size ->
@@ -963,7 +974,7 @@ defmodule Lenies.World do
 
     # Mark child cell occupied
     [{key, cell}] = :ets.lookup(state.tables.cells, slot.target_cell)
-    :ets.insert(state.tables.cells, {key, %{cell | lenie_id: child_id}})
+    state = put_cell(state, key, cell, %{cell | lenie_id: child_id})
 
     # Clean up parent's slot
     ChildSlots.delete(state.tables.child_slots, slot_id)

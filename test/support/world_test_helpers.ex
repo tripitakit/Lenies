@@ -20,9 +20,7 @@ defmodule Lenies.WorldTestHelpers do
     :copy_insert_rate,
     :copy_delete_rate,
     :background_mutation_rate_per_1000_ticks,
-    :attack_damage,
-    :grid_width,
-    :grid_height
+    :attack_damage
   ]
 
   @doc """

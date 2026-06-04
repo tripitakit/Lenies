@@ -3,14 +3,12 @@ defmodule LeniesWeb.EditorCaretTest do
 
   alias LeniesWeb.EditorCaret, as: C
 
-  describe "derive_range/1 and collapsed?/1" do
+  describe "derive_range/1" do
     test "collapsed caret has no range" do
-      assert C.collapsed?({2, 2})
       assert C.derive_range({2, 2}) == nil
     end
 
     test "caret after anchor selects blocks [anchor, caret-1]" do
-      refute C.collapsed?({3, 1})
       assert C.derive_range({3, 1}) == {1, 2}
     end
 

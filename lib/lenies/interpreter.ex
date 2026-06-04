@@ -19,10 +19,40 @@ defmodule Lenies.Interpreter do
   alias Lenies.Codeome.Costs
   alias Lenies.Interpreter.{State, Template}
 
+  @jump_opcodes [:jmp_t, :jz_t, :jnz_t, :call_t]
+
   @type step_result ::
           {:cont, State.t()}
           | {:wait_world, term(), State.t()}
           | {:halt, atom(), State.t()}
+
+  @doc """
+  Precompute the template-jump targets of `codeome` into its `jump_index` and
+  return the updated codeome. This is a pure performance cache: execution with
+  the index is identical to execution without it (the index just replaces the
+  per-execution `Template.extract` + `Template.find_complement` of each jump
+  with an O(1) map lookup).
+
+  Call it on a codeome that will run for many batches (a Lenie's own codeome).
+  A codeome is immutable, so the index stays valid until the codeome is rebuilt
+  via `Codeome.from_list/1`, which resets it — so callers must re-index after a
+  mutation.
+  """
+  @spec index_jumps(Codeome.t()) :: Codeome.t()
+  def index_jumps(%Codeome{} = codeome) do
+    size = Codeome.size(codeome)
+
+    index =
+      Enum.reduce(0..(size - 1)//1, %{}, fn ip, acc ->
+        if Codeome.at(codeome, ip) in @jump_opcodes do
+          Map.put(acc, ip, jump_lookup_live(codeome, ip, true))
+        else
+          acc
+        end
+      end)
+
+    Codeome.put_jump_index(codeome, index)
+  end
 
   @doc """
   Executes the next opcode. Empty Codeome → `{:halt, :empty_codeome, state}`.
@@ -175,12 +205,13 @@ defmodule Lenies.Interpreter do
   defp dispatch(:jnz_t, state, codeome, size), do: do_jump(state, codeome, size, :jnz_t, :nonzero)
 
   defp dispatch(:call_t, state, codeome, size) do
-    {template, t_len} = Template.extract(codeome, state.ip + 1, template_max_len())
+    # :call_t always needs the complement (it jumps whenever one is found).
+    {t_len, match} = jump_lookup(codeome, state.ip, true)
     return_ip = Integer.mod(state.ip + 1 + t_len, size)
 
-    case Template.find_complement(codeome, template, state.ip, template_search_radius()) do
+    case match do
       {:ok, match_pos} ->
-        target_ip = Integer.mod(match_pos + length(template), size)
+        target_ip = Integer.mod(match_pos + t_len, size)
 
         state
         |> State.push_call(return_ip)
@@ -433,9 +464,6 @@ defmodule Lenies.Interpreter do
   end
 
   defp do_jump(state, codeome, size, op, condition) do
-    {template, t_len} = Template.extract(codeome, state.ip + 1, template_max_len())
-    skip_to = Integer.mod(state.ip + 1 + t_len, size)
-
     # Pop exactly once for conditional jumps; no pop for :always.
     {should_jump, state_after_pop} =
       case condition do
@@ -451,19 +479,49 @@ defmodule Lenies.Interpreter do
           {top != 0, s}
       end
 
+    # Resolve the complement only when the branch is actually taken (preserves
+    # the original laziness on the live path; the cached path is O(1) anyway).
+    {t_len, match} = jump_lookup(codeome, state.ip, should_jump)
+    skip_to = Integer.mod(state.ip + 1 + t_len, size)
+
     target_ip =
-      if should_jump and t_len > 0 do
-        case Template.find_complement(codeome, template, state.ip, template_search_radius()) do
-          {:ok, match_pos} -> Integer.mod(match_pos + length(template), size)
-          :not_found -> skip_to
-        end
-      else
-        skip_to
+      case {should_jump and t_len > 0, match} do
+        {true, {:ok, match_pos}} -> Integer.mod(match_pos + t_len, size)
+        _ -> skip_to
       end
 
     %{state_after_pop | ip: target_ip}
     |> State.apply_cost(Costs.cost(op, t_len))
     |> halt_if_dead()
+  end
+
+  # Returns `{t_len, match}` for the template jump at `ip`, where `match` is
+  # `{:ok, pos} | :not_found`. Uses the codeome's precomputed `jump_index` when
+  # present (O(1)); otherwise resolves live. On the live path the complement
+  # search is skipped unless `need_match?` is true (the branch is taken), so a
+  # not-taken conditional jump never pays for `find_complement`.
+  defp jump_lookup(%Codeome{jump_index: nil} = codeome, ip, need_match?) do
+    jump_lookup_live(codeome, ip, need_match?)
+  end
+
+  defp jump_lookup(%Codeome{jump_index: index} = codeome, ip, need_match?) do
+    case index do
+      %{^ip => cached} -> cached
+      _ -> jump_lookup_live(codeome, ip, need_match?)
+    end
+  end
+
+  defp jump_lookup_live(codeome, ip, need_match?) do
+    {template, t_len} = Template.extract(codeome, ip + 1, template_max_len())
+
+    match =
+      if need_match? and t_len > 0 do
+        Template.find_complement(codeome, template, ip, template_search_radius())
+      else
+        :not_found
+      end
+
+    {t_len, match}
   end
 
   defp halt_if_dead(state) do

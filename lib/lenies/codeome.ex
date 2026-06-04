@@ -13,13 +13,29 @@ defmodule Lenies.Codeome do
   """
 
   @type opcode :: atom()
-  @type t :: %__MODULE__{opcodes: tuple()}
+  @typedoc """
+  Optional precomputed jump-target cache: `%{ip => {t_len, find_result}}` for
+  every template-jump opcode in the codeome (see `Lenies.Interpreter.index_jumps/1`).
+  `nil` means "not precomputed" — the interpreter then resolves jumps live.
+  """
+  @type jump_index :: nil | %{non_neg_integer() => {non_neg_integer(), term()}}
+  @type t :: %__MODULE__{opcodes: tuple(), jump_index: jump_index()}
 
-  defstruct opcodes: {}
+  defstruct opcodes: {}, jump_index: nil
 
   @spec from_list([opcode()]) :: t()
   def from_list(list) when is_list(list) do
+    # A fresh codeome carries no jump_index — building one is opt-in (only the
+    # long-lived Lenie execution path bothers; editor/disassembler/stepper skip
+    # it). This also guarantees a rebuilt/mutated codeome can never carry a
+    # stale index.
     %__MODULE__{opcodes: List.to_tuple(list)}
+  end
+
+  @doc "Attach a precomputed `jump_index` (see `Lenies.Interpreter.index_jumps/1`)."
+  @spec put_jump_index(t(), %{non_neg_integer() => {non_neg_integer(), term()}}) :: t()
+  def put_jump_index(%__MODULE__{} = c, index) when is_map(index) do
+    %{c | jump_index: index}
   end
 
   @spec size(t()) :: non_neg_integer()

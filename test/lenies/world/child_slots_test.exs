@@ -59,11 +59,4 @@ defmodule Lenies.World.ChildSlotsTest do
     :ok = ChildSlots.delete(tid, slot_id)
     assert ChildSlots.get(tid, slot_id) == :not_found
   end
-
-  test "opcodes_to_list/1 returns the opcode list", %{tid: tid} do
-    {:ok, slot_id} = ChildSlots.create(tid, "parent1", {10, 10}, 3)
-    :ok = ChildSlots.set_opcode(tid, slot_id, 1, :move)
-    {:ok, slot} = ChildSlots.get(tid, slot_id)
-    assert ChildSlots.opcodes_to_list(slot) == [:nop_0, :move, :nop_0]
-  end
 end
