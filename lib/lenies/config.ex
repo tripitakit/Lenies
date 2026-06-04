@@ -16,7 +16,7 @@ defmodule Lenies.Config do
   def hotspot_count, do: get(:hotspot_count, 8)
   def cell_resource_cap, do: get(:cell_resource_cap, 100)
   def carcass_decay, do: get(:carcass_decay, 0.05)
-  def codeome_length_bounds, do: get(:codeome_length_bounds, {5, 1000})
+  def codeome_length_bounds, do: get(:codeome_length_bounds, {5, 1024})
   def min_viable_codeome_opcodes, do: get(:min_viable_codeome_opcodes, 10)
   def reconcile_interval_ms, do: get(:reconcile_interval_ms, 30_000)
 

@@ -25,7 +25,7 @@ defmodule LeniesWeb.JumpTargets do
   def targets(buffer) when is_list(buffer) do
     codeome = Codeome.from_list(buffer)
     max_len = Application.get_env(:lenies, :template_max_len, 8)
-    radius = Application.get_env(:lenies, :template_search_radius, 256)
+    radius = Application.get_env(:lenies, :template_search_radius, 512)
 
     buffer
     |> Enum.with_index()

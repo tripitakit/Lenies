@@ -80,8 +80,8 @@ The World can reject the request for several reasons:
 - The front cell is already occupied by another lenie.
 - The front cell is off the grid edge.
 - This parent already has a pending allocation (only one pending child per parent).
-- The requested size is outside the codeome length bounds (`{5, 1000}` by default) — sizes
-  below 5 or above 1000 are rejected as `:invalid_size`.
+- The requested size is outside the codeome length bounds (`{5, 1024}` by default) — sizes
+  below 5 or above 1024 are rejected as `:invalid_size`.
 
 In all failure cases the World pushes `0`. A well-written replicator checks the return value
 and skips the copy loop if allocation failed. The mini-replicator in section 7.7 deliberately

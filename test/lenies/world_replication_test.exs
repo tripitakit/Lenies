@@ -52,11 +52,11 @@ defmodule Lenies.WorldReplicationTest do
     end
 
     test "fails when requested size out of bounds", %{world_id: world_id} do
-      # codeome_length_bounds default {5, 1000}
+      # codeome_length_bounds default {5, 1024}
       result = Lenies.Worlds.action(world_id, {:allocate, 2, {10, 10}, :e, "P1"})
       assert result == {:ok, :invalid_size}
 
-      result = Lenies.Worlds.action(world_id, {:allocate, 1001, {10, 10}, :e, "P1"})
+      result = Lenies.Worlds.action(world_id, {:allocate, 1025, {10, 10}, :e, "P1"})
       assert result == {:ok, :invalid_size}
     end
   end

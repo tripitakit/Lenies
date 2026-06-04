@@ -125,7 +125,7 @@ wraps modulo the codeome size, making it a closed ring.
 **Why the ring matters for template search.** Jump opcodes (`jmp_t`,
 `jz_t`, `jnz_t`, `call_t`) locate their targets by scanning for a
 complement template — a bit-flipped mirror of the nop sequence that follows
-the opcode. The scan is bounded by a configurable radius (default 256 cells)
+the opcode. The scan is bounded by a configurable radius (default 512 cells)
 but it wraps around the ring boundary. A template that starts near cell 11
 and whose complement sits near cell 0 is found correctly because every index
 is computed with `Integer.mod(pos, size)`.

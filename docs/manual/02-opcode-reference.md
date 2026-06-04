@@ -149,7 +149,7 @@ below it (`b`).
 ### Control Flow
 
 Template-based opcodes read the trailing `nop_0`/`nop_1` run as a template (≤ 8
-cells) and search 256 positions for its bitwise complement. Cost:
+cells) and search 512 positions for its bitwise complement. Cost:
 `0.2 + 0.05 × template_len` (minimum `0.2` with empty template).
 
 ### `jmp_t`

@@ -40,7 +40,7 @@ Flip every bit: `:nop_0 → :nop_1` and `:nop_1 → :nop_0`. The complement is w
 
 ### Step 3 — Search the codeome
 
-The interpreter scans forward through the codeome, starting at position `ip + 1`, for up to `template_search_radius = 256` positions (the ring wraps via `Integer.mod`). If no match is found going forward, it then scans *backward* from `ip - 1`, again up to 256 positions. The position returned is the index of the **first nop** of the matched complement run.
+The interpreter scans forward through the codeome, starting at position `ip + 1`, for up to `template_search_radius = 512` positions (the ring wraps via `Integer.mod`). If no match is found going forward, it then scans *backward* from `ip - 1`, again up to 512 positions. The position returned is the index of the **first nop** of the matched complement run.
 
 The forward pass has priority: if both a forward and a backward match exist, the forward one wins. This matters when designing codeomes with multiple potential targets — put the intended target forward of the jump whenever possible.
 

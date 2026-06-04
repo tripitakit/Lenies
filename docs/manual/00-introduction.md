@@ -48,7 +48,7 @@ that seems to vanish for no obvious reason.
 A codeome is a list of **opcodes** — named instructions drawn from a fixed
 whitelist of 38 atoms. An opcode is just a symbol like `:move`, `:eat`, or
 `:push1`. Every Lenie runs exactly one codeome, and the codeome can be
-anywhere from 5 to 1000 opcodes long.
+anywhere from 5 to 1024 opcodes long.
 
 The same list of opcodes serves two roles at once:
 

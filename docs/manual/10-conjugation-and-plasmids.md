@@ -89,7 +89,7 @@ Pushes `0` — and pays only the base cost — on any failure path:
 - the donor has no plasmid;
 - no Lenie is in the cell ahead;
 - the recipient already carries the plasmid that was picked (see below);
-- the recipient is full (appending would exceed the codeome length bound, 1000);
+- the recipient is full (appending would exceed the codeome length bound, 1024);
 - the recipient is busy (see the deadlock note below).
 
 **Cost:** `4.0 + 0.05 × plasmid_size` on success, `4.0` on failure.
@@ -396,7 +396,7 @@ copied, never executed.
   eat) but the extra bite pays it back. A plasmid that costs energy without
   returning any — like Veer's bare turn — is a net drain unless the *behaviour*
   earns its keep indirectly (fresh grazing).
-- **The 1000-opcode cap.** Conjugation refuses to append if it would push the
+- **The 1024-opcode cap.** Conjugation refuses to append if it would push the
   recipient past the codeome length bound. The once-per-encounter rule keeps the
   same plasmid from stacking, but **distinct** plasmids accumulate; a host can
   only absorb so many before it hits the cap.

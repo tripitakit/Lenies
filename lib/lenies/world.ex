@@ -773,7 +773,7 @@ defmodule Lenies.World do
   end
 
   defp do_action({:allocate, size, {x, y}, dir, parent_id}, state) do
-    bounds = Application.get_env(:lenies, :codeome_length_bounds, {5, 1000})
+    bounds = Application.get_env(:lenies, :codeome_length_bounds, {5, 1024})
     {min_size, max_size} = bounds
 
     cond do

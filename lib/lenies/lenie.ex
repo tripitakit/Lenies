@@ -194,7 +194,7 @@ defmodule Lenies.Lenie do
 
     current_size = Lenies.Codeome.size(state.codeome)
     new_size = current_size + length(plasmid_opcodes)
-    {_min, max} = Application.get_env(:lenies, :codeome_length_bounds, {3, 1000})
+    {_min, max} = Application.get_env(:lenies, :codeome_length_bounds, {3, 1024})
 
     cond do
       already_carries ->

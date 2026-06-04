@@ -39,7 +39,7 @@ an EMPTY call stack does NOT crash; it just advances IP by 1.
 
 **Codeome ring.** Fixed-length list of opcodes. IP is always `mod size`, so
 execution wraps from the last opcode back to position 0. Bounds: codeome
-length must be in `[5, 1000]` (`codeome_length_bounds`) AND contain at
+length must be in `[5, 1024]` (`codeome_length_bounds`) AND contain at
 least **10 non-nop** opcodes (`min_viable_codeome_opcodes`). Codeomes that
 violate either bound are rejected at creation.
 
@@ -52,7 +52,7 @@ energy is 500 (editable in the editor spawn form).
 1. The template is the run of `:nop_0`/`:nop_1` IMMEDIATELY AFTER the jump
    opcode (max length **8**, capped by `template_max_len`).
 2. The VM bit-flips every nop in that run to produce the **complement**.
-3. It searches the codeome — forward from `ip+1` for up to **256** opcodes
+3. It searches the codeome — forward from `ip+1` for up to **512** opcodes
    (`template_search_radius`), then backward — for the FIRST run of nops
    that matches the complement exactly.
 4. On match: `IP := match_pos + length(template)` — i.e. the IP lands at
@@ -159,7 +159,7 @@ Constant costs first, then parameterized.
 | Opcode | Formula | Example |
 |--------|---------|---------|
 | `:jmp_t`, `:jz_t`, `:jnz_t`, `:call_t` | `0.2 + 0.05 × t_len` | Empty template: 0.20. 4-nop template: 0.40. 8-nop template (cap): 0.60. |
-| `:allocate` | `5.0 + 0.05 × size_arg` | `size_arg=10` → 5.50. `size_arg=123` → 11.15. `size_arg=1000` (max codeome) → 55.0. |
+| `:allocate` | `5.0 + 0.05 × size_arg` | `size_arg=10` → 5.50. `size_arg=123` → 11.15. `size_arg=1024` (max codeome) → 56.2. |
 | `:make_plasmid` | `2.0 + 0.05 × length` | `length=20` → 3.00. `length=100` → 7.00. |
 | `:conjugate` | `4.0 + 0.05 × plasmid_size` | Latest plasmid 30 ops → 5.50. No plasmid → just 4.00 (returns 0). |
 
@@ -183,7 +183,7 @@ A template is the run of `:nop_0`/`:nop_1` immediately AFTER a jump opcode.
 The VM bit-flips each nop in that run to compute the **complement**, then
 searches the codeome for the FIRST matching run.
 
-**Search order:** forward from `ip+1` up to radius 256, then backward
+**Search order:** forward from `ip+1` up to radius 512, then backward
 (non-toroidal); on miss IP becomes `ip + 1 + t_len` (fall through).
 
 **Landing IP on match:** `match_pos + length(template)` — IP lands at the
@@ -876,7 +876,7 @@ replication. Steady state ≈ +805 energy per generation cycle.
    of the copies.)
 
 9. **Codeome length out of bounds.** The acceptable codeome length range is
-   **[5, 1000]** opcodes. Below 5: rejected. Above 1000: rejected. Also
+   **[5, 1024]** opcodes. Below 5: rejected. Above 1024: rejected. Also
    the codeome must contain at least **10 non-nop** opcodes — a codeome
    of 100 nops will be rejected even though length is in range.
 
@@ -930,8 +930,8 @@ Before outputting a codeome, mentally run through this list:
    building the codeome; `Codeome.from_list/1` itself does not validate,
    and any unrecognized opcode that slips through executes as `:nop_0`.
 
-2. **Codeome length is in `[5, 1000]`.** Count the opcodes in your list
-   (including all nops and separators). Below 5 or above 1000: rejected
+2. **Codeome length is in `[5, 1024]`.** Count the opcodes in your list
+   (including all nops and separators). Below 5 or above 1024: rejected
    at creation. The reference codeomes are 7 (Walker), 21 (TemplateJumper),
    93 (Defender), 123 (MR), 139 (Forager), 164 (Hunter).
 
@@ -994,7 +994,7 @@ If you have access to the Lenies source, verify your codeome by:
 - Calling `Lenies.Codeome.from_list(your_atoms)` to build the struct, and
   checking each atom with `Lenies.Codeome.Opcodes.known?/1` (the editor
   uses this to reject unknown atoms; `from_list/1` itself does not validate).
-- Checking length is in `[5, 1000]` and non-nop count `>= 10`.
+- Checking length is in `[5, 1024]` and non-nop count `>= 10`.
 - Optionally simulating ticks via `Lenies.Interpreter.step/2`.
 
 In the editor: paste the atoms into the spawn form (the editor accepts the

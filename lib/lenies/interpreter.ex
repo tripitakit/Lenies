@@ -475,5 +475,5 @@ defmodule Lenies.Interpreter do
   end
 
   defp template_max_len, do: Application.get_env(:lenies, :template_max_len, 8)
-  defp template_search_radius, do: Application.get_env(:lenies, :template_search_radius, 256)
+  defp template_search_radius, do: Application.get_env(:lenies, :template_search_radius, 512)
 end
