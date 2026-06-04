@@ -757,8 +757,9 @@ defmodule LeniesWeb.EditorLive do
 
       <%= if @show_save_form do %>
         <form
+          id="save-seed-form"
           phx-submit="submit_save_seed"
-          class="flex gap-2 items-center text-[11px] p-2 border-b border-violet-500/30"
+          class="flex flex-wrap gap-2 items-center justify-end text-[11px] p-2 border-b border-violet-500/30"
         >
           <label class="flex gap-1 items-center">
             <span class="opacity-70">name</span>
