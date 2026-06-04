@@ -8,6 +8,7 @@ defmodule LeniesWeb.EditorLive do
     /editor/new          — empty buffer (new seed)
     /editor/edit/:hash   — buffer pre-loaded from a representative
                            Lenie of the given species hash
+    /editor/seed/:seed_id — buffer pre-loaded from a builtin or custom seed
   """
 
   use LeniesWeb, :live_view
