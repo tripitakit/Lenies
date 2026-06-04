@@ -219,10 +219,10 @@ defmodule LeniesWeb.ControlsPanelComponent do
           <span class="text-[9px] tracking-widest opacity-50 w-9">SEED</span>
           <select name="seed_id" class="flex-1 text-xs">
             <%= for s <- Lenies.Seeds.all() do %>
-              <option value={Atom.to_string(s.id)}>{s.name}</option>
+              <option value={Atom.to_string(s.id)} selected={Atom.to_string(s.id) == @selected_seed_id}>{s.name}</option>
             <% end %>
             <%= for s <- @custom_seeds do %>
-              <option value={"custom:" <> to_string(s.id)}>★ {s.name}</option>
+              <option value={"custom:" <> to_string(s.id)} selected={("custom:" <> to_string(s.id)) == @selected_seed_id}>★ {s.name}</option>
             <% end %>
           </select>
           <button
@@ -241,7 +241,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
           <.link
             id="seed-edit-btn"
             navigate={~p"/sandbox/editor/seed/#{@selected_seed_id}"}
-            class="text-xs px-3 py-1 border border-cyan-500/60 text-cyan-200 hover:bg-cyan-800/50"
+            class="text-xs px-3 py-1 border border-cyan-500/60 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/50"
           >
             Edit
           </.link>
