@@ -205,12 +205,15 @@ defmodule Lenies.Arena do
       hash = Lenies.Codeome.hash(codeome)
       Lenies.SpeciesColor.set_override(handle, hash, entry.color_hex)
 
-      opts = [
-        energy: entry.energy_default,
-        dir: Enum.random([:n, :s, :e, :w]),
-        seeder_user_id: user.id,
-        seed_origin: "★ " <> entry.name
-      ]
+      plasmids = Lenies.Collection.to_plasmid_structs(entry)
+
+      opts =
+        [
+          energy: entry.energy_default,
+          dir: Enum.random([:n, :s, :e, :w]),
+          seeder_user_id: user.id,
+          seed_origin: "★ " <> entry.name
+        ] ++ if(plasmids == [], do: [], else: [plasmids: plasmids])
 
       case Lenies.Worlds.spawn_lenie(@world_id, codeome, opts) do
         {:ok, {_id, _pos}} ->

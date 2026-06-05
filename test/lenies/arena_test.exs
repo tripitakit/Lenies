@@ -323,6 +323,33 @@ defmodule Lenies.ArenaTest do
       user = Lenies.AccountsFixtures.user_fixture()
       assert {:error, :not_found} = Lenies.Arena.seed(user, 999_999)
     end
+
+    test "seed/2 with a saved plasmid spawns Lenie carrying that plasmid into Arena" do
+      user = Lenies.AccountsFixtures.user_fixture()
+
+      {:ok, codeome} =
+        Lenies.Collection.create_codeome(user, %{
+          name: "PlasmidSeed",
+          color_hex: "#aabbcc",
+          energy_default: 500.0,
+          opcodes: ["nop_0", "move", "eat"],
+          plasmids: [%{opcodes: ["turn_left"]}]
+        })
+
+      assert {:ok, :seeded} = Lenies.Arena.seed(user, codeome.id)
+      Process.sleep(50)
+
+      {:ok, handle} = Lenies.Worlds.handle(:arena)
+      lenies = :ets.tab2list(handle.tables.lenies)
+
+      assert length(lenies) == 1,
+             "expected exactly 1 Lenie in Arena; got #{length(lenies)}"
+
+      [{_id, snap}] = lenies
+
+      assert length(Map.get(snap, :plasmids, [])) == 1,
+             "expected spawned Arena Lenie to carry 1 plasmid; got #{inspect(Map.get(snap, :plasmids, []))}"
+    end
   end
 
   describe "apoptosis/1" do
