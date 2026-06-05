@@ -47,6 +47,17 @@ defmodule Lenies.ConfigTest do
     assert Config.min_viable_codeome_opcodes() == 10
   end
 
+  test "plasmid_loss_probability/0 defaults to 0.10" do
+    Application.delete_env(:lenies, :plasmid_loss_probability)
+    assert Config.plasmid_loss_probability() == 0.10
+  end
+
+  test "plasmid_loss_probability/0 reads an override" do
+    Application.put_env(:lenies, :plasmid_loss_probability, 0.25)
+    on_exit(fn -> Application.delete_env(:lenies, :plasmid_loss_probability) end)
+    assert Config.plasmid_loss_probability() == 0.25
+  end
+
   describe "configuration override" do
     setup do
       on_exit(fn -> Application.put_env(:lenies, :grid_size, {128, 128}) end)

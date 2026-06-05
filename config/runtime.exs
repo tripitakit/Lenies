@@ -49,6 +49,7 @@ config :lenies,
   defense_window_ticks: 5,
   attack_damage: 10,
   defense_attacker_penalty: 5,
+  plasmid_loss_probability: 0.10,
   spawn_cap: 10,
   replication_cap: 50
 
