@@ -357,6 +357,21 @@ defmodule Lenies.Lenie do
     :ok
   end
 
+  @doc """
+  Builds the execution Codeome = chromosome opcodes followed by every carried
+  plasmid's opcodes (in acquisition order), with jumps re-indexed. With an
+  empty plasmid list this is just the chromosome. Rebuilt only when plasmids
+  change (acquisition / mutation), never per tick.
+  """
+  @spec build_exec_codeome(Codeome.t(), [Lenies.Plasmid.t()]) :: Codeome.t()
+  def build_exec_codeome(codeome, plasmids) do
+    plasmid_ops = Enum.flat_map(plasmids, fn %Lenies.Plasmid{opcodes: ops} -> ops end)
+
+    (Codeome.to_list(codeome) ++ plasmid_ops)
+    |> Codeome.from_list()
+    |> Interpreter.index_jumps()
+  end
+
   # ----- internals -----
 
   # Between batches a Lenie sits idle for `lenie_metabolize_delay_ms` (100ms in

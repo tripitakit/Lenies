@@ -1,7 +1,8 @@
 defmodule Lenies.LenieTest do
   use ExUnit.Case, async: false
 
-  alias Lenies.{Codeome, Lenie}
+  alias Lenies.{Codeome, Interpreter, Lenie, Plasmid}
+  alias Lenies.Interpreter.State
 
   setup do
     {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
@@ -126,6 +127,32 @@ defmodule Lenies.LenieTest do
 
       assert [{^id, snap}] = :ets.lookup(handle.tables.lenies, id)
       assert snap.seeder_user_id == nil
+    end
+  end
+
+  describe "build_exec_codeome/2" do
+    test "with no plasmids returns the chromosome unchanged in size" do
+      codeome = Codeome.from_list([:nop_0, :nop_1, :nop_1])
+      exec = Lenie.build_exec_codeome(codeome, [])
+      assert Codeome.size(exec) == 3
+    end
+
+    test "appends plasmid opcodes after the chromosome" do
+      codeome = Codeome.from_list([:nop_0])
+      plasmids = [Plasmid.new([:turn_left, :turn_left])]
+      exec = Lenie.build_exec_codeome(codeome, plasmids)
+      assert Codeome.size(exec) == 3
+      assert Codeome.to_list(exec) == [:nop_0, :turn_left, :turn_left]
+    end
+
+    test "plasmid code runs via fall-through (ring) execution" do
+      codeome = Codeome.from_list([:nop_0])
+      plasmids = [Plasmid.new([:turn_left])]
+      exec = Lenie.build_exec_codeome(codeome, plasmids)
+      st = State.new(energy: 100.0, dir: :e)
+      {:cont, st2} = Interpreter.run_k_instructions(st, exec, 2)
+      # ip 0 = :nop_0, ip 1 = :turn_left → from :e a turn_left yields :n
+      assert st2.dir == :n
     end
   end
 end
