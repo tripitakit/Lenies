@@ -820,4 +820,46 @@ defmodule LeniesWeb.EditorLiveTest do
       assert state.active_target == {:plasmid, 0}
     end
   end
+
+  describe "plasmid mutators" do
+    setup %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
+      render_hook(view, "add_plasmid", %{})
+      render_hook(view, "set_target", %{"target" => "plasmid", "index" => "0"})
+      %{view: view}
+    end
+
+    test "delete removes an opcode from the active plasmid", %{view: view} do
+      for op <- ["nop_1", "move", "eat"],
+          do: render_hook(view, "edit_insert", %{"index" => 0, "opcode" => op})
+
+      render_hook(view, "plasmid_delete_op", %{"index" => "1"})
+      assert :sys.get_state(view.pid).socket.assigns.plasmid_buffers == [[:nop_1, :eat]]
+    end
+
+    test "reorder moves an opcode within the active plasmid", %{view: view} do
+      for op <- ["nop_1", "move"],
+          do: render_hook(view, "edit_insert", %{"index" => 0, "opcode" => op})
+
+      render_hook(view, "plasmid_reorder", %{"from" => "0", "to" => "2"})
+      assert :sys.get_state(view.pid).socket.assigns.plasmid_buffers == [[:move, :nop_1]]
+    end
+
+    test "remove deletes the active plasmid and resets target to chromosome", %{view: view} do
+      render_hook(view, "plasmid_remove", %{})
+      state = :sys.get_state(view.pid).socket.assigns
+      assert state.plasmid_buffers == []
+      assert state.active_target == :chromosome
+    end
+
+    test "insert past the cap is a no-op", %{view: view} do
+      cap = Lenies.Plasmid.max_length()
+
+      for _ <- 1..(cap + 5),
+          do: render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "nop_0"})
+
+      [plasmid] = :sys.get_state(view.pid).socket.assigns.plasmid_buffers
+      assert length(plasmid) == cap
+    end
+  end
 end

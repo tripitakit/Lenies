@@ -398,6 +398,30 @@ defmodule LeniesWeb.EditorLive do
      |> assign_dirty()}
   end
 
+  def handle_event("plasmid_delete_op", %{"index" => index}, socket) do
+    {:noreply, update_active_plasmid(socket, &CodeomeBuffer.delete(&1, to_int(index)))}
+  end
+
+  def handle_event("plasmid_reorder", %{"from" => from, "to" => to}, socket) do
+    {:noreply, update_active_plasmid(socket, &CodeomeBuffer.move(&1, to_int(from), to_int(to)))}
+  end
+
+  def handle_event("plasmid_remove", _params, socket) do
+    case socket.assigns.active_target do
+      {:plasmid, idx} ->
+        new_plasmids = List.delete_at(socket.assigns.plasmid_buffers, idx)
+
+        {:noreply,
+         socket
+         |> assign(:plasmid_buffers, new_plasmids)
+         |> assign(:active_target, :chromosome)
+         |> assign_dirty()}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
   def handle_event("move_caret", %{"dir" => dir} = params, socket) do
     len = length(socket.assigns.buffer)
     d = if dir == "up", do: :up, else: :down
@@ -1303,6 +1327,22 @@ defmodule LeniesWeb.EditorLive do
     socket
     |> assign(:plasmid_buffers, new_plasmid_buffers)
     |> assign_dirty()
+  end
+
+  # Apply `fun` to the currently-targeted plasmid buffer; no-op off a plasmid.
+  defp update_active_plasmid(socket, fun) when is_function(fun, 1) do
+    case socket.assigns.active_target do
+      {:plasmid, idx} ->
+        plasmids = socket.assigns.plasmid_buffers
+
+        case Enum.at(plasmids, idx) do
+          nil -> socket
+          plasmid -> commit_plasmid_change(socket, List.replace_at(plasmids, idx, fun.(plasmid)))
+        end
+
+      _ ->
+        socket
+    end
   end
 
   # Reads `eat_amount` / `attack_damage` from Application env at the
