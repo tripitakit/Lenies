@@ -1228,6 +1228,8 @@ defmodule LeniesWeb.EditorLive do
           <div class="codeome-plasmid-chips" role="tablist">
             <button
               type="button"
+              role="tab"
+              aria-selected={@active_target == :chromosome}
               data-target-chip="chromosome"
               phx-click="set_target"
               phx-value-target="chromosome"
@@ -1242,6 +1244,8 @@ defmodule LeniesWeb.EditorLive do
             <%= for {_plasmid, i} <- Enum.with_index(@plasmid_buffers) do %>
               <button
                 type="button"
+                role="tab"
+                aria-selected={@active_target == {:plasmid, i}}
                 data-plasmid-chip={i}
                 phx-click="set_target"
                 phx-value-target="plasmid"
@@ -1311,7 +1315,7 @@ defmodule LeniesWeb.EditorLive do
                         class="codeome-action-btn"
                         title="Elimina"
                       >
-                        ✕
+                        ⨯
                       </button>
                     </span>
                   </li>
@@ -1400,16 +1404,13 @@ defmodule LeniesWeb.EditorLive do
   end
 
   # Dirty if either the chromosome or the plasmid set differs from what was
-  # loaded. Reads current assigns so both chromosome and (future) plasmid
-  # mutators can funnel through it.
+  # loaded. Both originals are assigned at mount, so a plain compare suffices.
   defp assign_dirty(socket) do
-    buf_dirty =
-      socket.assigns.buffer != (socket.assigns[:original_buffer] || socket.assigns.buffer)
+    dirty =
+      socket.assigns.buffer != socket.assigns.original_buffer or
+        socket.assigns.plasmid_buffers != socket.assigns.original_plasmid_buffers
 
-    plas_dirty =
-      socket.assigns.plasmid_buffers != (socket.assigns[:original_plasmid_buffers] || [])
-
-    assign(socket, :dirty, buf_dirty or plas_dirty)
+    assign(socket, :dirty, dirty)
   end
 
   # Append an opcode to the end of plasmid `idx` (minimal editing: no caret).
