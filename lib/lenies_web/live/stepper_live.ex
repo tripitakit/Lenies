@@ -17,6 +17,7 @@ defmodule LeniesWeb.StepperLive do
     # Ensure @loops is always present; it is set in the codeome update path
     # but guard here in case of unexpected call ordering.
     socket = assign_new(socket, :loops, fn -> [] end)
+    socket = assign_new(socket, :plasmid_starts, fn -> MapSet.new() end)
     session = socket.assigns.session
 
     # `gen` is the run generation this tick belongs to. `run`/`pause`/`reset`
@@ -283,7 +284,7 @@ defmodule LeniesWeb.StepperLive do
           </aside>
 
           <section class="stepper-codeome">
-            <h3 class="stepper-panel-title">Codeome ({Lenies.Codeome.size(@session.exec_codeome)} ops)</h3>
+            <h3 class="stepper-panel-title">Codeome ({codeome_size_label(@session)} ops)</h3>
             <div class="stepper-codeome-panel">
               <div class="stepper-codeome-inner">
                 <svg class="stepper-loop-gutter">
@@ -306,6 +307,9 @@ defmodule LeniesWeb.StepperLive do
                 </svg>
                 <ol id="stepper-codeome-list" class="stepper-codeome-list" phx-hook="StepperFollowIP">
                   <%= for {op, idx} <- Enum.with_index(Lenies.Codeome.to_list(@session.exec_codeome)) do %>
+                    <%= if MapSet.member?(@plasmid_starts, idx) do %>
+                      <li class="stepper-codeome-divider" aria-hidden="true">── plasmid ──</li>
+                    <% end %>
                     <li
                       class={[
                         "stepper-codeome-row",
@@ -471,6 +475,7 @@ defmodule LeniesWeb.StepperLive do
     socket
     |> assign(:session, session)
     |> assign(:loops, JumpTargets.loops(Lenies.Codeome.to_list(session.exec_codeome)))
+    |> assign(:plasmid_starts, MapSet.new(Lenies.Stepper.plasmid_region_starts(session)))
     |> assign(
       :grid_payload_json,
       Jason.encode!(Lenies.Stepper.World.encode_grid_payload(session.world))
@@ -525,6 +530,18 @@ defmodule LeniesWeb.StepperLive do
 
   defp parse_int(n) when is_integer(n), do: n
   defp parse_int(_), do: nil
+
+  # "8" when plasmid-free, "8 (6 chromo + 2 plasmid)" when carrying plasmids.
+  defp codeome_size_label(session) do
+    exec = Lenies.Codeome.size(session.exec_codeome)
+    chromo = Lenies.Codeome.size(session.codeome)
+
+    if exec == chromo do
+      Integer.to_string(exec)
+    else
+      "#{exec} (#{chromo} chromo + #{exec - chromo} plasmid)"
+    end
+  end
 
   # Assign each loop a "lane" (0,1,2,...) so overlapping spans don't draw on top
   # of each other. Greedy: reuse the lowest lane whose last span ended before

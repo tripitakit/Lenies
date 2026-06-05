@@ -1398,6 +1398,16 @@
 .stepper-loop-arc { fill: none; stroke: #64748b; stroke-width: 1.5; }
 .stepper-loop-arc--active { stroke: #22d3ee; stroke-width: 2; }
 .stepper-codeome-row:hover { background: rgba(34, 211, 238, 0.08); }
+.stepper-codeome-divider {
+  list-style: none;
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: rgb(253 224 71 / 0.7); /* yellow-300/70, matches the plasmid badge */
+  padding: 2px 0;
+  user-select: none;
+  cursor: default;
+}
 .stepper-codeome-ip { background: rgba(34, 211, 238, 0.2); border-left-color: #22d3ee; }
 .stepper-codeome-bp { border-left-color: #ef4444; }
 /* Dedicated breakpoint gutter (first grid track). Always present so toggling a
