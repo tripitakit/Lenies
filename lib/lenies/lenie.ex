@@ -208,26 +208,25 @@ defmodule Lenies.Lenie do
     already_carries =
       Enum.any?(state.plasmids, fn %Lenies.Plasmid{opcodes: ops} -> ops == plasmid_opcodes end)
 
-    current_exec = Codeome.size(state.exec_codeome)
-    new_exec = current_exec + length(plasmid_opcodes)
-    {_min, max} = Lenies.Config.codeome_length_bounds()
+    if already_carries do
+      # Already carries this exact plasmid — report the no-op so the donor
+      # stops re-broadcasting the same transfer each tick. Cheap fast path:
+      # don't bother measuring the exec stream or reading config bounds.
+      {:reply, :already_present, state}
+    else
+      {_min, max} = Lenies.Config.codeome_length_bounds()
+      new_exec = Codeome.size(state.exec_codeome) + length(plasmid_opcodes)
 
-    cond do
-      already_carries ->
-        # Already carries this exact plasmid — report the no-op so the donor
-        # stops re-broadcasting the same transfer each tick.
-        {:reply, :already_present, state}
-
-      new_exec > max ->
+      if new_exec > max do
         # Acquiring it would overflow the executable stream (chromosome +
         # plasmids). Refuse — the chromosome itself is never touched.
         {:reply, {:error, :too_large}, state}
-
-      true ->
-        # Extra-chromosomal: the plasmid joins the carried list and the
-        # execution stream is rebuilt, but the chromosome (`:codeome`) and
-        # its hash are left untouched — so size and species identity stay
-        # plasmid-free.
+      else
+        # Extra-chromosomal: the plasmid joins the carried list (which also
+        # feeds the `:conjugate` outgoing pick and the dashboard species
+        # annotation) and the execution stream is rebuilt, but the chromosome
+        # (`:codeome`) and its hash are left untouched — so Size and species
+        # identity stay plasmid-free.
         new_plasmid = Lenies.Plasmid.new(plasmid_opcodes)
         new_plasmids = state.plasmids ++ [new_plasmid]
         new_interp = %{state.interp | plasmids: new_plasmids}
@@ -240,6 +239,7 @@ defmodule Lenies.Lenie do
         }
 
         {:reply, :ok, new_state}
+      end
     end
   end
 
