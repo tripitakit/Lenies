@@ -86,6 +86,9 @@ defmodule LeniesWeb.StepperLive do
   def update(%{codeome: codeome} = assigns, socket) do
     plasmids = Map.get(assigns, :plasmids, [])
 
+    # Reuse an in-progress session across re-renders; :codeome and :plasmids
+    # only seed a *new* session. A parent that changes plasmids mid-session
+    # must reset to pick them up (mirrors the codeome reuse behaviour).
     session =
       Map.get(socket.assigns, :session) ||
         Stepper.start_session(codeome, plasmids: plasmids)

@@ -182,9 +182,9 @@ defmodule LeniesWeb.StepperLiveTest do
     :ok
   end
 
-  test "update/1 with :plasmids starts the session carrying them" do
+  test "update/2 with :plasmids starts the session carrying them" do
     codeome = Lenies.Codeome.from_list([:nop_0, :move])
-    plasmid = Lenies.Plasmid.new([:twitch])
+    plasmid = Lenies.Plasmid.new([:nop_1])
     session = LeniesWeb.StepperLive.__test_build_session__(codeome, [plasmid])
     assert Lenies.Codeome.size(session.exec_codeome) == 3
   end
