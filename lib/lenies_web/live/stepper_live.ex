@@ -13,13 +13,20 @@ defmodule LeniesWeb.StepperLive do
   alias LeniesWeb.JumpTargets
 
   @impl true
-  def update(%{tick: true}, socket) do
+  def update(%{tick: gen}, socket) when is_integer(gen) do
     # Ensure @loops is always present; it is set in the codeome update path
     # but guard here in case of unexpected call ordering.
     socket = assign_new(socket, :loops, fn -> [] end)
     session = socket.assigns.session
 
-    if session.status == :running do
+    # `gen` is the run generation this tick belongs to. `run`/`pause`/`reset`
+    # bump `@run_gen`, so a tick from a superseded run (stale gen) — or one that
+    # arrives after Pause — is dropped here WITHOUT rescheduling. This guarantees
+    # exactly one live tick loop at a time. Without it, every pause/run or
+    # speed change could orphan a timer and spawn a parallel loop; the loops
+    # accumulated, flooded the LiveView mailbox (making Pause lag badly) and
+    # ran far faster than the slider's delay (making the speed slider useless).
+    if gen == Map.get(socket.assigns, :run_gen, 0) and session.status == :running do
       {:ok, new_session} = Lenies.Stepper.step(session)
 
       cond do
@@ -35,10 +42,10 @@ defmodule LeniesWeb.StepperLive do
           # stays visible). Without this, Run advances exactly one opcode and
           # the button flickers Pause → Run on the next render.
           running_session = %{new_session | status: :running}
-          # Delay the next tick based on the chosen run speed.
-          # Default 10/s ≈ 100ms, slow enough to follow state changes by eye.
+          # Delay the next tick based on the chosen run speed. The single loop
+          # re-reads @run_speed each tick, so moving the slider retunes it live.
           delay = Lenies.Stepper.delay_ms_for(Map.get(socket.assigns, :run_speed, 10))
-          Process.send_after(self(), {:stepper_tick, socket.assigns.id}, delay)
+          Process.send_after(self(), {:stepper_tick, socket.assigns.id, gen}, delay)
           {:ok, assign_session(socket, running_session)}
       end
     else
@@ -84,7 +91,8 @@ defmodule LeniesWeb.StepperLive do
      |> assign_session(session)
      |> assign(:loops, JumpTargets.loops(Lenies.Codeome.to_list(codeome)))
      |> assign_new(:current_user, fn -> nil end)
-     |> assign_new(:run_speed, fn -> 10 end)}
+     |> assign_new(:run_speed, fn -> 10 end)
+     |> assign_new(:run_gen, fn -> 0 end)}
   end
 
   @impl true
@@ -367,19 +375,33 @@ defmodule LeniesWeb.StepperLive do
   end
 
   def handle_event("run", _params, socket) do
+    # Start a fresh run generation so any still-pending tick from a previous
+    # run is orphaned (its stale gen is dropped in update/2). Exactly one loop.
+    gen = Map.get(socket.assigns, :run_gen, 0) + 1
     new_session = %{socket.assigns.session | status: :running}
-    send(self(), {:stepper_tick, socket.assigns.id})
-    {:noreply, assign_session(socket, new_session)}
+    send(self(), {:stepper_tick, socket.assigns.id, gen})
+    {:noreply, socket |> assign(:run_gen, gen) |> assign_session(new_session)}
   end
 
   def handle_event("pause", _params, socket) do
+    # Bump the run generation so the in-flight tick (old gen) is dropped on
+    # arrival and stops rescheduling — Pause takes effect immediately.
     new_session = %{socket.assigns.session | status: :paused}
-    {:noreply, assign_session(socket, new_session)}
+
+    {:noreply,
+     socket
+     |> assign(:run_gen, Map.get(socket.assigns, :run_gen, 0) + 1)
+     |> assign_session(new_session)}
   end
 
   def handle_event("reset", _params, socket) do
+    # Bump the generation too, so a reset while running stops the live loop.
     new_session = Stepper.reset(socket.assigns.session)
-    {:noreply, assign_session(socket, new_session)}
+
+    {:noreply,
+     socket
+     |> assign(:run_gen, Map.get(socket.assigns, :run_gen, 0) + 1)
+     |> assign_session(new_session)}
   end
 
   def handle_event("toggle_bp", %{"ip" => ip_str}, socket) do
