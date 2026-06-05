@@ -413,9 +413,8 @@ defmodule LeniesWeb.EditorLive do
 
         {:noreply,
          socket
-         |> assign(:plasmid_buffers, new_plasmids)
-         |> assign(:active_target, :chromosome)
-         |> assign_dirty()}
+         |> commit_plasmid_change(new_plasmids)
+         |> assign(:active_target, :chromosome)}
 
       _ ->
         {:noreply, socket}
