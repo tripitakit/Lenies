@@ -49,6 +49,24 @@ defmodule LeniesWeb.EditorLiveTest do
     assert html =~ "0 ops"
   end
 
+  describe "plasmid panel render" do
+    test "shows + Plasmide and the chromosome chip", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
+      assert has_element?(view, "[data-target-chip='chromosome']")
+      assert has_element?(view, "button", "+ Plasmide")
+    end
+
+    test "adding a plasmid renders its chip and listing", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
+      render_hook(view, "add_plasmid", %{})
+      render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "nop_1"})
+      html = render(view)
+      assert html =~ ~s(data-plasmid-chip="0")
+      assert html =~ "NOP_1"
+      assert html =~ "1/#{Lenies.Plasmid.max_length()}"
+    end
+  end
+
   test "toggling the manual pane updates the grid class", %{conn: conn} do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     refute render(view) =~ "manual-collapsed"

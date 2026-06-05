@@ -574,13 +574,39 @@
 /* Shared palette/listing pane chrome — used by the standalone editor
    page (EditorLive) and any future code-block layouts. */
 .lenies-dashboard .codeome-palette-pane,
-.lenies-dashboard .codeome-listing-pane {
+.lenies-dashboard .codeome-listing-pane,
+.lenies-dashboard .codeome-plasmid-pane {
   display: flex;
   flex-direction: column;
   gap: 6px;
   border: 1px solid rgba(34, 211, 238, 0.18);
   background: rgba(2, 6, 23, 0.4);
   padding: 8px;
+}
+
+.lenies-dashboard .codeome-plasmid-pane {
+  overflow: hidden;
+}
+
+.lenies-dashboard .codeome-plasmid-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.lenies-dashboard .codeome-plasmid-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.lenies-dashboard .codeome-tool-btn-active {
+  border-color: #22d3ee;
+  background: rgba(34, 211, 238, 0.15);
+  color: #a5f3fc;
 }
 
 .lenies-dashboard .codeome-palette-pane-title,
@@ -943,7 +969,7 @@
      the editor on wide viewports. The remaining horizontal space is
      split equally between the opcode pane and the codeome listing pane
      (each gets 1fr → 50% of what's left after the manual). */
-  grid-template-columns: minmax(0, 50%) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 38%) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr);
   grid-template-rows: minmax(0, 1fr);
   gap: 0.75rem;
   padding: 0.75rem;
@@ -955,7 +981,7 @@
 }
 
 .lenies-dashboard .editor-grid.manual-collapsed {
-  grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr);
 }
 
 .lenies-dashboard .manual-pane {

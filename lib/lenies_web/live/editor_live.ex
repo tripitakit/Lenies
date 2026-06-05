@@ -897,7 +897,7 @@ defmodule LeniesWeb.EditorLive do
 
         <section class="codeome-palette-pane min-h-0">
           <div class="codeome-palette-pane-title">
-            Opcodes — drag, dblclick, or type
+            Opcodes — drag, dblclick, or type → {target_label(@active_target)}
           </div>
 
           <form phx-submit="submit_opcode_text" class="palette-text-input-form">
@@ -1217,6 +1217,110 @@ defmodule LeniesWeb.EditorLive do
             </div>
           </div>
         </section>
+
+        <section class="codeome-plasmid-pane min-h-0">
+          <div class="codeome-listing-pane-title">Plasmidi</div>
+
+          <div class="codeome-plasmid-chips" role="tablist">
+            <button
+              type="button"
+              data-target-chip="chromosome"
+              phx-click="set_target"
+              phx-value-target="chromosome"
+              class={[
+                "codeome-tool-btn",
+                @active_target == :chromosome && "codeome-tool-btn-active"
+              ]}
+            >
+              Cromosoma
+            </button>
+
+            <%= for {_plasmid, i} <- Enum.with_index(@plasmid_buffers) do %>
+              <button
+                type="button"
+                data-plasmid-chip={i}
+                phx-click="set_target"
+                phx-value-target="plasmid"
+                phx-value-index={i}
+                class={[
+                  "codeome-tool-btn",
+                  @active_target == {:plasmid, i} && "codeome-tool-btn-active"
+                ]}
+              >
+                P{i + 1}
+              </button>
+            <% end %>
+
+            <button type="button" phx-click="add_plasmid" class="codeome-tool-btn">
+              + Plasmide
+            </button>
+          </div>
+
+          <%= case @active_target do %>
+            <% {:plasmid, idx} -> %>
+              <% plasmid = Enum.at(@plasmid_buffers, idx, []) %>
+              <div class="codeome-plasmid-head">
+                <span>P{idx + 1}</span>
+                <span class="opacity-70">{length(plasmid)}/{Lenies.Plasmid.max_length()}</span>
+                <button
+                  type="button"
+                  phx-click="plasmid_remove"
+                  class="codeome-action-btn"
+                  data-confirm="Eliminare questo plasmide?"
+                >
+                  Elimina plasmide
+                </button>
+              </div>
+
+              <ol class="codeome-blocks">
+                <%= for {opcode, i} <- Enum.with_index(plasmid) do %>
+                  <li class="codeome-block" data-plasmid-op-idx={i}>
+                    <span class="codeome-block-idx">{i}</span>
+                    <span class="codeome-block-name">{Atom.to_string(opcode) |> String.upcase()}</span>
+                    <span class="codeome-block-actions">
+                      <button
+                        :if={i > 0}
+                        type="button"
+                        phx-click="plasmid_reorder"
+                        phx-value-from={i}
+                        phx-value-to={i - 1}
+                        class="codeome-action-btn"
+                        title="Su"
+                      >
+                        ▲
+                      </button>
+                      <button
+                        :if={i < length(plasmid) - 1}
+                        type="button"
+                        phx-click="plasmid_reorder"
+                        phx-value-from={i}
+                        phx-value-to={i + 1}
+                        class="codeome-action-btn"
+                        title="Giù"
+                      >
+                        ▼
+                      </button>
+                      <button
+                        type="button"
+                        phx-click="plasmid_delete_op"
+                        phx-value-index={i}
+                        class="codeome-action-btn"
+                        title="Elimina"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  </li>
+                <% end %>
+              </ol>
+
+            <% :chromosome -> %>
+              <p class="codeome-snippets-empty">
+                Seleziona o crea un plasmide per modificarne gli opcode. Gli inserimenti
+                dalla palette vanno nel buffer selezionato.
+              </p>
+          <% end %>
+        </section>
       </div>
 
       <%= if @show_stepper do %>
@@ -1512,4 +1616,7 @@ defmodule LeniesWeb.EditorLive do
   # transfer class is the exception: its atom (:hgt) is not a readable name.
   defp category_label(:hgt), do: "Horizontal Code Transfer"
   defp category_label(other), do: Atom.to_string(other)
+
+  defp target_label(:chromosome), do: "Cromosoma"
+  defp target_label({:plasmid, i}), do: "P#{i + 1}"
 end
