@@ -517,17 +517,13 @@ defmodule Lenies.Lenie do
   defp apply_world_action({:divide, _new_energy, _pos, _dir}, state, interp) do
     case world_call(state, {:divide, interp.energy, interp.pos, interp.dir, state.id}) do
       {:ok, {:divided, _child_id, energy_given}} ->
-        plasmid_size =
-          case interp.plasmids do
-            [%Lenies.Plasmid{opcodes: ops} | _] -> length(ops)
-            _ -> 0
-          end
-
-        tax = 0.5 * plasmid_size
-        {:ok, %{interp | energy: interp.energy - energy_given - tax}}
+        # No plasmid divide-tax: carrying cost now emerges from executing the
+        # plasmid opcodes in the exec stream, not a flat surcharge here.
+        {:ok, %{interp | energy: interp.energy - energy_given}}
 
       {:ok, _failure} ->
-        # Failed: stillborn, target_blocked, no_slot — energy already deducted by opcode cost
+        # Failed: stillborn, target_blocked, no_slot — energy already deducted
+        # by opcode cost.
         {:ok, interp}
 
       _ ->
