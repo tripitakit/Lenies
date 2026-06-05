@@ -280,7 +280,11 @@ defmodule LeniesWeb.EditorLive do
           name: name,
           color_hex: color,
           energy_default: parse_clamped(energy_str, 1, 1_000_000, 10_000) * 1.0,
-          opcodes: Enum.map(socket.assigns.buffer, &Atom.to_string/1)
+          opcodes: Enum.map(socket.assigns.buffer, &Atom.to_string/1),
+          plasmids:
+            socket.assigns.plasmid_buffers
+            |> Enum.reject(&(&1 == []))
+            |> Enum.map(fn ops -> %{opcodes: Enum.map(ops, &Atom.to_string/1)} end)
         }
 
         case Lenies.Collection.create_codeome(socket.assigns.current_scope.user, attrs) do

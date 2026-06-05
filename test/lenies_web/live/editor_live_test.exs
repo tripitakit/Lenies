@@ -880,4 +880,46 @@ defmodule LeniesWeb.EditorLiveTest do
       assert length(plasmid) == cap
     end
   end
+
+  test "saving a seed persists authored plasmids (empties dropped)", %{conn: conn, user: user} do
+    # The chromosome below is a single `:move` opcode, which by default would
+    # fail the editor's save validation (min length / min non-nop thresholds).
+    # Relax those bounds for this test so the save reaches the persistence path
+    # we actually want to exercise (authored plasmids end up on the row).
+    prev_bounds = Lenies.Config.codeome_length_bounds()
+    prev_min_non_nops = Lenies.Config.min_viable_codeome_opcodes()
+    Application.put_env(:lenies, :codeome_length_bounds, {1, 1024})
+    Application.put_env(:lenies, :min_viable_codeome_opcodes, 1)
+
+    on_exit(fn ->
+      Application.put_env(:lenies, :codeome_length_bounds, prev_bounds)
+      Application.put_env(:lenies, :min_viable_codeome_opcodes, prev_min_non_nops)
+    end)
+
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
+    render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "move"})
+
+    render_hook(view, "add_plasmid", %{})
+    render_hook(view, "set_target", %{"target" => "plasmid", "index" => "0"})
+    render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "nop_1"})
+
+    # a second, empty plasmid that must be dropped on save
+    render_hook(view, "add_plasmid", %{})
+
+    render_hook(view, "submit_save_seed", %{
+      "seed_name" => "plasmid_seed",
+      "color_hex" => "#88ccff",
+      "energy_default" => "10000"
+    })
+
+    seed = named_codeome(user, "plasmid_seed")
+    assert Lenies.Collection.to_opcode_atoms(seed) == [:move]
+    assert Lenies.Collection.to_plasmid_structs(seed) == [Lenies.Plasmid.new([:nop_1])]
+  end
+
+  defp named_codeome(user, name) do
+    user
+    |> Lenies.Collection.list_codeomes()
+    |> Enum.find(&(&1.name == name))
+  end
 end
