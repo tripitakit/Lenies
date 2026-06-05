@@ -409,7 +409,10 @@ defmodule Lenies.Interpreter do
     {length, s1} = State.pop(state)
     {start_addr, s2} = State.pop(s1)
 
-    if Lenies.Plasmid.valid_length?(length) do
+    {_min, max} = Lenies.Config.codeome_length_bounds()
+    can_mint? = Lenies.Plasmid.valid_length?(length) and size + length <= max
+
+    if can_mint? do
       ops = for i <- 0..(length - 1), do: Codeome.at(codeome, start_addr + i)
       new_plasmid = Lenies.Plasmid.new(ops)
       cost = Costs.cost(:make_plasmid, length)
