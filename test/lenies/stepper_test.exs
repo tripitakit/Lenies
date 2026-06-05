@@ -239,6 +239,30 @@ defmodule Lenies.StepperTest do
     end
   end
 
+  describe "initial plasmids and reset" do
+    test "start_session records initial_plasmids" do
+      codeome = Lenies.Codeome.from_list([:nop_0, :move])
+      p = Lenies.Plasmid.new([:twitch])
+      session = Lenies.Stepper.start_session(codeome, plasmids: [p])
+
+      assert session.initial_plasmids == [p]
+      # exec_codeome = chromosome ++ plasmid
+      assert Lenies.Codeome.size(session.exec_codeome) == 3
+    end
+
+    test "reset restarts with the authored initial plasmids, not plasmid-free" do
+      codeome = Lenies.Codeome.from_list([:nop_0, :move])
+      p = Lenies.Plasmid.new([:twitch])
+      session = Lenies.Stepper.start_session(codeome, plasmids: [p])
+
+      reset = Lenies.Stepper.reset(session)
+
+      assert reset.initial_plasmids == [p]
+      assert reset.interp.plasmids == [p]
+      assert Lenies.Codeome.size(reset.exec_codeome) == 3
+    end
+  end
+
   describe "place_seed with a plasmid-carrying seed map" do
     alias Lenies.Codeomes.MinimalReplicator
 

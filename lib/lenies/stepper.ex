@@ -24,7 +24,8 @@ defmodule Lenies.Stepper do
             status: :ready,
             halt_reason: nil,
             last_action: nil,
-            place_seed_mode: nil
+            place_seed_mode: nil,
+            initial_plasmids: []
 
   @type t :: %__MODULE__{
           codeome: Codeome.t(),
@@ -37,7 +38,8 @@ defmodule Lenies.Stepper do
           status: :ready | :running | :paused | :halted | :breakpoint_hit | :safety_cap_reached,
           halt_reason: nil | atom,
           last_action: nil | map,
-          place_seed_mode: nil | map
+          place_seed_mode: nil | map,
+          initial_plasmids: [Lenies.Plasmid.t()]
         }
 
   @spec start_session(Codeome.t(), keyword) :: t()
@@ -74,7 +76,8 @@ defmodule Lenies.Stepper do
       codeome: codeome,
       exec_codeome: Lenie.build_exec_codeome(codeome, plasmids),
       interp: interp,
-      world: world
+      world: world,
+      initial_plasmids: plasmids
     }
   end
 
@@ -218,7 +221,7 @@ defmodule Lenies.Stepper do
       session.world.lenies
       |> Enum.filter(fn {_id, l} -> l.kind == :seed end)
 
-    fresh = start_session(session.codeome, [])
+    fresh = start_session(session.codeome, plasmids: session.initial_plasmids)
 
     new_world =
       Enum.reduce(seeds, fresh.world, fn {id, seed}, acc ->
