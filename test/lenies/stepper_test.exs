@@ -1,7 +1,7 @@
 defmodule Lenies.StepperTest do
   use ExUnit.Case, async: true
 
-  alias Lenies.{Codeome, Stepper}
+  alias Lenies.{Codeome, Plasmid, Stepper}
 
   describe "start_session/2" do
     test "initialises interp with default energy=5000, pos=(32,32), dir=:n" do
@@ -236,6 +236,38 @@ defmodule Lenies.StepperTest do
   describe "world_ops_per_sec/0" do
     test "returns a positive opcode rate" do
       assert Lenies.Stepper.world_ops_per_sec() > 0
+    end
+  end
+
+  describe "exec_codeome (extra-chromosomal)" do
+    test "with no plasmids exec_codeome matches the chromosome size" do
+      codeome = Codeome.from_list([:nop_0, :nop_1, :nop_1])
+      session = Stepper.start_session(codeome, [])
+      assert session.codeome == codeome
+      assert Codeome.size(session.exec_codeome) == 3
+    end
+
+    test "with :plasmids opt exec_codeome appends plasmid opcodes after the chromosome" do
+      codeome = Codeome.from_list([:nop_0])
+      session = Stepper.start_session(codeome, plasmids: [Plasmid.new([:turn_left, :turn_left])])
+
+      assert session.codeome == codeome
+      assert Codeome.to_list(session.exec_codeome) == [:nop_0, :turn_left, :turn_left]
+      assert session.interp.plasmids == [Plasmid.new([:turn_left, :turn_left])]
+    end
+
+    test "plasmid_region_starts/1 returns the start offset of each plasmid region" do
+      codeome = Codeome.from_list([:nop_0, :nop_1, :nop_1])
+
+      assert Stepper.plasmid_region_starts(Stepper.start_session(codeome, [])) == []
+
+      session =
+        Stepper.start_session(codeome,
+          plasmids: [Plasmid.new([:turn_left, :turn_left]), Plasmid.new([:add])]
+        )
+
+      # chromosome length 3 → first plasmid starts at 3, second at 3+2=5
+      assert Stepper.plasmid_region_starts(session) == [3, 5]
     end
   end
 end

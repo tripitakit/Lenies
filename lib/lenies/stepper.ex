@@ -7,7 +7,7 @@ defmodule Lenies.Stepper do
   returns a session — no GenServer, no PubSub.
   """
 
-  alias Lenies.{Codeome, Interpreter, Stepper.World}
+  alias Lenies.{Codeome, Interpreter, Lenie, Plasmid, Stepper.World}
   alias Lenies.Interpreter.State
 
   @max_history 50
@@ -15,6 +15,7 @@ defmodule Lenies.Stepper do
   @debug_id "debug"
 
   defstruct codeome: nil,
+            exec_codeome: nil,
             interp: nil,
             world: nil,
             history: [],
@@ -27,6 +28,7 @@ defmodule Lenies.Stepper do
 
   @type t :: %__MODULE__{
           codeome: Codeome.t(),
+          exec_codeome: Codeome.t(),
           interp: State.t(),
           world: World.t(),
           history: [map],
@@ -43,6 +45,7 @@ defmodule Lenies.Stepper do
     energy = Keyword.get(opts, :energy, 5000.0) * 1.0
     pos = Keyword.get(opts, :pos, {32, 32})
     dir = Keyword.get(opts, :dir, :n)
+    plasmids = Keyword.get(opts, :plasmids, [])
 
     interp = %State{
       ip: 0,
@@ -53,7 +56,7 @@ defmodule Lenies.Stepper do
       energy: energy,
       pos: pos,
       dir: dir,
-      plasmids: []
+      plasmids: plasmids
     }
 
     debug_lenie = %{
@@ -62,12 +65,34 @@ defmodule Lenies.Stepper do
       dir: dir,
       energy: energy,
       kind: :debug,
-      plasmids: []
+      plasmids: plasmids
     }
 
     {:ok, world} = World.new() |> World.place_lenie(@debug_id, debug_lenie)
 
-    %__MODULE__{codeome: codeome, interp: interp, world: world}
+    %__MODULE__{
+      codeome: codeome,
+      exec_codeome: Lenie.build_exec_codeome(codeome, plasmids),
+      interp: interp,
+      world: world
+    }
+  end
+
+  @doc """
+  Start offsets (in exec_codeome index space) of each carried-plasmid region:
+  `chromo_len`, `chromo_len + len(p1)`, … Empty when no plasmids. Used by the
+  UI to draw a separator before each plasmid region.
+  """
+  @spec plasmid_region_starts(t()) :: [non_neg_integer()]
+  def plasmid_region_starts(%__MODULE__{} = session) do
+    chromo_len = Codeome.size(session.codeome)
+
+    session.interp.plasmids
+    |> Enum.reduce({chromo_len, []}, fn %Plasmid{opcodes: ops}, {offset, acc} ->
+      {offset + length(ops), [offset | acc]}
+    end)
+    |> elem(1)
+    |> Enum.reverse()
   end
 
   @spec step(t()) :: {:ok, t()}
