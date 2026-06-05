@@ -1,5 +1,5 @@
 defmodule Lenies.Interpreter.MakePlasmidCapTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Lenies.{Codeome, Interpreter, Plasmid}
   alias Lenies.Interpreter.State

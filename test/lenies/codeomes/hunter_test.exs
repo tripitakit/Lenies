@@ -1,7 +1,7 @@
 defmodule Lenies.Codeomes.HunterTest do
   use ExUnit.Case, async: false
 
-  alias Lenies.Lenie
+  alias Lenies.{Lenie, Plasmid}
   alias Lenies.Codeomes.{Hunter, MinimalReplicator}
 
   @moduletag timeout: 60_000
@@ -134,6 +134,7 @@ defmodule Lenies.Codeomes.HunterTest do
          [
            id: "PREY",
            codeome: MinimalReplicator.codeome(),
+           plasmids: [Plasmid.new(MinimalReplicator.plasmid())],
            energy: 5_000.0,
            pos: {65, 64},
            dir: :w,
