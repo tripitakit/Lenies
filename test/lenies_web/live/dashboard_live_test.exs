@@ -174,14 +174,26 @@ defmodule LeniesWeb.DashboardLiveTest do
        %{conn: conn, handle: handle} do
     :ets.insert(handle.tables.lenies, {
       "rangep1",
-      %{id: "rangep1", codeome_hash: "RANGE-SP", lineage: {nil, 0},
-        plasmids: [Lenies.Plasmid.new([:nop_0])]}
+      %{
+        id: "rangep1",
+        codeome_hash: "RANGE-SP",
+        lineage: {nil, 0},
+        plasmids: [Lenies.Plasmid.new([:nop_0])]
+      }
     })
+
     :ets.insert(handle.tables.lenies, {
       "rangep3",
-      %{id: "rangep3", codeome_hash: "RANGE-SP", lineage: {nil, 0},
-        plasmids: [Lenies.Plasmid.new([:nop_0]), Lenies.Plasmid.new([:nop_1]),
-                   Lenies.Plasmid.new([:nop_0])]}
+      %{
+        id: "rangep3",
+        codeome_hash: "RANGE-SP",
+        lineage: {nil, 0},
+        plasmids: [
+          Lenies.Plasmid.new([:nop_0]),
+          Lenies.Plasmid.new([:nop_1]),
+          Lenies.Plasmid.new([:nop_0])
+        ]
+      }
     })
 
     {:ok, _view, html} = live(conn, ~p"/sandbox")
@@ -1010,7 +1022,7 @@ defmodule LeniesWeb.DashboardLiveTest do
   end
 
   describe "KILL button — cull selected species" do
-    test "KILL culls the selected species and clears the selection",
+    test "Kill uses an inline confirm, then culls and clears the selection",
          %{conn: conn, handle: handle} do
       :ets.insert(
         handle.tables.lenies,
@@ -1021,10 +1033,33 @@ defmodule LeniesWeb.DashboardLiveTest do
 
       render_click(view, "select_species", %{"hash" => "HASH-KILL"})
       assert has_element?(view, "#species-inspector")
+      assert has_element?(view, "#inspector-kill-HASH-KILL")
 
-      render_click(view, "kill_species", %{"hash" => "HASH-KILL"})
+      # First click shows the inline confirm (no browser data-confirm) — no cull yet.
+      view |> element("#inspector-kill-HASH-KILL") |> render_click()
+      assert has_element?(view, "#inspector-kill-confirm-HASH-KILL")
+      assert has_element?(view, "#species-inspector")
 
+      # Confirming culls the species and clears the selection.
+      view |> element("#inspector-kill-confirm-HASH-KILL button", "Yes, kill") |> render_click()
       refute has_element?(view, "#species-inspector")
+    end
+
+    test "Cancel dismisses the confirm without culling", %{conn: conn, handle: handle} do
+      :ets.insert(
+        handle.tables.lenies,
+        {"K2", %{id: "K2", codeome_hash: "HASH-KEEP", lineage: {nil, 0}}}
+      )
+
+      {:ok, view, _html} = live(conn, ~p"/sandbox")
+      render_click(view, "select_species", %{"hash" => "HASH-KEEP"})
+
+      view |> element("#inspector-kill-HASH-KEEP") |> render_click()
+      assert has_element?(view, "#inspector-kill-confirm-HASH-KEEP")
+
+      view |> element("#inspector-kill-confirm-HASH-KEEP button", "Cancel") |> render_click()
+      assert has_element?(view, "#inspector-kill-HASH-KEEP")
+      assert has_element?(view, "#species-inspector")
     end
   end
 

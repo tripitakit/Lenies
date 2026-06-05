@@ -24,7 +24,8 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
      socket
      |> assign(:codeome_lines, [])
      |> assign(:fetch_status, :ok)
-     |> assign(:cached_codeome_hash, nil)}
+     |> assign(:cached_codeome_hash, nil)
+     |> assign(:kill_confirming, false)}
   end
 
   @impl true
@@ -40,12 +41,22 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
        |> assign(assigns)
        |> assign(:codeome_lines, lines)
        |> assign(:fetch_status, status)
-       |> assign(:cached_codeome_hash, hash)}
+       |> assign(:cached_codeome_hash, hash)
+       |> assign(:kill_confirming, false)}
     end
   end
 
   def update(assigns, socket) do
     {:ok, assign(socket, assigns)}
+  end
+
+  @impl true
+  def handle_event("kill_init", _params, socket) do
+    {:noreply, assign(socket, :kill_confirming, true)}
+  end
+
+  def handle_event("kill_cancel", _params, socket) do
+    {:noreply, assign(socket, :kill_confirming, false)}
   end
 
   @impl true
@@ -61,13 +72,6 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
         <h2 class="text-xs flex-1 truncate">
           {String.slice(@selected_hash, 0..15)}…
         </h2>
-        <.link
-          navigate={~p"/sandbox/species/#{@selected_hash}"}
-          class="text-xs px-1.5 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
-          title="Open full species page"
-        >
-          ↗
-        </.link>
         <%= if @selected_hash do %>
           <.link
             id="open-edit-for-species"
@@ -77,17 +81,36 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
             Edit
           </.link>
         <% end %>
-        <button
-          :if={@selected_hash}
-          id={"inspector-kill-#{@selected_hash}"}
-          phx-click="kill_species"
-          phx-value-hash={@selected_hash}
-          data-confirm="Kill this species? All its living Lenies will be removed."
-          class="px-2 text-rose-300 hover:text-rose-200 hover:bg-rose-500/10"
-          title="Kill species"
-        >
-          ✕
-        </button>
+        <%= if @selected_hash do %>
+          <%= if @kill_confirming do %>
+            <div id={"inspector-kill-confirm-#{@selected_hash}"} class="flex items-center gap-1">
+              <button
+                phx-click="kill_species"
+                phx-value-hash={@selected_hash}
+                class="text-xs px-2 py-0.5 border border-rose-500 bg-rose-700/40 text-rose-100 hover:bg-rose-600/60"
+              >
+                Yes, kill
+              </button>
+              <button
+                phx-click="kill_cancel"
+                phx-target={@myself}
+                class="text-xs px-2 py-0.5 border border-slate-500 bg-slate-800 hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+            </div>
+          <% else %>
+            <button
+              id={"inspector-kill-#{@selected_hash}"}
+              phx-click="kill_init"
+              phx-target={@myself}
+              class="text-xs px-2 py-0.5 border border-rose-500/40 text-rose-300 hover:bg-rose-500/10"
+              title="Kill species"
+            >
+              Kill
+            </button>
+          <% end %>
+        <% end %>
         <button
           id={"inspector-close-#{@selected_hash}"}
           phx-click="select_species"

@@ -59,7 +59,6 @@ defmodule LeniesWeb.Router do
       on_mount: @sandbox_on_mount ++ [{LeniesWeb.UserAuth, :require_authenticated}] do
       live "/sandbox", DashboardLive, :index
       live "/sandbox/lenie/:id", LenieInspectorLive, :show
-      live "/sandbox/species/:hash", SpeciesLive, :show
       live "/sandbox/editor/new", EditorLive, :new
       live "/sandbox/editor/edit/:hash", EditorLive, :edit
       live "/sandbox/editor/seed/:seed_id", EditorLive, :seed

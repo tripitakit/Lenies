@@ -36,9 +36,16 @@ defmodule LeniesWeb.SpeciesInspectorComponentTest do
       assert html =~ "…"
     end
 
-    test "renders the ↗ link to the standalone species page", %{handle: handle} do
+    test "no longer links to the removed standalone species page", %{handle: handle} do
       html = render_component(SpeciesInspectorComponent, base_assigns(handle))
-      assert html =~ ~s(href="/sandbox/species/abc12345abc12345")
+      refute html =~ "/sandbox/species/"
+    end
+
+    test "renders a labelled Kill button with no browser data-confirm", %{handle: handle} do
+      html = render_component(SpeciesInspectorComponent, base_assigns(handle))
+      assert html =~ ~s(phx-click="kill_init")
+      assert html =~ "Kill"
+      refute html =~ "All its living Lenies will be removed."
     end
 
     test "renders the close button targeting the selected hash", %{handle: handle} do
