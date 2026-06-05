@@ -37,7 +37,7 @@ defmodule LeniesWeb.EditorLive do
 
     scope = socket.assigns.current_scope
 
-    {mode, selected_hash, buffer} =
+    {mode, selected_hash, buffer, plasmid_buffers} =
       init_for_route(socket.assigns.live_action, params, world_id, world_handle, scope)
 
     socket =
@@ -48,6 +48,9 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:selected_hash, selected_hash)
       |> assign(:buffer, buffer)
       |> assign(:original_buffer, buffer)
+      |> assign(:plasmid_buffers, plasmid_buffers)
+      |> assign(:original_plasmid_buffers, plasmid_buffers)
+      |> assign(:active_target, :chromosome)
       |> assign(:dirty, false)
       |> assign(:validation, LeniesWeb.CodeomeBuffer.validate(buffer))
       |> assign(:economics, current_economics(buffer))
@@ -74,7 +77,7 @@ defmodule LeniesWeb.EditorLive do
   end
 
   defp init_for_route(:new, _params, _world_id, _handle, _scope) do
-    {:new_seed, nil, []}
+    {:new_seed, nil, [], []}
   end
 
   defp init_for_route(:edit, %{"hash" => hash}, world_id, handle, _scope) do
@@ -90,43 +93,60 @@ defmodule LeniesWeb.EditorLive do
           []
       end
 
-    {:edit, hash, buffer}
+    # Plasmids of a live Lenie are out of scope for this editor route.
+    {:edit, hash, buffer, []}
   end
 
   # Custom seed: "custom:<id>" — scoped to the current user.
   defp init_for_route(:seed, %{"seed_id" => "custom:" <> id}, _world_id, _handle, scope) do
-    buffer =
+    {buffer, plasmid_buffers} =
       case Lenies.Collection.get_codeome(scope.user, id) do
-        %Lenies.Collection.Codeome{} = entry -> Lenies.Collection.to_opcode_atoms(entry)
-        _ -> []
+        %Lenies.Collection.Codeome{} = entry ->
+          {Lenies.Collection.to_opcode_atoms(entry),
+           Lenies.Collection.to_plasmid_structs(entry) |> Enum.map(& &1.opcodes)}
+
+        _ ->
+          {[], []}
       end
 
-    {:new_seed, nil, buffer}
+    {:new_seed, nil, buffer, plasmid_buffers}
   end
 
   # Builtin seed by id atom.
   defp init_for_route(:seed, %{"seed_id" => sid}, _world_id, _handle, _scope) do
-    buffer =
+    {buffer, plasmid_buffers} =
       case safe_seed_atom(sid) do
         nil ->
-          []
+          {[], []}
 
         atom ->
           case Lenies.Seeds.get(atom) do
-            %{codeome: codeome} -> Lenies.Codeome.to_list(codeome)
-            _ -> []
+            %{codeome: codeome} = seed ->
+              plasmids =
+                case Map.get(seed, :plasmid) do
+                  nil -> []
+                  ops -> [ops]
+                end
+
+              {Lenies.Codeome.to_list(codeome), plasmids}
+
+            _ ->
+              {[], []}
           end
       end
 
-    {:new_seed, nil, buffer}
+    {:new_seed, nil, buffer, plasmid_buffers}
   end
 
+  # Resolve a seed-id string to its atom. We match against the ids returned by
+  # `Lenies.Seeds.all/0` rather than `String.to_existing_atom/1`: on a cold VM
+  # the built-in codeome modules (and thus their id atoms) may not be loaded
+  # yet, which would make a first-open of a built-in seed spuriously resolve to
+  # nil. Walking `Seeds.all/0` loads them and guarantees the atom exists.
   defp safe_seed_atom(sid) do
-    try do
-      String.to_existing_atom(sid)
-    rescue
-      ArgumentError -> nil
-    end
+    Enum.find_value(Lenies.Seeds.all(), fn %{id: id} ->
+      if Atom.to_string(id) == sid, do: id
+    end)
   end
 
   defp safe_get_codeome(world_id, id) do
@@ -1208,15 +1228,25 @@ defmodule LeniesWeb.EditorLive do
   end
 
   defp apply_buffer_change(socket, new_buffer) do
-    original = socket.assigns[:original_buffer] || socket.assigns.buffer
-    dirty = new_buffer != original
-
     socket
     |> assign(:buffer, new_buffer)
-    |> assign(:dirty, dirty)
     |> assign(:validation, LeniesWeb.CodeomeBuffer.validate(new_buffer))
     |> assign(:economics, current_economics(new_buffer))
     |> assign(:jump_targets, LeniesWeb.JumpTargets.targets(new_buffer))
+    |> assign_dirty()
+  end
+
+  # Dirty if either the chromosome or the plasmid set differs from what was
+  # loaded. Reads current assigns so both chromosome and (future) plasmid
+  # mutators can funnel through it.
+  defp assign_dirty(socket) do
+    buf_dirty =
+      socket.assigns.buffer != (socket.assigns[:original_buffer] || socket.assigns.buffer)
+
+    plas_dirty =
+      socket.assigns.plasmid_buffers != (socket.assigns[:original_plasmid_buffers] || [])
+
+    assign(socket, :dirty, buf_dirty or plas_dirty)
   end
 
   # Reads `eat_amount` / `attack_damage` from Application env at the

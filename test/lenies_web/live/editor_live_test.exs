@@ -766,4 +766,37 @@ defmodule LeniesWeb.EditorLiveTest do
     assert html =~ ~s(id="save-seed-form")
     assert has_element?(view, "form#save-seed-form.justify-end")
   end
+
+  describe "plasmid preload on open" do
+    test "opening a Collection seed preloads its persisted plasmids", %{conn: conn, user: user} do
+      {:ok, seed} =
+        Lenies.Collection.create_codeome(user, %{
+          name: "withplasmid",
+          color_hex: "#88ccff",
+          energy_default: 10_000.0,
+          opcodes: ["nop_0", "move"],
+          plasmids: [%{opcodes: ["nop_1"]}]
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/seed/custom:#{seed.id}")
+
+      assert :sys.get_state(view.pid).socket.assigns.plasmid_buffers == [[:nop_1]]
+      assert :sys.get_state(view.pid).socket.assigns.active_target == :chromosome
+    end
+
+    test "opening a built-in seed preloads its plasmid", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/seed/minimal_replicator")
+      plasmids = :sys.get_state(view.pid).socket.assigns.plasmid_buffers
+      assert is_list(plasmids)
+      assert length(plasmids) == 1
+      assert is_list(hd(plasmids))
+      assert hd(plasmids) != []
+    end
+
+    test "opening /new has no plasmids", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+      assert :sys.get_state(view.pid).socket.assigns.plasmid_buffers == []
+      assert :sys.get_state(view.pid).socket.assigns.active_target == :chromosome
+    end
+  end
 end
