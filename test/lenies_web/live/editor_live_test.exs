@@ -65,6 +65,21 @@ defmodule LeniesWeb.EditorLiveTest do
       assert html =~ "NOP_1"
       assert html =~ "1/#{Lenies.Plasmid.max_length()}"
     end
+
+    test "opening Debug stepper carries authored plasmids into exec", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
+      render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "nop_0"})
+      render_hook(view, "edit_insert", %{"index" => 1, "opcode" => "move"})
+
+      render_hook(view, "add_plasmid", %{})
+      render_hook(view, "set_target", %{"target" => "plasmid", "index" => "0"})
+      render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "nop_1"})
+
+      render_hook(view, "open_stepper", %{})
+      html = render(view)
+      # exec = chromosome ++ plasmid → the plasmid separator is present
+      assert html =~ "── plasmid ──"
+    end
   end
 
   test "toggling the manual pane updates the grid class", %{conn: conn} do

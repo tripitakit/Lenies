@@ -283,7 +283,7 @@ defmodule LeniesWeb.EditorLive do
           opcodes: Enum.map(socket.assigns.buffer, &Atom.to_string/1),
           plasmids:
             socket.assigns.plasmid_buffers
-            |> Enum.reject(&(&1 == []))
+            |> non_empty_plasmid_buffers()
             |> Enum.map(fn ops -> %{opcodes: Enum.map(ops, &Atom.to_string/1)} end)
         }
 
@@ -1332,6 +1332,7 @@ defmodule LeniesWeb.EditorLive do
           module={LeniesWeb.StepperLive}
           id="stepper-modal"
           codeome={LeniesWeb.CodeomeBuffer.to_codeome(@buffer)}
+          plasmids={Enum.map(non_empty_plasmid_buffers(@plasmid_buffers), &Lenies.Plasmid.new/1)}
           current_user={@current_scope && @current_scope.user}
         />
       <% end %>
@@ -1429,6 +1430,11 @@ defmodule LeniesWeb.EditorLive do
         end
     end
   end
+
+  # The plasmid buffers the user has actually filled — empties are authoring
+  # placeholders and never persisted or executed.
+  defp non_empty_plasmid_buffers(plasmid_buffers) when is_list(plasmid_buffers),
+    do: Enum.reject(plasmid_buffers, &(&1 == []))
 
   defp commit_plasmid_change(socket, new_plasmid_buffers) do
     socket
