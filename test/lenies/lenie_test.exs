@@ -130,6 +130,39 @@ defmodule Lenies.LenieTest do
     end
   end
 
+  describe "exec_codeome wiring" do
+    test "inspect_state exposes chromosome vs exec sizes, hash, plasmid count",
+         %{world_id: world_id, handle: handle} do
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 5})
+      :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "EX1"}})
+
+      codeome = Codeome.from_list([:nop_0, :nop_1, :nop_1])
+
+      {:ok, pid} =
+        Lenie.start_link(
+          {handle,
+           [
+             id: "EX1",
+             codeome: codeome,
+             energy: 50.0,
+             pos: {5, 5},
+             dir: :e,
+             lineage: {nil, 0},
+             plasmids: [Lenies.Plasmid.new([:turn_left, :turn_left])],
+             paused?: true
+           ]}
+        )
+
+      snap = GenServer.call(pid, :inspect_state)
+      assert snap.codeome_size == 3
+      assert snap.exec_codeome_size == 5
+      assert snap.plasmid_count == 1
+      assert is_binary(snap.codeome_hash)
+
+      GenServer.stop(pid)
+    end
+  end
+
   describe "build_exec_codeome/2" do
     test "with no plasmids returns the chromosome unchanged in size" do
       codeome = Codeome.from_list([:nop_0, :nop_1, :nop_1])

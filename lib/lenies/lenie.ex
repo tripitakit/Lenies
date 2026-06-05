@@ -28,6 +28,10 @@ defmodule Lenies.Lenie do
     # two mutation points) instead of re-hashing the whole opcode tuple on every
     # snapshot write and on termination.
     :codeome_hash,
+    # Derived execution Codeome = chromosome ++ plasmid opcodes, indexed.
+    # What the interpreter runs. Rebuilt only when plasmids change; the
+    # chromosome (`:codeome`) and its hash stay plasmid-free.
+    :exec_codeome,
     :interp,
     :lineage,
     :seed_origin,
@@ -141,6 +145,7 @@ defmodule Lenies.Lenie do
       id: id,
       codeome: codeome,
       codeome_hash: Codeome.hash(codeome),
+      exec_codeome: build_exec_codeome(codeome, plasmids),
       interp: interp,
       lineage: lineage,
       seed_origin: seed_origin,
@@ -189,7 +194,10 @@ defmodule Lenies.Lenie do
       ip: state.interp.ip,
       stack: state.interp.stack,
       slots: state.interp.slots,
-      codeome_size: Codeome.size(state.codeome)
+      codeome_size: Codeome.size(state.codeome),
+      codeome_hash: state.codeome_hash,
+      exec_codeome_size: Codeome.size(state.exec_codeome),
+      plasmid_count: length(state.plasmids)
     }
 
     {:reply, snapshot, state}
@@ -255,7 +263,7 @@ defmodule Lenies.Lenie do
   def handle_info(:metabolize, state) do
     batch = Application.get_env(:lenies, :interpreter_steps_per_batch, 10)
 
-    case Interpreter.run_k_instructions(state.interp, state.codeome, batch) do
+    case Interpreter.run_k_instructions(state.interp, state.exec_codeome, batch) do
       {:cont, new_interp} ->
         new_state = age_and_continue(state, new_interp)
         noreply_between_batches(new_state)
