@@ -979,7 +979,11 @@ defmodule Lenies.World do
     parent_seed_origin = Map.get(parent_record, :seed_origin)
 
     parent_plasmids = Map.get(parent_record, :plasmids, [])
-    child_plasmids = mutate_plasmids(parent_plasmids, state)
+    # Extra-chromosomal inheritance: each plasmid segregates to the child with
+    # probability 1 - p_loss, then mutates. This is what bounds the carried
+    # count at equilibrium (vs. the old unbounded full-list inheritance).
+    kept_plasmids = segregate_plasmids(parent_plasmids, Lenies.Config.plasmid_loss_probability())
+    child_plasmids = mutate_plasmids(kept_plasmids, state)
 
     child_opts = [
       id: child_id,
@@ -1135,6 +1139,17 @@ defmodule Lenies.World do
     # whatever they were (initialized to :nop_0). This effectively shortens
     # the executed program by 1.
     :ok
+  end
+
+  @doc """
+  Stochastic segregational loss: each plasmid is independently kept with
+  probability `1 - p_loss`. `p_loss = 0.0` keeps all; `p_loss = 1.0` drops all
+  (`:rand.uniform/0` returns a value in `(0.0, 1.0]`, so `> 1.0` is never true).
+  Public for unit testing.
+  """
+  @spec segregate_plasmids([Lenies.Plasmid.t()], float()) :: [Lenies.Plasmid.t()]
+  def segregate_plasmids(plasmids, p_loss) when is_list(plasmids) do
+    Enum.filter(plasmids, fn _ -> :rand.uniform() > p_loss end)
   end
 
   defp mutate_plasmids(plasmids, state) when is_list(plasmids) do

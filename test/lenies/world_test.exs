@@ -387,4 +387,24 @@ defmodule Lenies.WorldTest do
       assert {:priority, :low} = :erlang.process_info(handle.pid, :priority)
     end
   end
+
+  describe "segregate_plasmids/2" do
+    test "p_loss = 0.0 keeps every plasmid" do
+      ps = [Lenies.Plasmid.new([:nop_0]), Lenies.Plasmid.new([:nop_1]), Lenies.Plasmid.new([:add])]
+      assert Lenies.World.segregate_plasmids(ps, 0.0) == ps
+    end
+
+    test "p_loss = 1.0 drops every plasmid" do
+      ps = [Lenies.Plasmid.new([:nop_0]), Lenies.Plasmid.new([:nop_1])]
+      assert Lenies.World.segregate_plasmids(ps, 1.0) == []
+    end
+
+    test "p_loss = 0.5 keeps roughly half over many plasmids" do
+      :rand.seed(:exsss, {11, 22, 33})
+      ps = for _ <- 1..2000, do: Lenies.Plasmid.new([:nop_0])
+      kept = Lenies.World.segregate_plasmids(ps, 0.5)
+      # Expect ~1000 kept; allow a generous statistical band.
+      assert length(kept) > 850 and length(kept) < 1150
+    end
+  end
 end

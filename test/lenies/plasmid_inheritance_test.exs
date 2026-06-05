@@ -13,6 +13,7 @@ defmodule Lenies.PlasmidInheritanceTest do
     Application.put_env(:lenies, :background_mutation_rate_per_1000_ticks, 0)
     Application.put_env(:lenies, :eat_amount, 50)
     Application.put_env(:lenies, :interpreter_steps_per_batch, 50)
+    Application.put_env(:lenies, :plasmid_loss_probability, 0.0)
 
     {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world()
     {:ok, handle} = Lenies.Worlds.handle(world_id)
@@ -24,6 +25,7 @@ defmodule Lenies.PlasmidInheritanceTest do
       Application.delete_env(:lenies, :background_mutation_rate_per_1000_ticks)
       Application.delete_env(:lenies, :eat_amount)
       Application.delete_env(:lenies, :interpreter_steps_per_batch)
+      Application.delete_env(:lenies, :plasmid_loss_probability)
 
       case Lenies.WorldTestHelpers.lenie_sup_pid(world_id) do
         sup when is_pid(sup) ->
