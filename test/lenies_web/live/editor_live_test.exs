@@ -820,10 +820,7 @@ defmodule LeniesWeb.EditorLiveTest do
     test "opening a built-in seed preloads its plasmid", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/sandbox/editor/seed/minimal_replicator")
       plasmids = :sys.get_state(view.pid).socket.assigns.plasmid_buffers
-      assert is_list(plasmids)
-      assert length(plasmids) == 1
-      assert is_list(hd(plasmids))
-      assert hd(plasmids) != []
+      assert plasmids == [Lenies.Codeomes.MinimalReplicator.plasmid()]
     end
 
     test "opening /new has no plasmids", %{conn: conn} do

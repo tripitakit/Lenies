@@ -883,6 +883,15 @@
   border: 1px dashed rgba(34, 211, 238, 0.25);
 }
 
+/* The plasmid pane is overflow:hidden like the listing pane, so its inner
+   .codeome-blocks must scroll too — a long plasmid (up to 64 opcodes) would
+   otherwise clip instead of scrolling. */
+.lenies-dashboard.codeome-editor-page .codeome-plasmid-pane .codeome-blocks {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 /* Energy mini-panel above the codeome listing — three stat boxes
    (cost / max gain / net) plus a tiny breakdown line. Compact so it
    never steals vertical space from the codeome listing. */
