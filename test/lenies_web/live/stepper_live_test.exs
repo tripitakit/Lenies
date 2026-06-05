@@ -182,6 +182,13 @@ defmodule LeniesWeb.StepperLiveTest do
     :ok
   end
 
+  test "update/1 with :plasmids starts the session carrying them" do
+    codeome = Lenies.Codeome.from_list([:nop_0, :move])
+    plasmid = Lenies.Plasmid.new([:twitch])
+    session = LeniesWeb.StepperLive.__test_build_session__(codeome, [plasmid])
+    assert Lenies.Codeome.size(session.exec_codeome) == 3
+  end
+
   test "the codeome list is followable and marks the current IP row", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
     populate_buffer(view)

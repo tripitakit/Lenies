@@ -84,7 +84,11 @@ defmodule LeniesWeb.StepperLive do
   end
 
   def update(%{codeome: codeome} = assigns, socket) do
-    session = Map.get(socket.assigns, :session) || Stepper.start_session(codeome, [])
+    plasmids = Map.get(assigns, :plasmids, [])
+
+    session =
+      Map.get(socket.assigns, :session) ||
+        Stepper.start_session(codeome, plasmids: plasmids)
 
     {:ok,
      socket
@@ -93,6 +97,11 @@ defmodule LeniesWeb.StepperLive do
      |> assign_new(:current_user, fn -> nil end)
      |> assign_new(:run_speed, fn -> 10 end)
      |> assign_new(:run_gen, fn -> 0 end)}
+  end
+
+  @doc false
+  def __test_build_session__(codeome, plasmids) do
+    Stepper.start_session(codeome, plasmids: plasmids)
   end
 
   @impl true
