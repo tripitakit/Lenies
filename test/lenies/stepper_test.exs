@@ -269,5 +269,40 @@ defmodule Lenies.StepperTest do
       # chromosome length 3 → first plasmid starts at 3, second at 3+2=5
       assert Stepper.plasmid_region_starts(session) == [3, 5]
     end
+
+    test "make_plasmid grows exec_codeome after the step; chromosome stays put" do
+      # push0 → start_addr 0; push1;push1;add → length 2; make_plasmid carves a
+      # 2-op plasmid from [push0, push1]. Chromosome size 6, exec grows to 8.
+      codeome = Codeome.from_list([:push0, :push1, :push1, :add, :make_plasmid, :nop_0])
+      session = Stepper.start_session(codeome, energy: 1000.0)
+
+      session = Enum.reduce(1..5, session, fn _, s -> {:ok, s2} = Stepper.step(s); s2 end)
+
+      assert length(session.interp.plasmids) == 1
+      assert Codeome.size(session.codeome) == 6
+      assert Codeome.size(session.exec_codeome) == 8
+    end
+
+    test "an expressed plasmid runs via fall-through (ring) in the stepper" do
+      # Chromosome [:nop_0] + plasmid [:turn_left]: exec ring [nop_0, turn_left].
+      codeome = Codeome.from_list([:nop_0])
+      session = Stepper.start_session(codeome, plasmids: [Plasmid.new([:turn_left])], dir: :n)
+
+      {:ok, s1} = Stepper.step(session)
+      {:ok, s2} = Stepper.step(s1)
+      assert s2.interp.dir == :w
+    end
+
+    test "step_back restores exec_codeome" do
+      codeome = Codeome.from_list([:push0, :push1, :push1, :add, :make_plasmid, :nop_0])
+      session = Stepper.start_session(codeome, energy: 1000.0)
+      before_exec = session.exec_codeome
+
+      session = Enum.reduce(1..5, session, fn _, s -> {:ok, s2} = Stepper.step(s); s2 end)
+      assert Codeome.size(session.exec_codeome) == 8
+
+      session = Enum.reduce(1..5, session, fn _, s -> {:ok, s2} = Stepper.step_back(s); s2 end)
+      assert session.exec_codeome == before_exec
+    end
   end
 end

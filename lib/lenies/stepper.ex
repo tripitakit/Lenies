@@ -102,15 +102,16 @@ defmodule Lenies.Stepper do
   end
 
   def step(%__MODULE__{} = session) do
-    snapshot = %{interp: session.interp, world: session.world}
+    snapshot = %{interp: session.interp, world: session.world, exec_codeome: session.exec_codeome}
     new_history = [snapshot | session.history] |> Enum.take(@max_history)
 
-    case Interpreter.step(session.interp, session.codeome) do
+    case Interpreter.step(session.interp, session.exec_codeome) do
       {:cont, new_interp} ->
         {:ok,
          %{
            session
            | interp: new_interp,
+             exec_codeome: rebuilt_exec(session, new_interp),
              history: new_history,
              step_count: session.step_count + 1,
              status: :ready
@@ -124,6 +125,7 @@ defmodule Lenies.Stepper do
          %{
            session
            | interp: resolved_interp,
+             exec_codeome: rebuilt_exec(session, resolved_interp),
              world: new_world,
              history: new_history,
              step_count: session.step_count + 1,
@@ -135,11 +137,23 @@ defmodule Lenies.Stepper do
          %{
            session
            | interp: new_interp,
+             exec_codeome: rebuilt_exec(session, new_interp),
              history: new_history,
              step_count: session.step_count + 1,
              status: :halted,
              halt_reason: reason
          }}
+    end
+  end
+
+  # Rebuild exec_codeome only when a step changed the carried plasmid list
+  # (`:make_plasmid` / incoming conjugation). Cheap structural compare on a
+  # short list — mirrors Lenie.age_and_continue/2.
+  defp rebuilt_exec(%__MODULE__{} = session, new_interp) do
+    if new_interp.plasmids == session.interp.plasmids do
+      session.exec_codeome
+    else
+      Lenie.build_exec_codeome(session.codeome, new_interp.plasmids)
     end
   end
 
@@ -152,6 +166,7 @@ defmodule Lenies.Stepper do
        session
        | interp: snap.interp,
          world: snap.world,
+         exec_codeome: snap.exec_codeome,
          history: rest,
          step_count: max(0, session.step_count - 1),
          status: :ready,
