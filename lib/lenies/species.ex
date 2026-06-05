@@ -31,7 +31,8 @@ defmodule Lenies.Species do
           cost: float(),
           max_gain: float(),
           seed_origin: nil | binary(),
-          plasmid_count: non_neg_integer()
+          plasmid_min: non_neg_integer(),
+          plasmid_max: non_neg_integer()
         }
 
   @doc """
@@ -86,13 +87,16 @@ defmodule Lenies.Species do
       # band injection, which the rest of the simulation doesn't do.
       seed_origin = Map.get(sample_snap, :seed_origin)
 
-      # Count of distinct plasmids the representative Lenie carries in its
-      # buffer (acquired via conjugation or inherited). The lenie's list is
-      # already deduplicated at acquisition (`Lenie.receive` rejects an
-      # exactly-carried plasmid), so its length is the distinct count. Like
-      # seed_origin, the plasmid buffer is uniform within a codeome-hash
-      # species. The dashboard shows this as "+ N plasmids".
-      plasmid_count = length(Map.get(sample_snap, :plasmids, []))
+      # Carried-plasmid load across the species' living members. Plasmids are
+      # extra-chromosomal: members of one chromosome-hash species can carry
+      # DIFFERENT loads (stochastic segregational loss + conjugation), so we
+      # report the range rather than a single sample. The dashboard shows this
+      # as "+ min–max plasmids".
+      plasmid_counts =
+        Enum.map(entries, fn {_id, snap} -> length(Map.get(snap, :plasmids, [])) end)
+
+      plasmid_min = Enum.min(plasmid_counts)
+      plasmid_max = Enum.max(plasmid_counts)
 
       %{
         hash: hash,
@@ -103,7 +107,8 @@ defmodule Lenies.Species do
         cost: cost,
         max_gain: max_gain,
         seed_origin: seed_origin,
-        plasmid_count: plasmid_count
+        plasmid_min: plasmid_min,
+        plasmid_max: plasmid_max
       }
     end)
     |> Enum.sort_by(& &1.population, :desc)

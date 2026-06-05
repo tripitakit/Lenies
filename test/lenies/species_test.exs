@@ -119,24 +119,45 @@ defmodule Lenies.SpeciesTest do
     assert h2.seed_origin == nil
   end
 
-  test "aggregate/1 reports plasmid_count = number of distinct carried plasmids", %{handle: h} do
+  test "aggregate/1 reports plasmid_min/plasmid_max across living members", %{handle: h} do
+    # Two members of the SAME chromosome species carrying different loads.
     :ets.insert(
       h.tables.lenies,
-      {"p",
+      {"p1",
        %{
-         id: "p",
+         id: "p1",
          codeome_hash: "hP",
          lineage: {nil, 0},
-         plasmids: [Lenies.Plasmid.new([:nop_0]), Lenies.Plasmid.new([:nop_1, :nop_1])]
+         plasmids: [Lenies.Plasmid.new([:nop_0])]
        }}
     )
 
+    :ets.insert(
+      h.tables.lenies,
+      {"p2",
+       %{
+         id: "p2",
+         codeome_hash: "hP",
+         lineage: {nil, 0},
+         plasmids: [
+           Lenies.Plasmid.new([:nop_0]),
+           Lenies.Plasmid.new([:nop_1]),
+           Lenies.Plasmid.new([:add])
+         ]
+       }}
+    )
+
+    # A different species with no plasmids.
     :ets.insert(h.tables.lenies, {"q", %{id: "q", codeome_hash: "hQ", lineage: {nil, 0}}})
 
     species = Species.aggregate(h)
 
-    assert Enum.find(species, &(&1.hash == "hP")).plasmid_count == 2
-    # No :plasmids key → 0, not a crash.
-    assert Enum.find(species, &(&1.hash == "hQ")).plasmid_count == 0
+    hp = Enum.find(species, &(&1.hash == "hP"))
+    assert hp.plasmid_min == 1
+    assert hp.plasmid_max == 3
+
+    hq = Enum.find(species, &(&1.hash == "hQ"))
+    assert hq.plasmid_min == 0
+    assert hq.plasmid_max == 0
   end
 end
