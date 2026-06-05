@@ -91,7 +91,9 @@ defmodule LeniesWeb.EditorLiveTest do
     )
 
     {:ok, _view, html} = live(conn, ~p"/sandbox/editor/edit/#{hash}")
-    assert html =~ "155 ops"
+    # MinimalReplicator chromosome is 123 opcodes (the Twitch plasmid is
+    # extra-chromosomal and no longer baked into codeome/0).
+    assert html =~ "123 ops"
   end
 
   test "drag-drop insert via edit_insert handler appends opcode and marks dirty", %{conn: conn} do

@@ -59,9 +59,11 @@ defmodule Lenies.Codeomes.CarnivoreTest do
     base_ops = MinimalReplicator.opcodes()
     carn = Carnivore.codeome() |> Codeome.to_list()
 
-    # carnivore = base (123) + :attack (1) + sprint plasmid (11) = 135
-    assert length(carn) == length(base_ops) + 1 + length(Carnivore.plasmid())
+    # carnivore chromosome = base (123) + :attack (1) = 124. The Sprint plasmid
+    # is extra-chromosomal (Carnivore.plasmid/0), not baked into the codeome.
+    assert length(carn) == length(base_ops) + 1
     assert :attack in carn
+    refute Enum.take(carn, -length(Carnivore.plasmid())) == Carnivore.plasmid()
   end
 
   test "duel: carnivore facing herbivore steals energy via :attack",

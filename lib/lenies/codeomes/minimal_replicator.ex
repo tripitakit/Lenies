@@ -461,6 +461,9 @@ defmodule Lenies.Codeomes.MinimalReplicator do
   @spec plasmid() :: [atom()]
   def plasmid, do: @plasmid_opcodes
 
+  # Extra-chromosomal: the codeome is the chromosome only. The Twitch plasmid
+  # (plasmid/0) travels separately in the carried-plasmid buffer (the spawn path
+  # passes `plasmids: [Plasmid.new(plasmid())]`), so it's NOT baked in here.
   @spec codeome() :: Codeome.t()
-  def codeome, do: Codeome.from_list(@opcodes ++ @plasmid_opcodes)
+  def codeome, do: Codeome.from_list(@opcodes)
 end

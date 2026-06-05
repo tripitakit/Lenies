@@ -40,7 +40,9 @@ defmodule Lenies.Codeomes.Carnivore do
   def codeome do
     base_opcodes = Lenies.Codeomes.MinimalReplicator.opcodes()
     patched = inject_attack_before_eat(base_opcodes)
-    Codeome.from_list(patched ++ @plasmid_opcodes)
+    # Extra-chromosomal: chromosome only; the Sprint plasmid (plasmid/0) rides
+    # in the carried-plasmid buffer, not in the codeome.
+    Codeome.from_list(patched)
   end
 
   defp inject_attack_before_eat(opcodes) do
