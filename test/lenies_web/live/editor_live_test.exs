@@ -799,4 +799,25 @@ defmodule LeniesWeb.EditorLiveTest do
       assert :sys.get_state(view.pid).socket.assigns.active_target == :chromosome
     end
   end
+
+  describe "insert routing via active target" do
+    test "palette insert goes to chromosome by default", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
+      render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "move"})
+      state = :sys.get_state(view.pid).socket.assigns
+      assert state.buffer == [:move]
+      assert state.plasmid_buffers == []
+    end
+
+    test "with a plasmid target, palette insert appends to that plasmid", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
+      render_hook(view, "add_plasmid", %{})
+      render_hook(view, "set_target", %{"target" => "plasmid", "index" => "0"})
+      render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "nop_1"})
+      state = :sys.get_state(view.pid).socket.assigns
+      assert state.buffer == []
+      assert state.plasmid_buffers == [[:nop_1]]
+      assert state.active_target == {:plasmid, 0}
+    end
+  end
 end

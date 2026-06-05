@@ -214,10 +214,15 @@ defmodule LeniesWeb.EditorLive do
       opcode = String.to_existing_atom(opcode_str)
 
       if Lenies.Codeome.Opcodes.known?(opcode) do
-        # `index` from a palette drop is authoritative for placement: move the
-        # caret there first, then insert at the caret.
-        socket = put_caret(socket, EditorCaret.place(index))
-        {:noreply, insert_at_caret(socket, [opcode])}
+        case socket.assigns.active_target do
+          :chromosome ->
+            # `index` from a palette drop is authoritative: move caret, insert.
+            socket = put_caret(socket, EditorCaret.place(index))
+            {:noreply, insert_at_caret(socket, [opcode])}
+
+          {:plasmid, i} ->
+            {:noreply, insert_into_plasmid(socket, i, opcode)}
+        end
       else
         {:noreply, socket}
       end
@@ -365,6 +370,32 @@ defmodule LeniesWeb.EditorLive do
       end
 
     {:noreply, put_caret(socket, new_pair)}
+  end
+
+  def handle_event("set_target", %{"target" => "chromosome"}, socket) do
+    {:noreply, assign(socket, :active_target, :chromosome)}
+  end
+
+  def handle_event("set_target", %{"target" => "plasmid", "index" => idx}, socket) do
+    i = to_int(idx)
+
+    target =
+      if i >= 0 and i < length(socket.assigns.plasmid_buffers),
+        do: {:plasmid, i},
+        else: :chromosome
+
+    {:noreply, assign(socket, :active_target, target)}
+  end
+
+  def handle_event("add_plasmid", _params, socket) do
+    new_plasmids = socket.assigns.plasmid_buffers ++ [[]]
+    new_idx = length(new_plasmids) - 1
+
+    {:noreply,
+     socket
+     |> assign(:plasmid_buffers, new_plasmids)
+     |> assign(:active_target, {:plasmid, new_idx})
+     |> assign_dirty()}
   end
 
   def handle_event("move_caret", %{"dir" => dir} = params, socket) do
@@ -1247,6 +1278,31 @@ defmodule LeniesWeb.EditorLive do
       socket.assigns.plasmid_buffers != (socket.assigns[:original_plasmid_buffers] || [])
 
     assign(socket, :dirty, buf_dirty or plas_dirty)
+  end
+
+  # Append an opcode to the end of plasmid `idx` (minimal editing: no caret).
+  # No-op if the index is gone or the plasmid is already at the cap.
+  defp insert_into_plasmid(socket, idx, opcode) do
+    plasmids = socket.assigns.plasmid_buffers
+
+    case Enum.at(plasmids, idx) do
+      nil ->
+        socket
+
+      plasmid ->
+        if length(plasmid) >= Lenies.Plasmid.max_length() do
+          socket
+        else
+          new_plasmid = CodeomeBuffer.insert(plasmid, length(plasmid), opcode)
+          commit_plasmid_change(socket, List.replace_at(plasmids, idx, new_plasmid))
+        end
+    end
+  end
+
+  defp commit_plasmid_change(socket, new_plasmid_buffers) do
+    socket
+    |> assign(:plasmid_buffers, new_plasmid_buffers)
+    |> assign_dirty()
   end
 
   # Reads `eat_amount` / `attack_damage` from Application env at the
