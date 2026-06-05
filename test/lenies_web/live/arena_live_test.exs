@@ -136,6 +136,48 @@ defmodule LeniesWeb.ArenaLiveTest do
     end
   end
 
+  describe "species table plasmid badge (ETS pre-populate)" do
+    setup do
+      :ok = Lenies.Arena.attach_viewer()
+      {:ok, handle} = Lenies.Worlds.handle(:arena)
+      :ok = Lenies.Worlds.pause(:arena)
+
+      on_exit(fn -> Lenies.Worlds.stop_world(:arena) end)
+
+      %{handle: handle}
+    end
+
+    test "shows a min–max range badge when members carry different plasmid loads",
+         %{conn: conn, handle: handle} do
+      :ets.insert(handle.tables.lenies, {
+        "arangep1",
+        %{id: "arangep1", codeome_hash: "ARENA-RANGE-SP", lineage: {nil, 0},
+          plasmids: [Lenies.Plasmid.new([:nop_0])]}
+      })
+      :ets.insert(handle.tables.lenies, {
+        "arangep3",
+        %{id: "arangep3", codeome_hash: "ARENA-RANGE-SP", lineage: {nil, 0},
+          plasmids: [Lenies.Plasmid.new([:nop_0]), Lenies.Plasmid.new([:nop_1]),
+                     Lenies.Plasmid.new([:nop_0])]}
+      })
+
+      {:ok, _view, html} = live(conn, ~p"/arena")
+
+      assert html =~ "1–3 plasmids"
+    end
+
+    test "omits the plasmid badge when there are none", %{conn: conn, handle: handle} do
+      :ets.insert(handle.tables.lenies, {
+        "anone",
+        %{id: "anone", codeome_hash: "ARENA-NOPLASMID-SP", lineage: {nil, 0}}
+      })
+
+      {:ok, _view, html} = live(conn, ~p"/arena")
+
+      refute html =~ ~r/ARENA-NOPLASMID-SP[\s\S]{0,200}plasmid/
+    end
+  end
+
   describe "canvas layers (no toggles)" do
     test "canvas always renders all three layers", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/arena")

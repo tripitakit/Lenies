@@ -170,6 +170,25 @@ defmodule LeniesWeb.DashboardLiveTest do
     assert html =~ "+ 2 plasmids"
   end
 
+  test "species table shows a min–max range when members carry different plasmid loads",
+       %{conn: conn, handle: handle} do
+    :ets.insert(handle.tables.lenies, {
+      "rangep1",
+      %{id: "rangep1", codeome_hash: "RANGE-SP", lineage: {nil, 0},
+        plasmids: [Lenies.Plasmid.new([:nop_0])]}
+    })
+    :ets.insert(handle.tables.lenies, {
+      "rangep3",
+      %{id: "rangep3", codeome_hash: "RANGE-SP", lineage: {nil, 0},
+        plasmids: [Lenies.Plasmid.new([:nop_0]), Lenies.Plasmid.new([:nop_1]),
+                   Lenies.Plasmid.new([:nop_0])]}
+    })
+
+    {:ok, _view, html} = live(conn, ~p"/sandbox")
+
+    assert html =~ "1–3 plasmids"
+  end
+
   test "species table omits the plasmid annotation when there are none",
        %{conn: conn, handle: handle} do
     :ets.insert(

@@ -330,9 +330,9 @@ defmodule LeniesWeb.ArenaLive do
                         </td>
                         <td class="py-0.5 opacity-80">
                           {format_seed_origin(sp)}<span
-                            :if={sp.plasmid_count > 0}
+                            :if={sp.plasmid_max > 0}
                             class="ml-1 text-[9px] text-yellow-300/80"
-                          >+ {sp.plasmid_count} {plasmid_word(sp.plasmid_count)}</span>
+                          >+ {plasmid_badge(sp.plasmid_min, sp.plasmid_max)}</span>
                         </td>
                         <td class="text-right pl-3 whitespace-nowrap">{sp.size}</td>
                         <td class="text-right pl-3 whitespace-nowrap text-rose-300">
@@ -596,6 +596,11 @@ defmodule LeniesWeb.ArenaLive do
   # Singular/plural for the species-table plasmid count annotation.
   defp plasmid_word(1), do: "plasmid"
   defp plasmid_word(_), do: "plasmids"
+
+  # Species-table load annotation: "N plasmids" when the whole species carries
+  # the same count, "min–max plasmids" when members differ (segregational loss).
+  defp plasmid_badge(n, n), do: "#{n} #{plasmid_word(n)}"
+  defp plasmid_badge(min, max), do: "#{min}–#{max} plasmids"
 
   # Format large counters (resources / carcasses) so the user can read
   # them at a glance: thousand-separated below 1k, then k/M/B suffixes
