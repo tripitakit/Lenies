@@ -390,12 +390,16 @@ defmodule LeniesWeb.ControlsPanelComponent do
         # world handle in @world_handle.
         Lenies.SpeciesColor.set_override(socket.assigns.world_handle, hash, seed.color_hex)
 
-        result =
-          Lenies.Worlds.spawn_lenie(socket.assigns.world_id, codeome,
+        plasmids = Lenies.Collection.to_plasmid_structs(seed)
+
+        spawn_opts =
+          [
             energy: seed.energy_default,
             dir: Enum.random([:n, :s, :e, :w]),
             seed_origin: "★ " <> seed.name
-          )
+          ] ++ if(plasmids == [], do: [], else: [plasmids: plasmids])
+
+        result = Lenies.Worlds.spawn_lenie(socket.assigns.world_id, codeome, spawn_opts)
 
         {:noreply, maybe_flash_cap_exceeded(socket, result)}
 

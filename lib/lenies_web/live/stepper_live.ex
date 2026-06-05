@@ -492,7 +492,7 @@ defmodule LeniesWeb.StepperLive do
           case Map.get(seed, :plasmid) do
             nil -> []
             [] -> []
-            ops when is_list(ops) -> [ops]
+            ops when is_list(ops) -> [Lenies.Plasmid.new(ops)]
           end
 
         %{codeome: seed.codeome, plasmids: plasmids}
@@ -508,7 +508,7 @@ defmodule LeniesWeb.StepperLive do
 
       %Lenies.Collection.Codeome{} = c ->
         opcodes = Lenies.Collection.to_opcode_atoms(c)
-        %{codeome: Lenies.Codeome.from_list(opcodes), plasmids: []}
+        %{codeome: Lenies.Codeome.from_list(opcodes), plasmids: Lenies.Collection.to_plasmid_structs(c)}
     end
   end
 

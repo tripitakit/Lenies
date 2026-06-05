@@ -239,6 +239,22 @@ defmodule Lenies.StepperTest do
     end
   end
 
+  describe "place_seed with a plasmid-carrying seed map" do
+    alias Lenies.Codeomes.MinimalReplicator
+
+    test "accepts %Plasmid{} structs in the seed map (build_exec_codeome contract)" do
+      codeome = Codeome.from_list([:nop_0, :nop_1])
+      session = Stepper.start_session(codeome, [])
+
+      seed = %{
+        codeome: MinimalReplicator.codeome(),
+        plasmids: [Lenies.Plasmid.new(MinimalReplicator.plasmid())]
+      }
+
+      assert {:ok, _new} = Stepper.place_seed(session, seed, {10, 10})
+    end
+  end
+
   describe "exec_codeome (extra-chromosomal)" do
     test "with no plasmids exec_codeome matches the chromosome size" do
       codeome = Codeome.from_list([:nop_0, :nop_1, :nop_1])
