@@ -1372,7 +1372,7 @@
 }
 .stepper-codeome-list {
   list-style: none;
-  padding: 0 0 0 20px;
+  padding: 0 0 0 32px;
   margin: 0;
   font-family: ui-monospace, "JetBrains Mono", monospace;
 }
@@ -1390,7 +1390,7 @@
   position: absolute;
   left: 0;
   top: 0;
-  width: 20px;
+  width: 32px;
   height: 100%;
   pointer-events: none;
   overflow: visible;
