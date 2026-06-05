@@ -76,6 +76,17 @@ defmodule Lenies.Collection do
     Enum.map(opcodes, &String.to_existing_atom/1)
   end
 
+  @doc """
+  Convert a codeome's stored plasmid embeds to runtime `Lenies.Plasmid` structs.
+  `String.to_existing_atom/1` defensively — the embed changeset guarantees known
+  opcodes at write time.
+  """
+  def to_plasmid_structs(%Codeome{plasmids: plasmids}) do
+    Enum.map(plasmids, fn %Lenies.Collection.Plasmid{opcodes: ops} ->
+      Lenies.Plasmid.new(Enum.map(ops, &String.to_existing_atom/1))
+    end)
+  end
+
   # Normalize a client-supplied id to an integer, or nil if unparseable.
   # Accepts already-integer ids (internal/tests) and strict integer strings.
   defp normalize_id(id) when is_integer(id), do: id

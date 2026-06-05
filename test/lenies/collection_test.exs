@@ -132,4 +132,52 @@ defmodule Lenies.CollectionTest do
       assert {:error, :not_found} = Lenies.Collection.delete_codeome(user, "garbage")
     end
   end
+
+  describe "plasmid persistence" do
+    setup do
+      %{user: Lenies.AccountsFixtures.user_fixture()}
+    end
+
+    test "create_codeome persists plasmids and get_codeome returns them", %{user: user} do
+      attrs = %{
+        name: "Twitchy", color_hex: "#00ff88", energy_default: 500.0,
+        opcodes: ["nop_1", "store", "eat"],
+        plasmids: [%{opcodes: ["nop_0", "move"]}, %{opcodes: ["eat"]}]
+      }
+
+      assert {:ok, saved} = Lenies.Collection.create_codeome(user, attrs)
+      reloaded = Lenies.Collection.get_codeome(user, saved.id)
+
+      assert [%Lenies.Collection.Plasmid{opcodes: ["nop_0", "move"]},
+              %Lenies.Collection.Plasmid{opcodes: ["eat"]}] = reloaded.plasmids
+    end
+
+    test "a seed saved without plasmids has an empty list", %{user: user} do
+      attrs = %{name: "Plain", color_hex: "#112233", energy_default: 500.0, opcodes: ["eat"]}
+      assert {:ok, saved} = Lenies.Collection.create_codeome(user, attrs)
+      assert Lenies.Collection.get_codeome(user, saved.id).plasmids == []
+    end
+
+    test "to_plasmid_structs/1 converts embeds to runtime Plasmid structs", %{user: user} do
+      attrs = %{
+        name: "Conv", color_hex: "#445566", energy_default: 500.0,
+        opcodes: ["eat"], plasmids: [%{opcodes: ["nop_0", "move"]}, %{opcodes: ["eat"]}]
+      }
+      {:ok, saved} = Lenies.Collection.create_codeome(user, attrs)
+      reloaded = Lenies.Collection.get_codeome(user, saved.id)
+
+      assert [%Lenies.Plasmid{opcodes: [:nop_0, :move]}, %Lenies.Plasmid{opcodes: [:eat]}] =
+               Lenies.Collection.to_plasmid_structs(reloaded)
+
+      assert Lenies.Collection.to_plasmid_structs(%Lenies.Collection.Codeome{plasmids: []}) == []
+    end
+
+    test "rejects a plasmid embed with an unknown opcode", %{user: user} do
+      attrs = %{
+        name: "BadP", color_hex: "#778899", energy_default: 500.0,
+        opcodes: ["eat"], plasmids: [%{opcodes: ["not_an_opcode"]}]
+      }
+      assert {:error, %Ecto.Changeset{}} = Lenies.Collection.create_codeome(user, attrs)
+    end
+  end
 end

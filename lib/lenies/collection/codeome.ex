@@ -14,6 +14,7 @@ defmodule Lenies.Collection.Codeome do
     field :color_hex, :string
     field :energy_default, :float, default: 10_000.0
     field :opcodes, {:array, :string}
+    embeds_many :plasmids, Lenies.Collection.Plasmid, on_replace: :delete
     belongs_to :owner, Lenies.Accounts.User
 
     timestamps(type: :utc_datetime)
@@ -28,6 +29,7 @@ defmodule Lenies.Collection.Codeome do
     |> validate_format(:name, @alnum_re, message: "must contain a letter or digit")
     |> validate_format(:color_hex, @hex_re, message: "must be a #RRGGBB hex colour")
     |> validate_opcodes()
+    |> cast_embed(:plasmids, with: &Lenies.Collection.Plasmid.changeset/2)
     # Translates the partial unique_index(:codeomes, [:owner_id, :name]) DB
     # constraint into a changeset error so Collection.create_codeome/2 can
     # classify it as {:error, :name_taken} instead of raising on duplicates.
