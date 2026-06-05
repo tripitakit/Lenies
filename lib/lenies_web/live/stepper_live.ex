@@ -89,7 +89,6 @@ defmodule LeniesWeb.StepperLive do
      socket
      |> assign(assigns)
      |> assign_session(session)
-     |> assign(:loops, JumpTargets.loops(Lenies.Codeome.to_list(codeome)))
      |> assign_new(:current_user, fn -> nil end)
      |> assign_new(:run_speed, fn -> 10 end)
      |> assign_new(:run_gen, fn -> 0 end)}
@@ -219,7 +218,7 @@ defmodule LeniesWeb.StepperLive do
                 <dt>energy</dt>
                 <dd>{Float.round(@session.interp.energy, 1)}</dd>
                 <dt>ip</dt>
-                <dd>{@session.interp.ip}/{Lenies.Codeome.size(@session.codeome)}</dd>
+                <dd>{@session.interp.ip}/{Lenies.Codeome.size(@session.exec_codeome)}</dd>
                 <dt>age</dt>
                 <dd>{@session.interp.age}</dd>
                 <dt>pos</dt>
@@ -227,7 +226,7 @@ defmodule LeniesWeb.StepperLive do
                 <dt>dir</dt>
                 <dd>{@session.interp.dir}</dd>
                 <dt>size</dt>
-                <dd>{Lenies.Codeome.size(@session.codeome)}</dd>
+                <dd>{Lenies.Codeome.size(@session.exec_codeome)}</dd>
               </dl>
             </section>
 
@@ -284,7 +283,7 @@ defmodule LeniesWeb.StepperLive do
           </aside>
 
           <section class="stepper-codeome">
-            <h3 class="stepper-panel-title">Codeome ({Lenies.Codeome.size(@session.codeome)} ops)</h3>
+            <h3 class="stepper-panel-title">Codeome ({Lenies.Codeome.size(@session.exec_codeome)} ops)</h3>
             <div class="stepper-codeome-panel">
               <div class="stepper-codeome-inner">
                 <svg class="stepper-loop-gutter">
@@ -306,7 +305,7 @@ defmodule LeniesWeb.StepperLive do
                   <% end %>
                 </svg>
                 <ol id="stepper-codeome-list" class="stepper-codeome-list" phx-hook="StepperFollowIP">
-                  <%= for {op, idx} <- Enum.with_index(Lenies.Codeome.to_list(@session.codeome)) do %>
+                  <%= for {op, idx} <- Enum.with_index(Lenies.Codeome.to_list(@session.exec_codeome)) do %>
                     <li
                       class={[
                         "stepper-codeome-row",
@@ -471,6 +470,7 @@ defmodule LeniesWeb.StepperLive do
   defp assign_session(socket, session) do
     socket
     |> assign(:session, session)
+    |> assign(:loops, JumpTargets.loops(Lenies.Codeome.to_list(session.exec_codeome)))
     |> assign(
       :grid_payload_json,
       Jason.encode!(Lenies.Stepper.World.encode_grid_payload(session.world))
