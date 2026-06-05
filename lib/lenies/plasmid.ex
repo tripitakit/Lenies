@@ -1,8 +1,13 @@
 defmodule Lenies.Plasmid do
   @moduledoc """
   A short opcode buffer that a Lenie can transfer to an adjacent Lenie via
-  the `:conjugate` opcode. Plasmids inherit vertically through `:divide`
-  alongside the codeome, and spread horizontally through conjugation.
+  the `:conjugate` opcode. Plasmids are extra-chromosomal: they are kept
+  separately from the chromosome (`Lenies.Codeome`) and never fused into it.
+  They spread horizontally through conjugation and inherit vertically at
+  `:divide`, where each plasmid segregates to the child stochastically (kept
+  with probability `1 - plasmid_loss_probability`). Their opcodes execute by
+  concatenation into the host's execution stream (the Lenie's `exec_codeome`),
+  expressed only where execution reaches them (fall-through).
 
   The MVP enforces a hard length cap of 64 opcodes per plasmid. The buffer
   is a plain Elixir list (not a tuple like `Lenies.Codeome`) because

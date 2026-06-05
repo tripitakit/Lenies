@@ -377,29 +377,34 @@ random walk, never closing into a starving loop, and keeps reaching fresh
 resource. If you want a turning plasmid that survives, randomize it the way
 Twitch does (§4) rather than turning the same way every time.
 
-And remember the host-compatibility caveat: a plasmid expresses **only** in a
-host that performs the jump your anchor hijacks. Conjugate Veer into a creature
-with no FORAGE_LOOP_HEAD `[0,1,0,1]` run and it lands as dead code — carried and
-copied, never executed.
+And remember the host-compatibility caveat: an anchor-driven plasmid expresses
+**only** in a host that performs the jump your anchor hijacks. Conjugate Veer
+into a creature with no FORAGE_LOOP_HEAD `[0,1,0,1]` run and its anchor never
+fires — carried and inherited, but effectively dead code unless plain
+fall-through happens to reach it.
 
 ---
 
 ## 7. Costs, sustainability, and pitfalls
 
-- **Carry/copy tax.** A plasmid lengthens the host's codeome, so each
-  replication copies more opcodes (the copy loop costs roughly 6.8 energy per
-  opcode), and `divide` charges an extra `0.5 × plasmid_size` for the plasmid
-  itself. The 32-opcode Twitch plasmid adds 16 energy per generation (0.5 × 32) plus the copy cost.
-  Budget for it (Chapter 8).
+- **Carry cost.** Plasmids are *extra-chromosomal*: they are kept separate from
+  the chromosome and never fused into it, so they do **not** lengthen the host's
+  codeome and there is no `divide` surcharge for carrying them. Their cost is
+  paid as **execution**: a plasmid's opcodes run as part of the host's execution
+  stream (chromosome followed by every carried plasmid), so an *expressed*
+  plasmid spends energy every step it runs. An unexpressed one is nearly free.
+  Budget for the ones that fire (Chapter 8).
 - **Per-step cost.** Twitch adds ~1.8 energy to each forage step (the random
   bit, the branch, the turn, the bounce); Sprint adds ~4.4 (an extra move and
   eat) but the extra bite pays it back. A plasmid that costs energy without
   returning any — like Veer's bare turn — is a net drain unless the *behaviour*
   earns its keep indirectly (fresh grazing).
-- **The 1024-opcode cap.** Conjugation refuses to append if it would push the
-  recipient past the codeome length bound. The once-per-encounter rule keeps the
-  same plasmid from stacking, but **distinct** plasmids accumulate; a host can
-  only absorb so many before it hits the cap.
+- **The 1024-opcode cap.** Conjugation refuses a plasmid if it would push the
+  recipient's *execution stream* (chromosome + carried plasmids) past the codeome
+  length bound. The once-per-encounter rule keeps the same plasmid from stacking,
+  and across generations **segregational loss** at `divide` (each plasmid is kept
+  by the child only with probability `1 − plasmid_loss_probability`) bounds how
+  many a lineage hoards — distinct plasmids no longer pile up without limit.
 - **Symmetric conjugation.** Two carriers facing each other both calling
   `conjugate` is now safe (§2) — neither dies — but neither transfer completes
   that tick. In dense fields this is just a small amount of wasted effort.
@@ -429,8 +434,9 @@ copied, never executed.
    Replicator (spawn the built-in seed first, pause, then spawn yours adjacent —
    or spawn several of each and let them mingle).
 6. Resume and watch the conjugation log. When your seed conjugates the plain
-   replicator, the recipient's codeome grows by eleven opcodes and it begins
-   veering — you will see a previously straight-walking Lenie start curving.
+   replicator, the recipient picks up the eleven-opcode plasmid (its chromosome
+   is untouched — the plasmid rides alongside it in the execution stream) and
+   begins veering — you will see a previously straight-walking Lenie start curving.
 7. Now swap `turn_left` for the Twitch random-turn block (§4) and observe the
    difference in how long the converted hosts survive.
 

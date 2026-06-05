@@ -80,12 +80,13 @@ defmodule Lenies.Codeomes.MinimalReplicator do
   - Codeome length: 123 opcodes (121 + 2 for in-forage `:conjugate, :drop`)
     → copy loop body cost ~6.8/iter × 123 ≈ 836
   - Allocate(123) + setup + divide ≈ ~33
-  - Plasmid replication tax: 0.5 × 31 (Twitch plasmid) ≈ 15.5
-  - Total replication cost: ~885
+  - Total replication cost: ~870 (plasmids are extra-chromosomal — they are
+    NOT copied into the child's chromosome and carry no divide-tax; their cost
+    is paid per-step as execution, see the forage line below)
   - Forage per cycle: sense+drop+eat+move (~5.6) + conjugate+drop (~4.1) +
     counter ops (~2.5) + plasmid intercept (~1.8 when it fires) ≈ 13.4
   - Eat gain at default `eat_amount` = 20. Net: ~+6.6 per iter × 128 ≈ +845/gen
-  - Steady state ≈ 2 × 128 × 6.6 − 885 ≈ +805. Sustainable.
+  - Steady state ≈ 2 × 128 × 6.6 − 870 ≈ +820. Sustainable.
 
   See [`docs/superpowers/specs/2026-05-19-seed-plasmids-design.md`] for the
   Twitch plasmid layout and the full cost derivation.
