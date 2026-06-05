@@ -235,4 +235,50 @@ defmodule Lenies.LenieTest do
       assert GenServer.call(pid, :inspect_state).plasmid_count == 0
     end
   end
+
+  describe "exec rebuild on self-made plasmid" do
+    test "make_plasmid grows the exec stream after the batch",
+         %{world_id: world_id, handle: handle} do
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {7, 7})
+      :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "MP1"}})
+
+      # push0 → start_addr 0; push1; push1; add → length 2; make_plasmid carves
+      # opcodes [0,1] into a 2-op plasmid. Chromosome size stays 6; exec grows to 8.
+      codeome = Codeome.from_list([:push0, :push1, :push1, :add, :make_plasmid, :nop_0])
+
+      {:ok, pid} =
+        Lenie.start_link(
+          {handle,
+           [
+             id: "MP1",
+             codeome: codeome,
+             energy: 10_000.0,
+             pos: {7, 7},
+             dir: :e,
+             lineage: {nil, 0}
+           ]}
+        )
+
+      on_exit(fn -> if Process.alive?(pid), do: GenServer.stop(pid) end)
+
+      deadline = System.monotonic_time(:millisecond) + 5_000
+      grew = wait_for_plasmid(pid, deadline)
+
+      assert grew, "expected make_plasmid to add a plasmid and grow exec within 5s"
+      snap = GenServer.call(pid, :inspect_state)
+      assert snap.codeome_size == 6
+      assert snap.exec_codeome_size > 6
+    end
+  end
+
+  defp wait_for_plasmid(pid, deadline) do
+    if System.monotonic_time(:millisecond) >= deadline do
+      false
+    else
+      case GenServer.call(pid, :inspect_state) do
+        %{plasmid_count: n} when n > 0 -> true
+        _ -> Process.sleep(50); wait_for_plasmid(pid, deadline)
+      end
+    end
+  end
 end

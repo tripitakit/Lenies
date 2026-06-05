@@ -301,7 +301,8 @@ defmodule Lenies.Lenie do
        | codeome: new_codeome,
          codeome_hash: new_hash,
          plasmids: new_plasmids,
-         interp: new_interp
+         interp: new_interp,
+         exec_codeome: build_exec_codeome(new_codeome, new_plasmids)
      }}
   end
 
@@ -395,11 +396,22 @@ defmodule Lenies.Lenie do
     new_interp = %{new_interp | age: new_interp.age + 1}
     new_batch_count = state.batch_count + 1
 
+    # A batch may have run :make_plasmid / :conjugate, changing the carried
+    # plasmid list. Rebuild the execution stream only when it actually changed
+    # (cheap structural compare on a short list) — never per tick otherwise.
+    exec_codeome =
+      if new_interp.plasmids == state.plasmids do
+        state.exec_codeome
+      else
+        build_exec_codeome(state.codeome, new_interp.plasmids)
+      end
+
     new_state = %{
       state
       | interp: new_interp,
         batch_count: new_batch_count,
-        plasmids: new_interp.plasmids
+        plasmids: new_interp.plasmids,
+        exec_codeome: exec_codeome
     }
 
     maybe_write_snapshot(new_state)
