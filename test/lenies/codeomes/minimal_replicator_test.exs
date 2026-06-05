@@ -53,8 +53,8 @@ defmodule Lenies.Codeomes.MinimalReplicatorTest do
 
   test "minimal_replicator reaches at least generation 3 in 30 seconds",
        %{world_id: world_id, handle: handle} do
-    # Seed a large biomass area. With the Twitch plasmid in the expressed codeome,
-    # offspring do a random walk rather than a straight march, so the colony
+    # Seed a large biomass area. This spawns the plasmid-free chromosome
+    # (codeome/0), so offspring march straight rather than random-walk; the colony
     # clusters near the origin instead of spreading linearly. Use a higher resource
     # (2000 vs 200) to prevent local depletion in the cluster area.
     for x <- 0..127, y <- 0..127 do

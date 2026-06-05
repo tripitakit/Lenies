@@ -576,15 +576,23 @@ to K=128). Sustainable at default `eat_amount=20`.
 ### 5.5 Carnivore (`lib/lenies/codeomes/carnivore.ex`)
 
 A predatory variant of MR built by patching the base codeome: inject
-`:attack` immediately before the first `:eat`, then append a "Sprint"
-plasmid (12 opcodes) that adds an extra `:move, :eat` per forage iter.
+`:attack` immediately before the first `:eat`. A "Sprint" plasmid (12
+opcodes) adds an extra `:move, :eat` per forage iter — but it is
+**extra-chromosomal**: kept separate (the module's `plasmid/0`), **NOT**
+baked into the codeome. It rides as the seed's `:plasmid` buffer and is
+concatenated into the *execution* stream (chromosome ++ plasmid) at
+runtime; the chromosome itself (Size / hash / replication) is plasmid-free.
 
-The Carnivore module's `codeome/0` does the patching at compile time —
-when writing an AI-generated Carnivore variant, copy the full MR base
-opcodes (§5.7), inject `:attack` before `:eat`, then append the plasmid:
+The Carnivore module's `codeome/0` returns the patched **chromosome only**;
+`plasmid/0` returns the Sprint buffer separately. When writing an
+AI-generated Carnivore variant, the codeome is the patched MR base, and the
+Sprint plasmid is a **separate** buffer (the seed's `:plasmid`) — do NOT
+append it to the codeome (that would inflate Size and duplicate the plasmid
+in the exec stream):
 
 ```elixir
-# The Sprint plasmid (appended to a modified MR base)
+# The Sprint plasmid — an extra-chromosomal buffer (the seed's :plasmid),
+# NOT part of the codeome. The runtime concatenates it after the chromosome.
 [
   # == pos 0..3: INTERCEPT_ANCHOR = FORAGE_LOOP_HEAD pattern [n0,n1,n0,n1] ==
   :nop_0,
@@ -614,8 +622,9 @@ opcodes (§5.7), inject `:attack` before `:eat`, then append the plasmid:
 
 The intercept works because the plasmid's INTERCEPT_ANCHOR matches the
 host's FORAGE_LOOP_HEAD template — when the host jumps to FORAGE_LOOP_HEAD,
-the search finds the plasmid anchor first (it's appended later in the
-codeome ring), and executes the plasmid body before bouncing back.
+the search finds the plasmid anchor first (the plasmid is concatenated after
+the chromosome in the runtime *execution* ring), and executes the plasmid
+body before bouncing back.
 
 ### 5.6 Defender (`lib/lenies/codeomes/defender.ex`)
 

@@ -68,6 +68,8 @@ every codeome access — and **appends** it to this creature's plasmid buffer.
 Multiple plasmids can be carried simultaneously (the buffer is a list;
 `:conjugate` later picks one uniformly at random to transfer).
 `length` must be in `[1, 64]`; an invalid length pushes `0` and changes nothing.
+It also pushes `0` and changes nothing if minting the plasmid would push the
+execution stream (chromosome + carried plasmids) past the codeome length cap.
 On success pushes `1`.
 
 **Cost:** `2.0 + 0.05 × length` on success, `2.0` on a validation failure.

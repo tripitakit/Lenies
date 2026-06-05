@@ -76,8 +76,8 @@ defmodule Lenies.Codeomes.CarnivoreTest do
       Lenie.start_link({handle,
        [
          id: "HERB",
-         # Large energy: HERB uses codeome/0 which includes the Twitch plasmid
-         # and random-walks, so it needs extra energy to survive the duel window.
+         # Large energy so HERB survives the duel window. (HERB uses the
+         # plasmid-free chromosome codeome/0 — it marches straight, no Twitch.)
          codeome: MinimalReplicator.codeome(),
          energy: 50_000.0,
          pos: {50, 50},
