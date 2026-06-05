@@ -188,4 +188,51 @@ defmodule Lenies.LenieTest do
       assert st2.dir == :n
     end
   end
+
+  describe "receive_plasmid (extra-chromosomal)" do
+    setup %{world_id: world_id, handle: handle} do
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {6, 6})
+      :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "RC1"}})
+
+      {:ok, pid} =
+        Lenie.start_link(
+          {handle,
+           [
+             id: "RC1",
+             codeome: Codeome.from_list([:nop_0, :nop_1, :nop_1]),
+             energy: 50.0,
+             pos: {6, 6},
+             dir: :e,
+             lineage: {nil, 0},
+             paused?: true
+           ]}
+        )
+
+      on_exit(fn -> if Process.alive?(pid), do: GenServer.stop(pid) end)
+      {:ok, pid: pid}
+    end
+
+    test "acquiring a plasmid does not change chromosome hash/size", %{pid: pid} do
+      before = GenServer.call(pid, :inspect_state)
+      assert :ok = Lenie.receive_plasmid(pid, [:turn_left, :turn_left])
+      after_ = GenServer.call(pid, :inspect_state)
+
+      assert after_.codeome_size == before.codeome_size
+      assert after_.codeome_hash == before.codeome_hash
+      assert after_.exec_codeome_size == before.exec_codeome_size + 2
+      assert after_.plasmid_count == 1
+    end
+
+    test "acquiring the same plasmid twice is a no-op", %{pid: pid} do
+      assert :ok = Lenie.receive_plasmid(pid, [:turn_left])
+      assert :already_present = Lenie.receive_plasmid(pid, [:turn_left])
+      assert GenServer.call(pid, :inspect_state).plasmid_count == 1
+    end
+
+    test "rejects a plasmid that would push exec over the length cap", %{pid: pid} do
+      huge = List.duplicate(:nop_0, 2000)
+      assert {:error, :too_large} = Lenie.receive_plasmid(pid, huge)
+      assert GenServer.call(pid, :inspect_state).plasmid_count == 0
+    end
+  end
 end

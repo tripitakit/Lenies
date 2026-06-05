@@ -52,7 +52,7 @@ defmodule Lenies.ConjugationTest do
     {:ok, context}
   end
 
-  test "receive_plasmid appends to codeome and adds to the plasmid list",
+  test "receive_plasmid adds plasmid to carried list and exec stream, chromosome stays untouched",
        %{world_id: world_id, handle: handle} do
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {64, 64})
     :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | lenie_id: "RX"}})
@@ -76,9 +76,16 @@ defmodule Lenies.ConjugationTest do
     assert Lenie.receive_plasmid(recipient_pid, plasmid_ops) == :ok
 
     snapshot = :sys.get_state(recipient_pid)
-    assert Codeome.size(snapshot.codeome) == 5 + 3
+    # Chromosome stays at 5 — plasmid is extra-chromosomal.
+    assert Codeome.size(snapshot.codeome) == 5
 
     assert Codeome.to_list(snapshot.codeome) ==
+             [:eat, :move, :turn_left, :eat, :move]
+
+    # Exec stream = chromosome + plasmid (8 opcodes total).
+    assert Codeome.size(snapshot.exec_codeome) == 5 + 3
+
+    assert Codeome.to_list(snapshot.exec_codeome) ==
              [:eat, :move, :turn_left, :eat, :move, :turn_right, :turn_right, :defend]
 
     assert [%Plasmid{opcodes: ^plasmid_ops}] = snapshot.plasmids
@@ -199,13 +206,18 @@ defmodule Lenies.ConjugationTest do
     # Either is acceptable — we care that it ran at all and the stack is an integer.
     assert hd(donor_snap.interp.stack) in [0, 1]
 
-    # Recipient codeome grew by exactly 3 opcodes (capped at max 5).
-    assert Codeome.size(recipient_snap.codeome) == 5
+    # Recipient chromosome is unchanged (extra-chromosomal model).
+    assert Codeome.size(recipient_snap.codeome) == 2
 
-    assert Codeome.to_list(recipient_snap.codeome) ==
+    assert Codeome.to_list(recipient_snap.codeome) == [:eat, :move]
+
+    # Exec stream = chromosome (2) + plasmid (3) = 5 (at cap).
+    assert Codeome.size(recipient_snap.exec_codeome) == 5
+
+    assert Codeome.to_list(recipient_snap.exec_codeome) ==
              [:eat, :move, :turn_left, :defend, :eat]
 
-    # Recipient now has the plasmid in its buffer too.
+    # Recipient now has the plasmid in its carried list.
     assert [%Plasmid{opcodes: [:turn_left, :defend, :eat]}] = recipient_snap.plasmids
   end
 
@@ -326,7 +338,11 @@ defmodule Lenies.ConjugationTest do
              %Plasmid{opcodes: [:move, :eat]}
            ] = snap.plasmids
 
-    assert Codeome.to_list(snap.codeome) ==
+    # Chromosome stays unchanged (extra-chromosomal model).
+    assert Codeome.to_list(snap.codeome) == [:eat, :move, :turn_left]
+
+    # Exec stream includes both plasmids after the chromosome.
+    assert Codeome.to_list(snap.exec_codeome) ==
              [:eat, :move, :turn_left, :turn_right, :defend, :move, :eat]
   end
 

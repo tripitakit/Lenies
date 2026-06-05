@@ -70,12 +70,12 @@ defmodule Lenies.Lenie do
   def inspect_state(pid), do: GenServer.call(pid, :inspect_state)
 
   @doc """
-  Synchronous call invoked by another Lenie's `:conjugate` opcode. Appends
-  the plasmid opcodes to this Lenie's codeome and adds the plasmid to its
-  (multi-plasmid) buffer. Returns `:ok` on a real transfer,
-  `:already_present` if the Lenie already carries that exact plasmid (a
-  no-op — limits a transfer to once per plasmid per encounter), or
-  `{:error, :too_large}` if appending would exceed `codeome_length_bounds`.
+  Synchronous call invoked by another Lenie's `:conjugate` opcode. Adds
+  the plasmid to this Lenie's carried list and rebuilds the execution
+  stream (the chromosome and its hash are left untouched). Returns `:ok`
+  on a real transfer, `:already_present` if the Lenie already carries that
+  exact plasmid, or `{:error, :too_large}` if it would overflow the
+  executable-stream cap.
   """
   @spec receive_plasmid(pid(), [atom()], timeout()) ::
           :ok | :already_present | {:error, :too_large}
@@ -208,46 +208,36 @@ defmodule Lenies.Lenie do
     already_carries =
       Enum.any?(state.plasmids, fn %Lenies.Plasmid{opcodes: ops} -> ops == plasmid_opcodes end)
 
-    current_size = Lenies.Codeome.size(state.codeome)
-    new_size = current_size + length(plasmid_opcodes)
+    current_exec = Codeome.size(state.exec_codeome)
+    new_exec = current_exec + length(plasmid_opcodes)
     {_min, max} = Lenies.Config.codeome_length_bounds()
 
     cond do
       already_carries ->
         # Already carries this exact plasmid — report the no-op so the donor
-        # stops re-broadcasting the same transfer each tick, and avoid
-        # codeome bloat from re-appending it.
+        # stops re-broadcasting the same transfer each tick.
         {:reply, :already_present, state}
 
-      new_size > max ->
+      new_exec > max ->
+        # Acquiring it would overflow the executable stream (chromosome +
+        # plasmids). Refuse — the chromosome itself is never touched.
         {:reply, {:error, :too_large}, state}
 
       true ->
-        new_codeome =
-          state.codeome
-          |> Lenies.Codeome.to_list()
-          |> Kernel.++(plasmid_opcodes)
-          |> Lenies.Codeome.from_list()
-          |> Interpreter.index_jumps()
-
+        # Extra-chromosomal: the plasmid joins the carried list and the
+        # execution stream is rebuilt, but the chromosome (`:codeome`) and
+        # its hash are left untouched — so size and species identity stay
+        # plasmid-free.
         new_plasmid = Lenies.Plasmid.new(plasmid_opcodes)
-        # Accumulate: a Lenie can carry several distinct plasmids. The
-        # codeome already runs all of them (they're appended above); this
-        # list also drives the dashboard species annotation and the random
-        # outgoing pick in `:conjugate`.
         new_plasmids = state.plasmids ++ [new_plasmid]
         new_interp = %{state.interp | plasmids: new_plasmids}
-        new_hash = Codeome.hash(new_codeome)
 
         new_state = %{
           state
-          | codeome: new_codeome,
-            codeome_hash: new_hash,
-            plasmids: new_plasmids,
-            interp: new_interp
+          | plasmids: new_plasmids,
+            interp: new_interp,
+            exec_codeome: build_exec_codeome(state.codeome, new_plasmids)
         }
-
-        cache_codeome_by_hash(new_codeome, new_hash)
 
         {:reply, :ok, new_state}
     end
