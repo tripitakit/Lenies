@@ -882,23 +882,20 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   test "saving a seed persists authored plasmids (empties dropped)", %{conn: conn, user: user} do
-    # The chromosome below is a single `:move` opcode, which by default would
-    # fail the editor's save validation (min length / min non-nop thresholds).
-    # Relax those bounds for this test so the save reaches the persistence path
-    # we actually want to exercise (authored plasmids end up on the row).
-    prev_bounds = Lenies.Config.codeome_length_bounds()
-    prev_min_non_nops = Lenies.Config.min_viable_codeome_opcodes()
-    Application.put_env(:lenies, :codeome_length_bounds, {1, 1024})
-    Application.put_env(:lenies, :min_viable_codeome_opcodes, 1)
-
-    on_exit(fn ->
-      Application.put_env(:lenies, :codeome_length_bounds, prev_bounds)
-      Application.put_env(:lenies, :min_viable_codeome_opcodes, prev_min_non_nops)
-    end)
+    # A genuinely save-valid chromosome (10 non-nop opcodes) — the same buffer
+    # the other save tests in this file rely on — so we exercise the
+    # persistence path without tuning the editor's validation bounds.
+    valid_chromosome = ~w(push0 push1 add move eat push0 push1 add move eat)a
 
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
-    render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "move"})
 
+    # Build the chromosome first while the active target is still :chromosome
+    # (submit_opcode_text always inserts into the chromosome buffer).
+    render_hook(view, "submit_opcode_text", %{
+      "opcodes" => "push0 push1 add move eat push0 push1 add move eat"
+    })
+
+    # Author a plasmid with a single opcode.
     render_hook(view, "add_plasmid", %{})
     render_hook(view, "set_target", %{"target" => "plasmid", "index" => "0"})
     render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "nop_1"})
@@ -913,7 +910,8 @@ defmodule LeniesWeb.EditorLiveTest do
     })
 
     seed = named_codeome(user, "plasmid_seed")
-    assert Lenies.Collection.to_opcode_atoms(seed) == [:move]
+    assert Lenies.Collection.to_opcode_atoms(seed) == valid_chromosome
+    # The authored plasmid persisted; the trailing empty plasmid was dropped.
     assert Lenies.Collection.to_plasmid_structs(seed) == [Lenies.Plasmid.new([:nop_1])]
   end
 
