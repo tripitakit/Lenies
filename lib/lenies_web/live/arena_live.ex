@@ -99,6 +99,8 @@ defmodule LeniesWeb.ArenaLive do
       |> assign(:sort_by, sort_by)
       |> assign(:sort_dir, sort_dir)
       |> assign(:species_sig, nil)
+      |> assign(:owned_hashes, owned_hashes(socket))
+      |> assign(:killing_hash, nil)
       |> stream_configure(:species_table, dom_id: fn sp -> "species-row-#{sp.hash}" end)
       |> stream(:species_table, sort_species(all_species, sort_by, sort_dir))
 
@@ -242,6 +244,30 @@ defmodule LeniesWeb.ArenaLive do
             <div class="flex-1 flex flex-col min-h-0 min-w-0">
               <div class="panel p-2 flex-1 flex flex-col gap-2 min-h-0">
                 <h2 class="text-xs">▮ {@species_total} species</h2>
+
+                <div
+                  :if={@killing_hash}
+                  class="flex items-center gap-2 p-2 border border-rose-500/60 bg-rose-950/40"
+                >
+                  <span class="text-[11px] text-rose-200">
+                    Kill your members of species {String.slice(@killing_hash, 0..7)}?
+                  </span>
+                  <button
+                    type="button"
+                    phx-click="kill_species_confirm"
+                    class="text-[11px] px-2 py-0.5 border border-rose-500 bg-rose-700/40 text-rose-100 hover:bg-rose-600/60"
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    phx-click="kill_species_cancel"
+                    class="text-[11px] px-2 py-0.5 border border-slate-500 bg-slate-800 hover:bg-slate-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+
                 <div class="flex-1 min-h-0 overflow-auto">
                   <table class="w-full text-[11px] tabular-nums">
                     <thead class="text-cyan-300/80 sticky top-0 bg-slate-950/80">
@@ -303,6 +329,7 @@ defmodule LeniesWeb.ArenaLive do
                         >
                           Gen{sort_arrow(@sort_by, @sort_dir, :avg_generation)}
                         </th>
+                        <th class="text-right py-1 pl-3 whitespace-nowrap"></th>
                       </tr>
                     </thead>
                     <tbody id="species-rows" phx-update="stream">
@@ -347,6 +374,18 @@ defmodule LeniesWeb.ArenaLive do
                         <td class="text-right pl-3 whitespace-nowrap">{sp.population}</td>
                         <td class="text-right pl-3 whitespace-nowrap">
                           {Float.round(sp.avg_generation, 2)}
+                        </td>
+                        <td class="text-right pl-3 whitespace-nowrap">
+                          <button
+                            :if={MapSet.member?(@owned_hashes, sp.hash)}
+                            type="button"
+                            phx-click="kill_species_init"
+                            phx-value-hash={sp.hash}
+                            class="text-[10px] px-1.5 py-0.5 border border-rose-500/50 text-rose-300 hover:bg-rose-500/10"
+                            title="Kill your members of this species"
+                          >
+                            KILL
+                          </button>
                         </td>
                       </tr>
                     </tbody>
@@ -448,6 +487,27 @@ defmodule LeniesWeb.ArenaLive do
       when is_integer(x) and is_integer(y) do
     payload = lenie_hover_payload(socket.assigns.world_handle, x, y)
     {:noreply, push_event(socket, "lenie_hover_info", payload)}
+  end
+
+  def handle_event("kill_species_init", %{"hash" => hash}, socket) do
+    {:noreply, assign(socket, :killing_hash, hash)}
+  end
+
+  def handle_event("kill_species_cancel", _params, socket) do
+    {:noreply, assign(socket, :killing_hash, nil)}
+  end
+
+  def handle_event("kill_species_confirm", _params, socket) do
+    case {socket.assigns[:current_scope], socket.assigns.killing_hash} do
+      {%{user: %{} = user}, hash} when is_binary(hash) ->
+        {:ok, _killed} = Lenies.Arena.kill_species(user, hash)
+        # Arena broadcasts :arena_lineage_changed; the species table refreshes
+        # on the next tick (which recomputes owned_hashes and re-streams).
+        {:noreply, assign(socket, :killing_hash, nil)}
+
+      _ ->
+        {:noreply, assign(socket, :killing_hash, nil)}
+    end
   end
 
   def handle_event(_event, _params, socket), do: {:noreply, socket}
@@ -659,14 +719,28 @@ defmodule LeniesWeb.ArenaLive do
   # depends on it.
   defp maybe_stream_species(socket, all_species) do
     sorted = sort_species(all_species, socket.assigns.sort_by, socket.assigns.sort_dir)
-    sig = :erlang.phash2({socket.assigns.selected_hash, sorted})
+    owned = owned_hashes(socket)
+    # Fold `owned` into the signature so the per-row KILL affordance refreshes
+    # when the user's ownership changes (seed/kill/apoptosis), even if the
+    # species set itself is otherwise unchanged.
+    sig = :erlang.phash2({socket.assigns.selected_hash, owned, sorted})
 
     if sig == socket.assigns.species_sig do
       socket
     else
       socket
       |> assign(:species_sig, sig)
+      |> assign(:owned_hashes, owned)
       |> stream(:species_table, sorted, reset: true)
+    end
+  end
+
+  # MapSet of codeome hashes the current viewer owns alive members of in the
+  # Arena (empty for anonymous viewers). Drives the per-row KILL button.
+  defp owned_hashes(socket) do
+    case socket.assigns[:current_scope] do
+      %{user: %{id: id}} -> MapSet.new(Lenies.Arena.owned_species_hashes(id))
+      _ -> MapSet.new()
     end
   end
 

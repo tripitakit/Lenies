@@ -50,7 +50,7 @@ config :lenies,
   attack_damage: 10,
   defense_attacker_penalty: 5,
   plasmid_loss_probability: 0.10,
-  spawn_cap: 10,
+  spawn_cap: 50,
   replication_cap: 50
 
 # In the test environment disable carcass decay so that tick_now/0 can be

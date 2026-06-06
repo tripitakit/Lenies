@@ -1082,10 +1082,10 @@ defmodule LeniesWeb.DashboardLiveTest do
       conn: conn,
       handle: handle
     } do
-      # The sandbox world boots with default spawn_cap=10. Fill the :lenies
-      # ETS table with 10 fake records so the component update/2 sees the
+      # The sandbox world boots with default spawn_cap=50. Fill the :lenies
+      # ETS table with 50 fake records so the component update/2 sees the
       # cap as reached.
-      for i <- 1..10 do
+      for i <- 1..50 do
         :ets.insert(
           handle.tables.lenies,
           {"fake-#{i}", %{id: "fake-#{i}", codeome_hash: "abc", lineage: {nil, 0}}}
@@ -1099,7 +1099,7 @@ defmodule LeniesWeb.DashboardLiveTest do
     end
 
     test "spawning when at cap surfaces a flash", %{conn: conn, handle: handle} do
-      for i <- 1..10 do
+      for i <- 1..50 do
         :ets.insert(
           handle.tables.lenies,
           {"fake-#{i}", %{id: "fake-#{i}", codeome_hash: "abc", lineage: {nil, 0}}}

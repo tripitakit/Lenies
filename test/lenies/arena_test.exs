@@ -302,7 +302,28 @@ defmodule Lenies.ArenaTest do
       assert Lenies.Arena.lineage_count(user.id) == 1
     end
 
-    test "seed/2 with lineage>0 returns {:error, :lineage_alive, N}" do
+    test "seed/2 allows up to max_per_user, then returns {:error, :lineage_full, N}" do
+      user = Lenies.AccountsFixtures.user_fixture()
+      max = Lenies.Arena.max_per_user()
+
+      {:ok, codeome} =
+        Lenies.Collection.create_codeome(user, %{
+          name: "ArenaSeed",
+          color_hex: "#abcdef",
+          energy_default: 500.0,
+          opcodes: ["nop_1", "store", "eat", "eat", "move", "eat", "move", "eat", "move", "eat"]
+        })
+
+      for _ <- 1..max do
+        assert {:ok, :seeded} = Lenies.Arena.seed(user, codeome.id)
+        Process.sleep(20)
+      end
+
+      assert Lenies.Arena.lineage_count(user.id) == max
+      assert {:error, :lineage_full, ^max} = Lenies.Arena.seed(user, codeome.id)
+    end
+
+    test "owned_species_hashes/1 returns the user's distinct alive species" do
       user = Lenies.AccountsFixtures.user_fixture()
 
       {:ok, codeome} =
@@ -313,10 +334,51 @@ defmodule Lenies.ArenaTest do
           opcodes: ["nop_1", "store", "eat", "eat", "move", "eat", "move", "eat", "move", "eat"]
         })
 
+      assert Lenies.Arena.owned_species_hashes(user.id) == []
+
       {:ok, :seeded} = Lenies.Arena.seed(user, codeome.id)
       Process.sleep(50)
 
-      assert {:error, :lineage_alive, 1} = Lenies.Arena.seed(user, codeome.id)
+      assert [hash] = Lenies.Arena.owned_species_hashes(user.id)
+      assert is_binary(hash)
+    end
+
+    test "kill_species/2 kills only the caller's members of a species, not other users'" do
+      opcodes = ["nop_1", "store", "eat", "eat", "move", "eat", "move", "eat", "move", "eat"]
+      user_a = Lenies.AccountsFixtures.user_fixture()
+      user_b = Lenies.AccountsFixtures.user_fixture()
+
+      {:ok, ca} =
+        Lenies.Collection.create_codeome(user_a, %{
+          name: "Shared",
+          color_hex: "#abcdef",
+          energy_default: 500.0,
+          opcodes: opcodes
+        })
+
+      {:ok, cb} =
+        Lenies.Collection.create_codeome(user_b, %{
+          name: "Shared",
+          color_hex: "#abcdef",
+          energy_default: 500.0,
+          opcodes: opcodes
+        })
+
+      {:ok, :seeded} = Lenies.Arena.seed(user_a, ca.id)
+      {:ok, :seeded} = Lenies.Arena.seed(user_b, cb.id)
+      Process.sleep(50)
+
+      # Same opcodes → same codeome hash → one species shared by both users.
+      hash = Lenies.Codeome.hash(Lenies.Codeome.from_list(Enum.map(opcodes, &String.to_existing_atom/1)))
+      assert hash in Lenies.Arena.owned_species_hashes(user_a.id)
+      assert hash in Lenies.Arena.owned_species_hashes(user_b.id)
+
+      assert {:ok, 1} = Lenies.Arena.kill_species(user_a, hash)
+      Process.sleep(50)
+
+      # Only user_a's member died; user_b's member of the same species survives.
+      assert Lenies.Arena.lineage_count(user_a.id) == 0
+      assert Lenies.Arena.lineage_count(user_b.id) == 1
     end
 
     test "seed/2 returns {:error, :not_found} when codeome_id doesn't belong to user" do

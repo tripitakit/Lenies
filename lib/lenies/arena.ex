@@ -20,6 +20,13 @@ defmodule Lenies.Arena do
   @world_id :arena
   @grace_ms 30_000
 
+  # Max simultaneously-alive Lenies a single user may have seeded in the Arena.
+  @max_per_user 5
+
+  @doc "Max alive Lenies one user may have in the Arena."
+  @spec max_per_user() :: pos_integer()
+  def max_per_user, do: @max_per_user
+
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
   @doc "Attach the calling viewer pid to the Arena. Idempotent; starts the world on first attach."
@@ -47,14 +54,43 @@ defmodule Lenies.Arena do
   end
 
   @doc """
-  Atomically check the user's lineage count and (if 0) spawn one Lenie from their
-  collection into the Arena.
+  Atomically check the user's lineage count and (if below `max_per_user/0`)
+  spawn one Lenie from their collection into the Arena.
   """
   @spec seed(map(), integer | binary) ::
           {:ok, :seeded}
-          | {:error, :lineage_alive, non_neg_integer()}
+          | {:error, :lineage_full, non_neg_integer()}
           | {:error, term}
   def seed(user, codeome_id), do: GenServer.call(__MODULE__, {:seed, user, codeome_id})
+
+  @doc """
+  Distinct codeome hashes of the species the user currently has alive members
+  of in the Arena — used to show a per-row KILL affordance only on the user's
+  own species.
+  """
+  @spec owned_species_hashes(integer) :: [binary]
+  def owned_species_hashes(user_id) when is_integer(user_id) do
+    case Lenies.Worlds.handle(@world_id) do
+      {:ok, handle} ->
+        ms = [
+          {{:_, %{seeder_user_id: :"$1", codeome_hash: :"$2"}}, [{:==, :"$1", user_id}], [:"$2"]}
+        ]
+
+        handle.tables.lenies |> :ets.select(ms) |> Enum.uniq()
+
+      :error ->
+        []
+    end
+  end
+
+  @doc """
+  Kills only the calling user's members of one species (codeome `hash`) in the
+  Arena — other users' Lenies of the same codeome are left untouched. Returns
+  `{:ok, count_killed}`. Same death-replay mechanics as `apoptosis/1`.
+  """
+  @spec kill_species(map(), binary) :: {:ok, non_neg_integer()}
+  def kill_species(user, hash) when is_binary(hash),
+    do: GenServer.call(__MODULE__, {:kill_species, user, hash})
 
   @doc """
   Kills all Lenies in the Arena whose seeder_user_id matches `user.id`.
@@ -157,50 +193,66 @@ defmodule Lenies.Arena do
   end
 
   def handle_call({:apoptosis, user}, _from, state) do
-    count =
-      case Lenies.Worlds.handle(@world_id) do
-        {:ok, handle} ->
-          # Grab id + the fields needed to post `:lenie_died` on the Lenie's
-          # behalf (pos, energy, codeome_hash). Lenie doesn't trap exits, so
-          # a supervisor shutdown bypasses its terminate/2 — we replay the
-          # cast ourselves to keep the World/ETS state consistent.
-          ms = [
-            {{:"$1", %{seeder_user_id: :"$2", pos: :"$3", energy: :"$4", codeome_hash: :"$5"}},
-             [{:==, :"$2", user.id}], [{{:"$1", :"$3", :"$4", :"$5"}}]}
-          ]
+    # Match all of the user's Lenies (any species).
+    guard = [{:==, :"$2", user.id}]
+    count = kill_user_lenies(user.id, guard)
+    broadcast_lineage_changed(user.id)
+    {:reply, {:ok, count}, state}
+  end
 
-          rows = :ets.select(handle.tables.lenies, ms)
-          sup = Lenies.LenieSupervisor.via(@world_id)
+  def handle_call({:kill_species, user, hash}, _from, state) do
+    # Match only the user's Lenies of one species (codeome hash).
+    guard = [{:andalso, {:==, :"$2", user.id}, {:==, :"$5", hash}}]
+    count = kill_user_lenies(user.id, guard)
+    broadcast_lineage_changed(user.id)
+    {:reply, {:ok, count}, state}
+  end
 
-          Enum.reduce(rows, 0, fn {id, pos, energy, hash}, acc ->
-            case Registry.lookup(Lenies.Registry, {:lenie, @world_id, id}) do
-              [{pid, _}] ->
-                _ = DynamicSupervisor.terminate_child(sup, pid)
-                GenServer.cast(handle.pid, {:lenie_died, id, pos, energy, hash, user.id})
-                acc + 1
+  # Terminate the Lenies matched by `guard` (over the standard
+  # {id, seeder_user_id($2), pos($3), energy($4), codeome_hash($5)} bindings)
+  # and replay `:lenie_died` on each one's behalf so the World/ETS state stays
+  # consistent (Lenie doesn't trap exits, so a supervisor shutdown bypasses
+  # its terminate/2). Returns the count killed.
+  defp kill_user_lenies(user_id, guard) do
+    case Lenies.Worlds.handle(@world_id) do
+      {:ok, handle} ->
+        ms = [
+          {{:"$1", %{seeder_user_id: :"$2", pos: :"$3", energy: :"$4", codeome_hash: :"$5"}}, guard,
+           [{{:"$1", :"$3", :"$4", :"$5"}}]}
+        ]
 
-              [] ->
-                acc
-            end
-          end)
+        rows = :ets.select(handle.tables.lenies, ms)
+        sup = Lenies.LenieSupervisor.via(@world_id)
 
-        :error ->
-          0
-      end
+        Enum.reduce(rows, 0, fn {id, pos, energy, hash}, acc ->
+          case Registry.lookup(Lenies.Registry, {:lenie, @world_id, id}) do
+            [{pid, _}] ->
+              _ = DynamicSupervisor.terminate_child(sup, pid)
+              GenServer.cast(handle.pid, {:lenie_died, id, pos, energy, hash, user_id})
+              acc + 1
 
+            [] ->
+              acc
+          end
+        end)
+
+      :error ->
+        0
+    end
+  end
+
+  defp broadcast_lineage_changed(user_id) do
     Phoenix.PubSub.broadcast(
       Lenies.PubSub,
-      "arena:user:#{user.id}",
-      {:arena_lineage_changed, user.id}
+      "arena:user:#{user_id}",
+      {:arena_lineage_changed, user_id}
     )
-
-    {:reply, {:ok, count}, state}
   end
 
   defp do_seed(user, codeome_id) do
     with %Lenies.Collection.Codeome{} = entry <- Lenies.Collection.get_codeome(user, codeome_id),
          {:ok, handle} <- Lenies.Worlds.handle(@world_id),
-         0 <- lineage_count(user.id) do
+         count when count < @max_per_user <- lineage_count(user.id) do
       codeome = Lenies.Codeome.from_list(Lenies.Collection.to_opcode_atoms(entry))
       hash = Lenies.Codeome.hash(codeome)
       Lenies.SpeciesColor.set_override(handle, hash, entry.color_hex)
@@ -230,7 +282,7 @@ defmodule Lenies.Arena do
       end
     else
       nil -> {:error, :not_found}
-      count when is_integer(count) and count > 0 -> {:error, :lineage_alive, count}
+      count when is_integer(count) -> {:error, :lineage_full, count}
       :error -> {:error, :arena_not_running}
       {:error, _} = err -> err
     end

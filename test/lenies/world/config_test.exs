@@ -41,7 +41,7 @@ defmodule Lenies.World.ConfigTest do
     end)
 
     cfg = Lenies.World.Config.defaults()
-    assert cfg.spawn_cap == 10
+    assert cfg.spawn_cap == 50
     assert cfg.replication_cap == 50
   end
 

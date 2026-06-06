@@ -44,29 +44,6 @@ defmodule LeniesWeb.ArenaControlsComponent do
           >
             Open the editor
           </.link>
-        <% @lineage_count == 0 -> %>
-          <.form
-            for={%{}}
-            as={:seed}
-            phx-submit="seed"
-            phx-target={@myself}
-            class="flex items-center gap-2"
-          >
-            <select name="codeome_id" class="flex-1 text-xs">
-              <%= for c <- @codeomes do %>
-                <option value={c.id}>{c.name}</option>
-              <% end %>
-            </select>
-            <button
-              id="arena-seed-btn"
-              phx-hook="ActionFeedback"
-              data-fx="success"
-              type="submit"
-              class="text-xs px-3 py-1 border border-cyan-500/60 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/50 whitespace-nowrap"
-            >
-              Seed your Lenie
-            </button>
-          </.form>
         <% @apoptosis_confirming -> %>
           <div
             id="apoptosis-confirm"
@@ -97,18 +74,48 @@ defmodule LeniesWeb.ArenaControlsComponent do
             </div>
           </div>
         <% true -> %>
-          <p class="text-[11px] opacity-80">Your lineage: {@lineage_count} Lenies alive</p>
-          <button
-            id="apoptosis-btn"
-            phx-hook="ActionFeedback"
-            data-fx="danger"
-            type="button"
-            phx-click="apoptosis_init"
-            phx-target={@myself}
-            class="self-start text-xs px-2 py-2 border border-rose-500/60 bg-rose-900/30 text-rose-200 hover:bg-rose-800/50 hover:text-rose-100 tracking-widest"
-          >
-            ⌷ Apoptosis ({@lineage_count})
-          </button>
+          <p class="text-[11px] opacity-80">
+            Your lineage: {@lineage_count}/{Lenies.Arena.max_per_user()} alive
+          </p>
+
+          <%= if @lineage_count < Lenies.Arena.max_per_user() do %>
+            <.form
+              for={%{}}
+              as={:seed}
+              phx-submit="seed"
+              phx-target={@myself}
+              class="flex items-center gap-2"
+            >
+              <select name="codeome_id" class="flex-1 text-xs">
+                <%= for c <- @codeomes do %>
+                  <option value={c.id}>{c.name}</option>
+                <% end %>
+              </select>
+              <button
+                id="arena-seed-btn"
+                phx-hook="ActionFeedback"
+                data-fx="success"
+                type="submit"
+                class="text-xs px-3 py-1 border border-cyan-500/60 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/50 whitespace-nowrap"
+              >
+                Seed your Lenie
+              </button>
+            </.form>
+          <% end %>
+
+          <%= if @lineage_count > 0 do %>
+            <button
+              id="apoptosis-btn"
+              phx-hook="ActionFeedback"
+              data-fx="danger"
+              type="button"
+              phx-click="apoptosis_init"
+              phx-target={@myself}
+              class="self-start text-xs px-2 py-2 border border-rose-500/60 bg-rose-900/30 text-rose-200 hover:bg-rose-800/50 hover:text-rose-100 tracking-widest"
+            >
+              ⌷ Apoptosis ({@lineage_count})
+            </button>
+          <% end %>
       <% end %>
 
       <%= if @flash_msg do %>
@@ -128,9 +135,11 @@ defmodule LeniesWeb.ArenaControlsComponent do
         send(self(), {:arena_lineage_changed, user.id})
         {:noreply, assign(socket, :flash_msg, "Seeded!")}
 
-      {:error, :lineage_alive, n} ->
+      {:error, :lineage_full, n} ->
         send(self(), {:arena_lineage_changed, user.id})
-        {:noreply, assign(socket, :flash_msg, "Your lineage is alive (#{n}).")}
+
+        {:noreply,
+         assign(socket, :flash_msg, "Arena is full for you (#{n}/#{Lenies.Arena.max_per_user()}).")}
 
       {:error, reason} ->
         {:noreply, assign(socket, :flash_msg, "Seed failed: #{inspect(reason)}")}
