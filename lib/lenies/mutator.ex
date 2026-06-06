@@ -111,9 +111,15 @@ defmodule Lenies.Mutator do
 
   Returns the mutated list.
   """
-  @spec copy_mutate_list([atom()], float(), float(), float()) :: [atom()]
+  # Rates are `is_number`, not `is_float`: the persistent tuning controls store a
+  # whole-number rate as an integer (parse_tune_value truncates 0.0 -> 0), so a
+  # slider set to 0 or 1 hands this path an integer. `copy_outcome/1` compares
+  # them with `:rand.uniform() < rate`, which works for ints and floats alike —
+  # a stricter `is_float` guard here would (and did) crash the World mid-divide.
+  @spec copy_mutate_list([atom()], number(), number(), number()) :: [atom()]
   def copy_mutate_list(opcodes, sub_rate, ins_rate, del_rate)
-      when is_list(opcodes) and is_float(sub_rate) and is_float(ins_rate) and is_float(del_rate) do
+      when is_list(opcodes) and is_number(sub_rate) and is_number(ins_rate) and
+             is_number(del_rate) do
     rates = %{substitution: sub_rate, insert: ins_rate, delete: del_rate}
 
     Enum.flat_map(opcodes, fn op ->

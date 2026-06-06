@@ -133,5 +133,15 @@ defmodule Lenies.MutatorTest do
       mutated = Mutator.copy_mutate_list(original, 0.0, 1.0, 0.0)
       assert length(mutated) == 10
     end
+
+    test "accepts integer rates (a slider tuned to 0/1 stores a whole number)" do
+      # The persistent tuning controls store whole-number rates as integers
+      # (parse_tune_value truncates 0.0 -> 0), so the copy-mutation path can be
+      # handed integer rates. They must work like their float equivalents, not
+      # crash with a FunctionClauseError.
+      original = [:eat, :move, :turn_left]
+      assert Mutator.copy_mutate_list(original, 0, 0, 0) == original
+      assert Mutator.copy_mutate_list(List.duplicate(:eat, 20), 0, 0, 1) == []
+    end
   end
 end
