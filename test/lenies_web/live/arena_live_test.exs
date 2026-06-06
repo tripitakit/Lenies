@@ -261,5 +261,26 @@ defmodule LeniesWeb.ArenaLiveTest do
 
       refute has_element?(view, "form[phx-submit=save_species_confirm]")
     end
+
+    test "confirm saves codeome + the max-plasmid member's plasmids", %{conn: conn, user: user, hash: hash} do
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/arena")
+
+      view
+      |> element("button[phx-click=save_species_init][phx-value-hash='#{hash}']")
+      |> render_click()
+
+      view
+      |> form("form[phx-submit=save_species_confirm]", %{name: "EvolvedInArena"})
+      |> render_submit()
+
+      codeome =
+        Lenies.Collection.list_codeomes(user)
+        |> Enum.find(&(&1.name == "EvolvedInArena"))
+
+      assert codeome
+      assert codeome.opcodes == ["nop_1", "eat", "move"]
+      assert length(codeome.plasmids) == 3
+      refute has_element?(view, "form[phx-submit=save_species_confirm]")
+    end
   end
 end

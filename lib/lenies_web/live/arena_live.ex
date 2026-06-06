@@ -272,7 +272,7 @@ defmodule LeniesWeb.ArenaLive do
 
                 <div
                   :if={@saving_hash}
-                  class="flex items-center gap-2 p-2 border border-emerald-500/60 bg-emerald-950/40"
+                  class="flex flex-col gap-1 p-2 border border-emerald-500/60 bg-emerald-950/40"
                 >
                   <form
                     phx-submit="save_species_confirm"
@@ -285,6 +285,7 @@ defmodule LeniesWeb.ArenaLive do
                       type="text"
                       name="name"
                       autocomplete="off"
+                      autofocus
                       placeholder="name"
                       class="flex-1 min-w-0 text-[11px] px-2 py-0.5 bg-slate-900 border border-slate-600 text-cyan-100"
                     />
@@ -302,7 +303,7 @@ defmodule LeniesWeb.ArenaLive do
                       Cancel
                     </button>
                   </form>
-                  <span :if={@save_error} class="text-[11px] text-rose-300 whitespace-nowrap">
+                  <span :if={@save_error} class="text-[11px] text-rose-300">
                     {@save_error}
                   </span>
                 </div>
@@ -567,6 +568,41 @@ defmodule LeniesWeb.ArenaLive do
     {:noreply, assign(socket, saving_hash: nil, save_error: nil)}
   end
 
+  def handle_event("save_species_confirm", %{"name" => name}, socket) do
+    %{current_scope: scope, world_handle: handle, saving_hash: hash} = socket.assigns
+
+    with %{user: %{} = user} <- scope,
+         h when is_binary(h) <- hash,
+         %{} = snap <- pick_max_plasmid_member(Lenies.Species.for_hash(handle, h)) do
+      attrs = %{
+        name: name,
+        color_hex: SpeciesColor.hex(handle, h),
+        energy_default: 10_000.0,
+        opcodes: Enum.map(snap.codeome, &Atom.to_string/1),
+        plasmids:
+          Enum.map(snap.plasmids, fn %Lenies.Plasmid{opcodes: ops} ->
+            %{opcodes: Enum.map(ops, &Atom.to_string/1)}
+          end)
+      }
+
+      case Lenies.Collection.create_codeome(user, attrs) do
+        {:ok, _codeome} ->
+          {:noreply,
+           socket
+           |> assign(saving_hash: nil, save_error: nil)
+           |> put_flash(:info, "Saved “#{name}” to your collection.")}
+
+        {:error, :name_taken} ->
+          {:noreply, assign(socket, :save_error, "Name “#{name}” already taken.")}
+
+        {:error, %Ecto.Changeset{}} ->
+          {:noreply, assign(socket, :save_error, "Invalid codeome — try another name.")}
+      end
+    else
+      _ -> {:noreply, assign(socket, saving_hash: nil, save_error: nil)}
+    end
+  end
+
   def handle_event(_event, _params, socket), do: {:noreply, socket}
 
   defp lenie_hover_payload(handle, x, y) do
@@ -799,6 +835,18 @@ defmodule LeniesWeb.ArenaLive do
       %{user: %{id: id}} -> MapSet.new(Lenies.Arena.owned_species_hashes(id))
       _ -> MapSet.new()
     end
+  end
+
+  # Pick the living member of a species carrying the most plasmids (ties: the
+  # first encountered). `for_hash/2` returns `{id, snapshot}` tuples; we save
+  # the snapshot's codeome + plasmids. Returns nil when no members are alive.
+  defp pick_max_plasmid_member([]), do: nil
+
+  defp pick_max_plasmid_member(members) do
+    {_id, snap} =
+      Enum.max_by(members, fn {_id, snap} -> length(Map.get(snap, :plasmids, [])) end)
+
+    snap
   end
 
   defp sort_key_fun(:seed), do: fn sp -> sp |> format_seed_origin() |> String.downcase() end
