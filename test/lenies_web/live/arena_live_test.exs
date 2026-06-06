@@ -262,6 +262,33 @@ defmodule LeniesWeb.ArenaLiveTest do
       refute has_element?(view, "form[phx-submit=save_species_confirm]")
     end
 
+    test "name_taken keeps the bar open with an error and creates nothing new", %{conn: conn, user: user, hash: hash} do
+      {:ok, _existing} =
+        Lenies.Collection.create_codeome(user, %{
+          name: "Taken",
+          color_hex: "#123456",
+          energy_default: 10_000.0,
+          opcodes: ["nop_0"]
+        })
+
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/arena")
+
+      view
+      |> element("button[phx-click=save_species_init][phx-value-hash='#{hash}']")
+      |> render_click()
+
+      html =
+        view
+        |> form("form[phx-submit=save_species_confirm]", %{name: "Taken"})
+        |> render_submit()
+
+      assert html =~ "already taken"
+      assert has_element?(view, "form[phx-submit=save_species_confirm]")
+      # exactly one codeome named "Taken" — no duplicate created
+      assert Lenies.Collection.list_codeomes(user)
+             |> Enum.count(&(&1.name == "Taken")) == 1
+    end
+
     test "confirm saves codeome + the max-plasmid member's plasmids", %{conn: conn, user: user, hash: hash} do
       {:ok, view, _html} = live(log_in_user(conn, user), ~p"/arena")
 
