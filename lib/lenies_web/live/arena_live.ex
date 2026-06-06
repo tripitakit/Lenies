@@ -101,6 +101,8 @@ defmodule LeniesWeb.ArenaLive do
       |> assign(:species_sig, nil)
       |> assign(:owned_hashes, owned_hashes(socket))
       |> assign(:killing_hash, nil)
+      |> assign(:saving_hash, nil)
+      |> assign(:save_error, nil)
       |> stream_configure(:species_table, dom_id: fn sp -> "species-row-#{sp.hash}" end)
       |> stream(:species_table, sort_species(all_species, sort_by, sort_dir))
 
@@ -376,6 +378,16 @@ defmodule LeniesWeb.ArenaLive do
                           {Float.round(sp.avg_generation, 2)}
                         </td>
                         <td class="text-right pl-3 whitespace-nowrap">
+                          <button
+                            :if={MapSet.member?(@owned_hashes, sp.hash)}
+                            type="button"
+                            phx-click="save_species_init"
+                            phx-value-hash={sp.hash}
+                            class="text-[10px] px-1.5 py-0.5 mr-1 border border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/10"
+                            title="Save this species to your collection"
+                          >
+                            SAVE
+                          </button>
                           <button
                             :if={MapSet.member?(@owned_hashes, sp.hash)}
                             type="button"

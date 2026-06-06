@@ -199,4 +199,53 @@ defmodule LeniesWeb.ArenaLiveTest do
       assert html =~ "ARENA"
     end
   end
+
+  describe "species SAVE button" do
+    setup %{conn: conn} do
+      user = Lenies.AccountsFixtures.user_fixture()
+      :ok = Lenies.Arena.attach_viewer()
+      {:ok, handle} = Lenies.Worlds.handle(:arena)
+      :ok = Lenies.Worlds.pause(:arena)
+
+      hash = "ARENA-SAVE-SP"
+
+      :ets.insert(handle.tables.lenies, {
+        "asave1",
+        %{id: "asave1", codeome_hash: hash, lineage: {nil, 0},
+          seeder_user_id: user.id,
+          codeome: [:nop_1, :eat, :move],
+          plasmids: [Lenies.Plasmid.new([:nop_0])]}
+      })
+
+      :ets.insert(handle.tables.lenies, {
+        "asave3",
+        %{id: "asave3", codeome_hash: hash, lineage: {nil, 0},
+          seeder_user_id: user.id,
+          codeome: [:nop_1, :eat, :move],
+          plasmids: [Lenies.Plasmid.new([:nop_0]), Lenies.Plasmid.new([:nop_1]),
+                     Lenies.Plasmid.new([:eat])]}
+      })
+
+      on_exit(fn -> Lenies.Worlds.stop_world(:arena) end)
+      %{conn: conn, user: user, handle: handle, hash: hash}
+    end
+
+    test "SAVE button renders for an owned species", %{conn: conn, user: user, hash: hash} do
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/arena")
+
+      assert has_element?(
+               view,
+               "button[phx-click=save_species_init][phx-value-hash='#{hash}']"
+             )
+    end
+
+    test "no SAVE button for anonymous viewers", %{conn: conn, hash: hash} do
+      {:ok, view, _html} = live(conn, ~p"/arena")
+
+      refute has_element?(
+               view,
+               "button[phx-click=save_species_init][phx-value-hash='#{hash}']"
+             )
+    end
+  end
 end
