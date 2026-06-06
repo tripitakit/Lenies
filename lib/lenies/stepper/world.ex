@@ -171,14 +171,26 @@ defmodule Lenies.Stepper.World do
   def apply_action(:defend, world, interp, _lenie_id), do: {:ok, world, interp}
 
   def apply_action({:allocate, size, _pos, _dir}, world, interp, lenie_id) do
-    case find_free_neighbour(world, interp.pos) do
-      {:ok, target_cell} ->
-        slot = %{target_cell: target_cell, size: size, buffer: List.duplicate(nil, size)}
-        new_slots = Map.put(world.child_slots, lenie_id, slot)
-        {:ok, %{world | child_slots: new_slots}, State.push(interp, 1)}
+    {min_size, max_size} = Lenies.Config.codeome_length_bounds()
 
-      :no_free ->
+    cond do
+      # Mirror the live world's :invalid_size guard (world.ex). A mutated codeome
+      # can pop a negative, zero, or huge value as the requested size; without
+      # this guard `List.duplicate(nil, size)` raised on negative sizes (or blew
+      # up memory on huge ones) and crashed the whole stepper mid-RUN.
+      size < min_size or size > max_size ->
         {:ok, world, State.push(interp, 0)}
+
+      true ->
+        case find_free_neighbour(world, interp.pos) do
+          {:ok, target_cell} ->
+            slot = %{target_cell: target_cell, size: size, buffer: List.duplicate(nil, size)}
+            new_slots = Map.put(world.child_slots, lenie_id, slot)
+            {:ok, %{world | child_slots: new_slots}, State.push(interp, 1)}
+
+          :no_free ->
+            {:ok, world, State.push(interp, 0)}
+        end
     end
   end
 
