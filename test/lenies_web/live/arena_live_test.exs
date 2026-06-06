@@ -247,5 +247,19 @@ defmodule LeniesWeb.ArenaLiveTest do
                "button[phx-click=save_species_init][phx-value-hash='#{hash}']"
              )
     end
+
+    test "clicking SAVE opens the name bar; Cancel closes it", %{conn: conn, user: user, hash: hash} do
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/arena")
+
+      view
+      |> element("button[phx-click=save_species_init][phx-value-hash='#{hash}']")
+      |> render_click()
+
+      assert has_element?(view, "form[phx-submit=save_species_confirm]")
+
+      view |> element("button[phx-click=save_species_cancel]") |> render_click()
+
+      refute has_element?(view, "form[phx-submit=save_species_confirm]")
+    end
   end
 end

@@ -270,6 +270,43 @@ defmodule LeniesWeb.ArenaLive do
                   </button>
                 </div>
 
+                <div
+                  :if={@saving_hash}
+                  class="flex items-center gap-2 p-2 border border-emerald-500/60 bg-emerald-950/40"
+                >
+                  <form
+                    phx-submit="save_species_confirm"
+                    class="flex items-center gap-2 w-full"
+                  >
+                    <span class="text-[11px] text-emerald-200 whitespace-nowrap">
+                      Save species {String.slice(@saving_hash, 0..7)} as:
+                    </span>
+                    <input
+                      type="text"
+                      name="name"
+                      autocomplete="off"
+                      placeholder="name"
+                      class="flex-1 min-w-0 text-[11px] px-2 py-0.5 bg-slate-900 border border-slate-600 text-cyan-100"
+                    />
+                    <button
+                      type="submit"
+                      class="text-[11px] px-2 py-0.5 border border-emerald-500 bg-emerald-700/40 text-emerald-100 hover:bg-emerald-600/60"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="save_species_cancel"
+                      class="text-[11px] px-2 py-0.5 border border-slate-500 bg-slate-800 hover:bg-slate-700"
+                    >
+                      Cancel
+                    </button>
+                  </form>
+                  <span :if={@save_error} class="text-[11px] text-rose-300 whitespace-nowrap">
+                    {@save_error}
+                  </span>
+                </div>
+
                 <div class="flex-1 min-h-0 overflow-auto">
                   <table class="w-full text-[11px] tabular-nums">
                     <thead class="text-cyan-300/80 sticky top-0 bg-slate-950/80">
@@ -502,7 +539,7 @@ defmodule LeniesWeb.ArenaLive do
   end
 
   def handle_event("kill_species_init", %{"hash" => hash}, socket) do
-    {:noreply, assign(socket, :killing_hash, hash)}
+    {:noreply, assign(socket, killing_hash: hash, saving_hash: nil, save_error: nil)}
   end
 
   def handle_event("kill_species_cancel", _params, socket) do
@@ -520,6 +557,14 @@ defmodule LeniesWeb.ArenaLive do
       _ ->
         {:noreply, assign(socket, :killing_hash, nil)}
     end
+  end
+
+  def handle_event("save_species_init", %{"hash" => hash}, socket) do
+    {:noreply, assign(socket, saving_hash: hash, save_error: nil, killing_hash: nil)}
+  end
+
+  def handle_event("save_species_cancel", _params, socket) do
+    {:noreply, assign(socket, saving_hash: nil, save_error: nil)}
   end
 
   def handle_event(_event, _params, socket), do: {:noreply, socket}
