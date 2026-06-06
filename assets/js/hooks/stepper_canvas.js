@@ -60,36 +60,55 @@ const StepperCanvas = {
       this.ctx.fillStyle = color;
       this.ctx.fillRect(l.x * cellPx, l.y * cellPx, cellPx, cellPx);
 
-      // Facing arrow (tiny triangle at the front edge)
-      this.ctx.fillStyle = "#0f172a";
-      this.ctx.beginPath();
+      // Facing indicator.
       const cx = l.x * cellPx + cellPx / 2;
       const cy = l.y * cellPx + cellPx / 2;
-      const r = cellPx / 3;
-      switch (l.dir) {
-        case "n":
-          this.ctx.moveTo(cx, cy - r);
-          this.ctx.lineTo(cx - r / 2, cy + r / 2);
-          this.ctx.lineTo(cx + r / 2, cy + r / 2);
-          break;
-        case "s":
-          this.ctx.moveTo(cx, cy + r);
-          this.ctx.lineTo(cx - r / 2, cy - r / 2);
-          this.ctx.lineTo(cx + r / 2, cy - r / 2);
-          break;
-        case "e":
-          this.ctx.moveTo(cx + r, cy);
-          this.ctx.lineTo(cx - r / 2, cy - r / 2);
-          this.ctx.lineTo(cx - r / 2, cy + r / 2);
-          break;
-        case "w":
-          this.ctx.moveTo(cx - r, cy);
-          this.ctx.lineTo(cx + r / 2, cy - r / 2);
-          this.ctx.lineTo(cx + r / 2, cy + r / 2);
-          break;
+
+      if (l.kind === "debug") {
+        // One-cell whisker in the Lenie's own colour, pointing the current dir.
+        let ex = cx, ey = cy;
+        switch (l.dir) {
+          case "n": ey = cy - cellPx; break;
+          case "s": ey = cy + cellPx; break;
+          case "e": ex = cx + cellPx; break;
+          case "w": ex = cx - cellPx; break;
+        }
+        this.ctx.strokeStyle = color;
+        this.ctx.lineWidth = cellPx / 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(cx, cy);
+        this.ctx.lineTo(ex, ey);
+        this.ctx.stroke();
+      } else {
+        // Seeds / children keep the small dark triangle.
+        this.ctx.fillStyle = "#0f172a";
+        this.ctx.beginPath();
+        const r = cellPx / 3;
+        switch (l.dir) {
+          case "n":
+            this.ctx.moveTo(cx, cy - r);
+            this.ctx.lineTo(cx - r / 2, cy + r / 2);
+            this.ctx.lineTo(cx + r / 2, cy + r / 2);
+            break;
+          case "s":
+            this.ctx.moveTo(cx, cy + r);
+            this.ctx.lineTo(cx - r / 2, cy - r / 2);
+            this.ctx.lineTo(cx + r / 2, cy - r / 2);
+            break;
+          case "e":
+            this.ctx.moveTo(cx + r, cy);
+            this.ctx.lineTo(cx - r / 2, cy - r / 2);
+            this.ctx.lineTo(cx - r / 2, cy + r / 2);
+            break;
+          case "w":
+            this.ctx.moveTo(cx - r, cy);
+            this.ctx.lineTo(cx + r / 2, cy - r / 2);
+            this.ctx.lineTo(cx + r / 2, cy + r / 2);
+            break;
+        }
+        this.ctx.closePath();
+        this.ctx.fill();
       }
-      this.ctx.closePath();
-      this.ctx.fill();
     }
   },
 };

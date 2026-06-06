@@ -36,6 +36,27 @@ defmodule Lenies.Stepper.World do
   end
 
   @doc """
+  Fill every cell's `:resource` with a random value in 15..45 (inclusive),
+  derived from `seed` via a functional RNG so the distribution is reproducible.
+  Other cell fields (carcass, carcass_hue, lenie_id) are left untouched.
+  """
+  def seed_resources(%__MODULE__{cells: cells, grid: {w, h}} = world, seed)
+      when is_integer(seed) do
+    rng0 = :rand.seed_s(:exsss, {seed, seed, seed})
+
+    coords = for x <- 0..(w - 1), y <- 0..(h - 1), do: {x, y}
+
+    {new_cells, _rng} =
+      Enum.reduce(coords, {cells, rng0}, fn pos, {acc, rng} ->
+        {n, rng} = :rand.uniform_s(31, rng)
+        cell = %{acc[pos] | resource: 14 + n}
+        {Map.put(acc, pos, cell), rng}
+      end)
+
+    %{world | cells: new_cells}
+  end
+
+  @doc """
   Place a Lenie record at its `pos`. Returns `{:ok, world}` or
   `{:error, :cell_occupied}` if another Lenie already sits there, or
   `{:error, :out_of_bounds}` if pos is outside the grid.
@@ -119,10 +140,16 @@ defmodule Lenies.Stepper.World do
       %{lenie_id: target_id} when is_binary(target_id) ->
         damage = Application.get_env(:lenies, :attack_damage, 10)
         target = world.lenies[target_id]
+
+        # Mirror the live world: reward the attacker with exactly what the
+        # victim loses (never more than it had); drive energy below zero with
+        # the full damage to decide lethality.
+        actual = min(damage, max(target.energy, 0))
         new_energy = target.energy - damage
+        new_interp = %{interp | energy: interp.energy + actual}
 
         if new_energy <= 0 do
-          carcass_value = max(0, trunc(target.energy * 0.5))
+          carcass_value = max(0, trunc(new_energy * 0.5))
 
           new_cells =
             Map.update!(world.cells, front, fn c ->
@@ -130,10 +157,10 @@ defmodule Lenies.Stepper.World do
             end)
 
           new_lenies = Map.delete(world.lenies, target_id)
-          {:ok, %{world | cells: new_cells, lenies: new_lenies}, interp}
+          {:ok, %{world | cells: new_cells, lenies: new_lenies}, new_interp}
         else
           new_lenies = Map.update!(world.lenies, target_id, fn t -> %{t | energy: new_energy} end)
-          {:ok, %{world | lenies: new_lenies}, interp}
+          {:ok, %{world | lenies: new_lenies}, new_interp}
         end
 
       _ ->
