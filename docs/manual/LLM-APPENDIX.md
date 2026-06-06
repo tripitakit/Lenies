@@ -67,9 +67,11 @@ the Lenie process must then call the World process to resolve the action and
 get a result. From the codeome author's perspective, these read as ordinary
 opcodes; they just take extra real-world time to resolve.
 
-**`:read_self`.** Reads the codeome by index: pops `addr` (top), pushes the
-**opcode integer** (NOT the atom name) at codeome position `addr mod size`,
-per the encoding table in §2.
+**`:read_self`.** Reads the **chromosome** by index: pops `addr` (top), pushes
+the **opcode integer** (NOT the atom name) at chromosome position `addr mod
+chromosome_size`, per the encoding table in §2. It reads the chromosome only —
+never a carried plasmid — so a copy loop bounded by `:get_size` replicates the
+chromosome exactly.
 
 ---
 
@@ -109,7 +111,7 @@ The 38 opcodes are indexed 0..37 in the encoding map. Any integer outside
 | 18 | `:sense_self` | 0.5 | `( -- 1 )` | **Always pushes 1**; local, never queries world |
 | 19 | `:sense_energy` | 0.5 | `( -- e )` | `trunc(state.energy)` |
 | 20 | `:sense_age` | 0.5 | `( -- age )` | Ticks since spawn |
-| 21 | `:sense_size` | 0.5 | `( -- n )` | Codeome size |
+| 21 | `:sense_size` | 0.5 | `( -- n )` | Execution-stream size (chromosome + carried plasmids) |
 | 22 | `:move` | 2.0 | `( -- )` | Step forward one cell; world action |
 | 23 | `:turn_left` | 0.5 | `( -- )` | Counter-clockwise: n→w→s→e→n |
 | 24 | `:turn_right` | 0.5 | `( -- )` | Clockwise: n→e→s→w→n |
@@ -117,8 +119,8 @@ The 38 opcodes are indexed 0..37 in the encoding map. Any integer outside
 | 26 | `:attack` | 5.0 | `( -- )` | Damage Lenie in front cell (deals 10, costs 5) |
 | 27 | `:defend` | 2.0 | `( -- )` | Activate defense for `defense_window_ticks=5`; incoming attacks deal half damage (10→5) and the attacker pays an extra `defense_attacker_penalty=5` |
 | 28 | `:get_ip` | 0.3 | `( -- ip )` | Current instruction pointer |
-| 29 | `:get_size` | 0.3 | `( -- n )` | Codeome size (cheaper than `:sense_size`) |
-| 30 | `:read_self` | 0.3 | `( addr -- opcode_int )` | Returns the INTEGER encoding (per this table), not the atom |
+| 29 | `:get_size` | 0.3 | `( -- n )` | Chromosome size, excludes plasmids (cheaper than `:sense_size`) |
+| 30 | `:read_self` | 0.3 | `( addr -- opcode_int )` | Reads the chromosome only; returns the INTEGER encoding (per this table), not the atom |
 | 31 | `:allocate` | `5.0 + 0.05·size_arg` | `( size_arg -- )` | Allocate child slot of size in front cell |
 | 32 | `:write_child` | 1.0 | `( child_addr opcode_int -- )` | `opcode_int` is TOP |
 | 33 | `:divide` | 10.0 | `( -- )` | Commit child as new Lenie |
@@ -132,7 +134,7 @@ So `:add` on `[]` becomes `0 + 0 = 0` (result pushed), `:store` with one
 operand stores using slot_idx=top=that operand and value=0, etc.
 
 **Tolerance.** Unknown opcode integers decode as `:nop_0`. Out-of-bounds
-codeome reads in `:read_self` use `addr mod size`.
+chromosome reads in `:read_self` use `addr mod chromosome_size`.
 
 ---
 

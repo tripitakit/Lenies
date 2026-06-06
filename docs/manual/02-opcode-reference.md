@@ -217,8 +217,12 @@ literal `push1`.
 
 **Stack:** `( -- n )`
 **Cost:** `0.5`
-**Description:** Pushes the codeome length. Same stack effect as `get_size` but
-costs `0.5` instead of `0.3`; prefer `get_size` inside tight replication loops.
+**Description:** Pushes the length of the **execution stream** — the chromosome
+*plus* every carried plasmid, i.e. the full ring the VM actually runs. This is
+the one self-inspection opcode that "sees" plasmids. It differs from `get_size`,
+which reports the chromosome only (see below); for a plasmid-free creature the
+two are equal. Use `sense_size` to reason about your running body/energy; use
+`get_size` inside replication loops so you copy the chromosome, not the plasmids.
 
 ---
 
@@ -306,17 +310,23 @@ itself, before advance). Used in position-relative arithmetic for copy loops.
 
 **Stack:** `( -- n )`
 **Cost:** `0.3`
-**Description:** Pushes the codeome length. Cheaper than `sense_size` (`0.3`
-vs `0.5`); prefer this inside replication counter arithmetic.
+**Description:** Pushes the **chromosome** length — the heritable codeome only,
+*excluding* any carried plasmids (unlike `sense_size`, which counts the full
+execution stream). Cheaper than `sense_size` (`0.3` vs `0.5`). Pair it with
+`read_self` as the bound of a replication copy loop: the loop then copies the
+chromosome exactly, so offspring stay the same species and plasmids remain
+extra-chromosomal (inherited only via segregation at `divide`, never copied into
+the child's chromosome).
 
 ### `read_self`
 
 **Stack:** `( a -- op_int )`
 **Cost:** `0.3`
-**Description:** Pops address `a`, reads the opcode at `codeome[a mod size]`,
-and pushes its integer encoding (`Opcodes.encode/1`). The address wraps so
-out-of-range values are safe. Used with `write_child` to copy the parent
-codeome into a child buffer.
+**Description:** Pops address `a`, reads the opcode at `chromosome[a mod
+chromosome_size]`, and pushes its integer encoding (`Opcodes.encode/1`). Reads
+are confined to the **chromosome** — `read_self` can never return a plasmid
+opcode — and the address wraps, so out-of-range values are safe. Used with
+`write_child` to copy the parent's chromosome into a child buffer.
 
 ---
 
