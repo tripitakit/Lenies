@@ -65,27 +65,26 @@ defmodule Lenies.Sandboxes do
 
   @impl true
   def handle_call({:attach, user_id, pid}, _from, state) do
-    case Map.get(state, user_id) do
-      nil ->
-        case start_sandbox(user_id) do
-          {:ok, _world_pid} ->
-            ref = Process.monitor(pid)
-
-            entry = %{
+    # `start_sandbox/1` is idempotent: an already-running world short-circuits
+    # to `{:ok, _}` WITHOUT re-restoring (never clobbers a live world), while a
+    # missing one is started and auto-restored. Calling it on EVERY attach —
+    # not just the first — self-heals the case where the world died outside the
+    # grace path (a crash, a manual stop_world, or a dev hot-reload restart)
+    # and left this entry behind: a reconnect then restarts + restores it
+    # instead of registering the client against a dead/empty world (which would
+    # surface as an empty sandbox after reconnect).
+    case start_sandbox(user_id) do
+      {:ok, _world_pid} ->
+        entry =
+          Map.get(state, user_id) ||
+            %{
               world_id: world_id_for(user_id),
-              connections: MapSet.new([pid]),
-              monitors: %{pid => ref},
+              connections: MapSet.new(),
+              monitors: %{},
               pending_stop: nil,
-              generation: 1
+              generation: 0
             }
 
-            {:reply, :ok, Map.put(state, user_id, entry)}
-
-          {:error, _} = err ->
-            {:reply, err, state}
-        end
-
-      %{} = entry ->
         new_entry =
           entry
           |> add_connection(pid)
@@ -93,6 +92,9 @@ defmodule Lenies.Sandboxes do
           |> bump_generation()
 
         {:reply, :ok, Map.put(state, user_id, new_entry)}
+
+      {:error, _} = err ->
+        {:reply, err, state}
     end
   end
 

@@ -202,6 +202,31 @@ defmodule Lenies.SandboxesTest do
     end
   end
 
+  describe "attach self-heals a world that died outside the grace path" do
+    test "reconnect restarts a world that was stopped while the entry persisted" do
+      user_id = unique_user_id()
+      world_id = {:sandbox, user_id}
+      on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
+
+      :ok = Lenies.Sandboxes.attach(user_id)
+      assert Lenies.Worlds.alive?(world_id)
+
+      # The world dies independently of the grace timer (crash, manual stop, or
+      # a dev hot-reload supervisor restart). The Sandboxes entry is NOT removed
+      # (only the grace handler deletes it), so it now outlives its world.
+      :ok = Lenies.Worlds.stop_world(world_id)
+      refute Lenies.Worlds.alive?(world_id)
+      assert Map.has_key?(:sys.get_state(Lenies.Sandboxes), user_id)
+
+      # A reconnecting client must NOT be registered against the dead world —
+      # attach has to restart (and auto-restore) it, or the user lands in an
+      # empty sandbox.
+      :ok = Lenies.Sandboxes.attach(user_id)
+      assert Lenies.Worlds.alive?(world_id),
+             "reconnect left the world dead — user would see an empty sandbox"
+    end
+  end
+
   describe "auto-restore" do
     setup do
       Application.put_env(:lenies, :sandbox_grace_ms, 50)
