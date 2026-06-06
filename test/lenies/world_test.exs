@@ -326,6 +326,39 @@ defmodule Lenies.WorldTest do
     end
   end
 
+  describe "a failed child start never crashes the World" do
+    test "spawn_lenie absorbs a child start failure instead of wiping the world",
+         %{world_id: world_id} do
+      import ExUnit.CaptureLog
+
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
+      good = Lenies.Seeds.get(:minimal_replicator).codeome
+
+      # One healthy Lenie first — it must survive the failed spawn below.
+      assert {:ok, {_id, _pos}} =
+               GenServer.call(handle.pid, {:spawn_lenie, good, [energy: 100.0]})
+
+      assert :ets.info(handle.tables.lenies, :size) == 1
+      world_pid = handle.pid
+
+      # A non-%Codeome{} makes Lenie.init crash (Interpreter.index_jumps/1 only
+      # accepts the struct), so DynamicSupervisor.start_child returns an error.
+      # If the World matched start_child strictly it would crash here and the
+      # GenServer.call would EXIT; instead it must reply {:error, :spawn_failed}.
+      log =
+        capture_log(fn ->
+          assert {:error, :spawn_failed} =
+                   GenServer.call(world_pid, {:spawn_lenie, :not_a_codeome, [energy: 100.0]})
+        end)
+
+      assert log =~ "failed to start child"
+
+      # World still alive and its population untouched (NOT reset to empty).
+      assert Process.alive?(world_pid)
+      assert :ets.info(handle.tables.lenies, :size) == 1
+    end
+  end
+
   describe "replication_cap enforcement (Task 5)" do
     test "divide returns {:ok, :replication_cap_exceeded} when at replication_cap; Lenie stays alive" do
       world_id = :"replication_cap_test_#{System.unique_integer([:positive])}"

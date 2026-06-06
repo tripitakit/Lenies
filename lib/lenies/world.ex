@@ -345,26 +345,43 @@ defmodule Lenies.World do
           plasmids: plasmids
         ]
 
-        {:ok, _pid} =
-          DynamicSupervisor.start_child(
-            Lenies.LenieSupervisor.via(state.world_id),
-            Supervisor.child_spec({Lenies.Lenie, {state.handle, child_opts}},
-              restart: :temporary
+        # A child whose init fails must NOT crash the World — that would drop
+        # every Lenie in this world and reset it to empty (the ETS tables are
+        # owned by this process). Handle the error like the snapshot-restore
+        # path does: leave the cell free and report the failure to the caller.
+        case start_lenie_child(state, child_opts) do
+          {:ok, _pid} ->
+            [{key, cell}] = :ets.lookup(state.tables.cells, pos)
+            state = put_cell(state, key, cell, %{cell | lenie_id: lenie_id})
+
+            # User spawn can happen while paused: publish the snapshot so the new
+            # lenie appears immediately (no tick to refresh it otherwise).
+            state = store_occupancy(state)
+
+            {:reply, {:ok, {lenie_id, pos}}, state}
+
+          other ->
+            Logger.warning(
+              "World #{inspect(state.world_id)}: spawn_lenie failed to start child: #{inspect(other)}"
             )
-          )
 
-        [{key, cell}] = :ets.lookup(state.tables.cells, pos)
-        state = put_cell(state, key, cell, %{cell | lenie_id: lenie_id})
-
-        # User spawn can happen while paused: publish the snapshot so the new
-        # lenie appears immediately (no tick to refresh it otherwise).
-        state = store_occupancy(state)
-
-        {:reply, {:ok, {lenie_id, pos}}, state}
+            {:reply, {:error, :spawn_failed}, state}
+        end
 
       :no_free_cell ->
         {:reply, {:error, :no_free_cell}, state}
     end
+  end
+
+  # Single choke point for starting a Lenie process under this world's
+  # LenieSupervisor. Returns the raw `DynamicSupervisor.start_child/2` result so
+  # every caller can decide how to handle a failed start WITHOUT a strict match
+  # that would crash the World (and wipe its ETS-owned population).
+  defp start_lenie_child(state, child_opts) do
+    DynamicSupervisor.start_child(
+      Lenies.LenieSupervisor.via(state.world_id),
+      Supervisor.child_spec({Lenies.Lenie, {state.handle, child_opts}}, restart: :temporary)
+    )
   end
 
   @impl true
@@ -420,6 +437,37 @@ defmodule Lenies.World do
     state = schedule_reconcile(%{state | reconcile_ref: nil})
     {:noreply, state}
   end
+
+  # Diagnostic net: if the World GenServer ever dies for an abnormal reason, its
+  # ETS tables die with it and `rest_for_one` resets the world to empty (see
+  # Lenies.World.Supervisor). That presents to the user as "the sandbox got
+  # killed and restarts empty". Log the crash reason + key state BEFORE the
+  # tables vanish so the cause is captured instead of lost. Normal shutdowns
+  # (`:normal`, `:shutdown`, `{:shutdown, _}`) are silent.
+  @impl true
+  def terminate(reason, state)
+      when reason not in [:normal, :shutdown] and not (is_tuple(reason) and elem(reason, 0) == :shutdown) do
+    Logger.error(
+      "Lenies.World #{inspect(state.world_id)} TERMINATING abnormally " <>
+        "(pop=#{safe_size(state)}, tick=#{Map.get(state, :tick_count)}): " <>
+        Exception.format_exit(reason)
+    )
+
+    :ok
+  end
+
+  def terminate(_reason, _state), do: :ok
+
+  defp safe_size(%{tables: %{lenies: t}}) do
+    case :ets.info(t, :size) do
+      n when is_integer(n) -> n
+      _ -> "?"
+    end
+  rescue
+    _ -> "?"
+  end
+
+  defp safe_size(_), do: "?"
 
   # ----- internals -----
 
@@ -1012,23 +1060,30 @@ defmodule Lenies.World do
       seeder_user_id: Map.get(parent_record, :seeder_user_id)
     ]
 
-    {:ok, _child_pid} =
-      DynamicSupervisor.start_child(
-        Lenies.LenieSupervisor.via(state.world_id),
-        Supervisor.child_spec({Lenies.Lenie, {state.handle, child_opts}},
-          restart: :temporary
+    # A failed child start must not crash the World (that would wipe the whole
+    # population to empty). On failure, release the parent's slot and report a
+    # benign failure — the calling Lenie treats it like any other failed divide.
+    case start_lenie_child(state, child_opts) do
+      {:ok, _child_pid} ->
+        # Mark child cell occupied
+        [{key, cell}] = :ets.lookup(state.tables.cells, slot.target_cell)
+        state = put_cell(state, key, cell, %{cell | lenie_id: child_id})
+
+        # Clean up parent's slot
+        ChildSlots.delete(state.tables.child_slots, slot_id)
+        update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil), state)
+
+        {{:ok, {:divided, child_id, child_energy}}, state}
+
+      other ->
+        Logger.warning(
+          "World #{inspect(state.world_id)}: divide failed to start child: #{inspect(other)}"
         )
-      )
 
-    # Mark child cell occupied
-    [{key, cell}] = :ets.lookup(state.tables.cells, slot.target_cell)
-    state = put_cell(state, key, cell, %{cell | lenie_id: child_id})
-
-    # Clean up parent's slot
-    ChildSlots.delete(state.tables.child_slots, slot_id)
-    update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil), state)
-
-    {{:ok, {:divided, child_id, child_energy}}, state}
+        ChildSlots.delete(state.tables.child_slots, slot_id)
+        update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil), state)
+        {{:ok, :spawn_failed}, state}
+    end
   end
 
   defp find_random_free_cell({w, h}, tables) do
@@ -1241,12 +1296,7 @@ defmodule Lenies.World do
           plasmids: Map.get(snap, :plasmids, [])
         ]
 
-        case DynamicSupervisor.start_child(
-               Lenies.LenieSupervisor.via(state.world_id),
-               Supervisor.child_spec({Lenies.Lenie, {state.handle, child_opts}},
-                 restart: :temporary
-               )
-             ) do
+        case start_lenie_child(state, child_opts) do
           {:ok, _pid} ->
             :ok
 
