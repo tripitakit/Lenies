@@ -237,6 +237,42 @@ defmodule Lenies.SandboxesTest do
     end
 
     @tag :tmp_dir
+    test "spawned lenies survive disconnect → grace stop → reconnect", %{tmp_dir: tmp} do
+      Application.put_env(:lenies, :snapshot_root, tmp)
+      on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
+
+      user_id = unique_user_id()
+      world_id = {:sandbox, user_id}
+      on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
+
+      # 1) Connect and spawn a Lenie (the user "sows" lenies in the sandbox).
+      :ok = Lenies.Sandboxes.attach(user_id)
+      codeome = Lenies.Codeome.from_list([:nop_0, :move, :eat, :nop_1, :nop_0])
+      {:ok, _pid} = Lenies.Worlds.spawn_lenie(world_id, codeome, energy: 1000.0, dir: :n)
+      Process.sleep(50)
+
+      {:ok, handle1} = Lenies.Worlds.handle(world_id)
+
+      assert Lenies.Species.aggregate(handle1) != [],
+             "precondition: the spawned Lenie is present before disconnect"
+
+      # 2) Lose connection: detach drops the last client → grace timer fires →
+      #    world auto-saves and stops.
+      :ok = Lenies.Sandboxes.detach(user_id)
+      Process.sleep(1_000)
+      refute Lenies.Worlds.alive?(world_id), "world should stop after the grace window"
+
+      # 3) Reconnect: a fresh attach restarts the world and auto-restores.
+      :ok = Lenies.Sandboxes.attach(user_id)
+      {:ok, handle2} = Lenies.Worlds.handle(world_id)
+      Process.sleep(100)
+
+      # 4) The species table (what the dashboard renders) must NOT be empty.
+      assert Lenies.Species.aggregate(handle2) != [],
+             "sandbox empty after reconnect — Lenies lost across grace stop + restore"
+    end
+
+    @tag :tmp_dir
     test "first attach with NO auto snapshot starts an empty world", %{tmp_dir: tmp} do
       Application.put_env(:lenies, :snapshot_root, tmp)
       on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
