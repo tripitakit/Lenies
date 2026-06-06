@@ -359,6 +359,56 @@ defmodule Lenies.WorldTest do
     end
   end
 
+  describe "self-replication is plasmid-free (species stays stable)" do
+    test "a plasmid-bearing replicator's offspring keep the parent's codeome_hash" do
+      world_id = :"plasmid_repro_test_#{System.unique_integer([:positive])}"
+
+      {:ok, _} =
+        Lenies.Worlds.start_world(world_id, %{
+          spawn_cap: :infinity,
+          replication_cap: 50,
+          tick_interval_ms: 10,
+          radiation_per_tick: 12_000,
+          # Mutation OFF — any species drift must come from plasmid leakage, not copy errors.
+          copy_substitution_rate: 0.0,
+          copy_insert_rate: 0.0,
+          copy_delete_rate: 0.0,
+          background_mutation_rate_per_1000_ticks: 0
+        })
+
+      on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
+
+      {:ok, handle} = Lenies.Worlds.handle(world_id)
+      seed = Lenies.Seeds.get(:minimal_replicator)
+      pristine_hash = Lenies.Codeome.hash(seed.codeome)
+
+      # Spawn the seed carrying its plasmid, exactly like the Sandbox seed form.
+      assert {:ok, {_id, _pos}} =
+               GenServer.call(
+                 handle.pid,
+                 {:spawn_lenie, seed.codeome,
+                  [energy: 20_000.0, plasmids: [Lenies.Plasmid.new(seed.plasmid)]]}
+               )
+
+      # Run until it has replicated at least a few times.
+      Enum.reduce_while(1..60, 1, fn _, _ ->
+        Process.sleep(50)
+        pop = :ets.info(handle.tables.lenies, :size)
+        if pop >= 4, do: {:halt, pop}, else: {:cont, pop}
+      end)
+
+      lenies = :ets.tab2list(handle.tables.lenies)
+      assert length(lenies) >= 2, "replicator should have produced offspring"
+
+      # Every Lenie — parent and offspring — must still be the pristine species:
+      # the chromosome was copied without the plasmid leaking into it.
+      hashes = lenies |> Enum.map(fn {_id, snap} -> snap.codeome_hash end) |> Enum.uniq()
+
+      assert hashes == [pristine_hash],
+             "expected all offspring to keep the pristine chromosome hash; got #{inspect(hashes)}"
+    end
+  end
+
   describe "replication_cap enforcement (Task 5)" do
     test "divide returns {:ok, :replication_cap_exceeded} when at replication_cap; Lenie stays alive" do
       world_id = :"replication_cap_test_#{System.unique_integer([:positive])}"

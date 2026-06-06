@@ -33,4 +33,26 @@ defmodule Lenies.Interpreter.SelfInspectTest do
     {:cont, s} = Interpreter.step(state, c)
     assert hd(s.stack) == Opcodes.encode(:push1)
   end
+
+  # Extra-chromosomal plasmids: the interpreter executes the exec stream
+  # (chromosome ++ plasmids), but self-inspection must see only the heritable
+  # chromosome so self-replication copies the chromosome — never the plasmids —
+  # into the child. Otherwise a plasmid-bearing seed's offspring drift to a new
+  # species ("evolved from") even with mutation disabled.
+  test ":get_size reports chromosome_size, not the exec-stream size" do
+    # exec = chromosome(3) ++ plasmid(2); chromosome_size pins the heritable length.
+    c = Codeome.from_list([:get_size, :nop_0, :nop_1, :add, :sub])
+    state = State.new(energy: 100.0, chromosome_size: 3)
+    {:cont, s} = Interpreter.step(state, c)
+    assert s.stack == [3]
+  end
+
+  test ":read_self addresses wrap within the chromosome, not the exec stream" do
+    # exec size 4, chromosome size 2. addr 3 must wrap to chromosome index
+    # 1 (3 mod 2 = 1 → :push1), NOT exec index 3 (:move, a plasmid opcode).
+    c = Codeome.from_list([:read_self, :push1, :eat, :move])
+    state = State.new(energy: 100.0, chromosome_size: 2) |> State.push(3)
+    {:cont, s} = Interpreter.step(state, c)
+    assert hd(s.stack) == Opcodes.encode(:push1)
+  end
 end

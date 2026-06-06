@@ -16,6 +16,13 @@ defmodule Lenies.Interpreter.State do
     `:make_plasmid` appends without limit and `:conjugate` spreads each).
     Mutated by `:make_plasmid` and `:conjugate`; the host Lenie process
     mirrors this into its own `state.plasmids` field via `age_and_continue/2`.
+  - `chromosome_size`: length of the heritable chromosome (the exec stream the
+    interpreter runs is `chromosome ++ plasmids`, so its size is larger). Pins
+    what `:get_size` reports and what `:read_self` can address, so a Lenie
+    self-replicates its chromosome ONLY — plasmids stay extra-chromosomal and
+    are inherited via segregation, never copied into the child's chromosome.
+    `nil` for States built without it (tests, pre-feature) → falls back to the
+    full exec-stream size, preserving the old behaviour.
   """
 
   @type t :: %__MODULE__{
@@ -27,7 +34,8 @@ defmodule Lenies.Interpreter.State do
           age: non_neg_integer(),
           pos: {non_neg_integer(), non_neg_integer()},
           call_stack: [non_neg_integer()],
-          plasmids: [Lenies.Plasmid.t()]
+          plasmids: [Lenies.Plasmid.t()],
+          chromosome_size: nil | non_neg_integer()
         }
 
   @stack_max 16
@@ -42,7 +50,8 @@ defmodule Lenies.Interpreter.State do
             age: 0,
             pos: {0, 0},
             call_stack: [],
-            plasmids: []
+            plasmids: [],
+            chromosome_size: nil
 
   def new(opts) do
     %__MODULE__{
@@ -54,7 +63,8 @@ defmodule Lenies.Interpreter.State do
       age: Keyword.get(opts, :age, 0),
       pos: Keyword.get(opts, :pos, {0, 0}),
       call_stack: Keyword.get(opts, :call_stack, []),
-      plasmids: Keyword.get(opts, :plasmids, [])
+      plasmids: Keyword.get(opts, :plasmids, []),
+      chromosome_size: Keyword.get(opts, :chromosome_size)
     }
   end
 

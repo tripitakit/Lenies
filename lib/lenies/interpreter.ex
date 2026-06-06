@@ -188,13 +188,24 @@ defmodule Lenies.Interpreter do
     state |> State.push(state.ip) |> advance_and_charge(:get_ip, size, 1)
   end
 
+  # Self-inspection reports the heritable chromosome, NOT the exec stream
+  # (chromosome ++ plasmids) the interpreter actually runs. This keeps the
+  # self-replication copy loop (`get_size` then `read_self` per index) copying
+  # the chromosome only, so plasmids stay extra-chromosomal — inherited via
+  # segregation, never baked into the child's chromosome (which would drift its
+  # species). `chromosome_size` is nil for States built without it (tests,
+  # pre-feature); fall back to the exec size so behaviour is unchanged there.
   defp dispatch(:get_size, state, _c, size) do
-    state |> State.push(size) |> advance_and_charge(:get_size, size, 1)
+    n = state.chromosome_size || size
+    state |> State.push(n) |> advance_and_charge(:get_size, size, 1)
   end
 
   defp dispatch(:read_self, state, c, size) do
     {addr, s1} = State.pop(state)
-    op = Codeome.at(c, addr)
+    # The chromosome is the exec stream's prefix, so reading at `addr mod
+    # chromosome_size` stays within it and never returns a plasmid opcode.
+    chromosome_size = state.chromosome_size || size
+    op = Codeome.at(c, Integer.mod(addr, chromosome_size))
     op_int = Lenies.Codeome.Opcodes.encode(op)
     s1 |> State.push(op_int) |> advance_and_charge(:read_self, size, 1)
   end

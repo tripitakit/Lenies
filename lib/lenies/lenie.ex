@@ -135,7 +135,13 @@ defmodule Lenies.Lenie do
     # the legacy bare-id registration (multi-world refactor T6).
     {:ok, _} = Registry.register(Lenies.Registry, {:lenie, handle.id, id}, nil)
 
-    interp = State.new(energy: energy, pos: pos, dir: dir)
+    # `chromosome_size` pins self-inspection (`:get_size` / `:read_self`) to the
+    # heritable chromosome so replication copies the chromosome only — plasmids
+    # stay extra-chromosomal. The chromosome length is fixed for a Lenie's life
+    # (background mutation substitutes in place; conjugation never touches it),
+    # so it's set once here.
+    interp =
+      State.new(energy: energy, pos: pos, dir: dir, chromosome_size: Codeome.size(codeome))
 
     # Pause state must come via spawn opts — calling `World.paused?()`
     # here would deadlock (we're typically inside World's
