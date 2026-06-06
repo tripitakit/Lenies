@@ -40,7 +40,9 @@ const StepperCanvas = {
     // Resources (green) + carcasses (brown)
     for (const c of payload.cells) {
       if (c.r > 0) {
-        const alpha = Math.min(1, c.r / 20);
+        // Map alpha across the full baseline range (≈15..45) instead of
+        // saturating at r=20, so the per-cell variance is actually visible.
+        const alpha = Math.min(1, c.r / 45);
         this.ctx.fillStyle = `rgba(34, 197, 94, ${alpha})`;
         this.ctx.fillRect(c.x * cellPx, c.y * cellPx, cellPx, cellPx);
       }
@@ -51,7 +53,7 @@ const StepperCanvas = {
       }
     }
 
-    // Lenies
+    // Lenies — bodies + seed/child facing triangles.
     for (const l of payload.lenies) {
       const color =
         l.kind === "debug" ? "#facc15"   // yellow — the one being debugged
@@ -60,27 +62,12 @@ const StepperCanvas = {
       this.ctx.fillStyle = color;
       this.ctx.fillRect(l.x * cellPx, l.y * cellPx, cellPx, cellPx);
 
-      // Facing indicator.
-      const cx = l.x * cellPx + cellPx / 2;
-      const cy = l.y * cellPx + cellPx / 2;
-
-      if (l.kind === "debug") {
-        // One-cell whisker in the Lenie's own colour, pointing the current dir.
-        let ex = cx, ey = cy;
-        switch (l.dir) {
-          case "n": ey = cy - cellPx; break;
-          case "s": ey = cy + cellPx; break;
-          case "e": ex = cx + cellPx; break;
-          case "w": ex = cx - cellPx; break;
-        }
-        this.ctx.strokeStyle = color;
-        this.ctx.lineWidth = cellPx / 2;
-        this.ctx.beginPath();
-        this.ctx.moveTo(cx, cy);
-        this.ctx.lineTo(ex, ey);
-        this.ctx.stroke();
-      } else {
-        // Seeds / children keep the small dark triangle.
+      // Seeds / children get a small dark facing triangle (drawn with the body).
+      // The debug Lenie's whisker is drawn in a later pass so it sits on top of
+      // any adjacent Lenie square it extends over.
+      if (l.kind !== "debug") {
+        const cx = l.x * cellPx + cellPx / 2;
+        const cy = l.y * cellPx + cellPx / 2;
         this.ctx.fillStyle = "#0f172a";
         this.ctx.beginPath();
         const r = cellPx / 3;
@@ -109,6 +96,28 @@ const StepperCanvas = {
         this.ctx.closePath();
         this.ctx.fill();
       }
+    }
+
+    // Debug Lenie whisker — last pass, so it renders on top of any neighbouring
+    // Lenie squares it crosses into (otherwise a later-drawn adjacent Lenie
+    // would paint over it and the direction would disappear).
+    for (const l of payload.lenies) {
+      if (l.kind !== "debug") continue;
+      const cx = l.x * cellPx + cellPx / 2;
+      const cy = l.y * cellPx + cellPx / 2;
+      let ex = cx, ey = cy;
+      switch (l.dir) {
+        case "n": ey = cy - cellPx; break;
+        case "s": ey = cy + cellPx; break;
+        case "e": ex = cx + cellPx; break;
+        case "w": ex = cx - cellPx; break;
+      }
+      this.ctx.strokeStyle = "#facc15"; // same colour as the debug Lenie
+      this.ctx.lineWidth = cellPx / 2;
+      this.ctx.beginPath();
+      this.ctx.moveTo(cx, cy);
+      this.ctx.lineTo(ex, ey);
+      this.ctx.stroke();
     }
   },
 };
