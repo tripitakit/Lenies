@@ -101,6 +101,8 @@ defmodule LeniesWeb.ArenaLive do
       |> assign(:species_sig, nil)
       |> assign(:owned_hashes, owned_hashes(socket))
       |> assign(:killing_hash, nil)
+      |> assign(:saving_hash, nil)
+      |> assign(:save_error, nil)
       |> stream_configure(:species_table, dom_id: fn sp -> "species-row-#{sp.hash}" end)
       |> stream(:species_table, sort_species(all_species, sort_by, sort_dir))
 
@@ -268,6 +270,44 @@ defmodule LeniesWeb.ArenaLive do
                   </button>
                 </div>
 
+                <div
+                  :if={@saving_hash}
+                  class="flex flex-col gap-1 p-2 border border-emerald-500/60 bg-emerald-950/40"
+                >
+                  <form
+                    phx-submit="save_species_confirm"
+                    class="flex items-center gap-2 w-full"
+                  >
+                    <span class="text-[11px] text-emerald-200 whitespace-nowrap">
+                      Save species {String.slice(@saving_hash, 0..7)} as:
+                    </span>
+                    <input
+                      type="text"
+                      name="name"
+                      autocomplete="off"
+                      autofocus
+                      placeholder="name"
+                      class="flex-1 min-w-0 text-[11px] px-2 py-0.5 bg-slate-900 border border-slate-600 text-cyan-100"
+                    />
+                    <button
+                      type="submit"
+                      class="text-[11px] px-2 py-0.5 border border-emerald-500 bg-emerald-700/40 text-emerald-100 hover:bg-emerald-600/60"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="save_species_cancel"
+                      class="text-[11px] px-2 py-0.5 border border-slate-500 bg-slate-800 hover:bg-slate-700"
+                    >
+                      Cancel
+                    </button>
+                  </form>
+                  <span :if={@save_error} class="text-[11px] text-rose-300">
+                    {@save_error}
+                  </span>
+                </div>
+
                 <div class="flex-1 min-h-0 overflow-auto">
                   <table class="w-full text-[11px] tabular-nums">
                     <thead class="text-cyan-300/80 sticky top-0 bg-slate-950/80">
@@ -376,6 +416,16 @@ defmodule LeniesWeb.ArenaLive do
                           {Float.round(sp.avg_generation, 2)}
                         </td>
                         <td class="text-right pl-3 whitespace-nowrap">
+                          <button
+                            :if={MapSet.member?(@owned_hashes, sp.hash)}
+                            type="button"
+                            phx-click="save_species_init"
+                            phx-value-hash={sp.hash}
+                            class="text-[10px] px-1.5 py-0.5 mr-1 border border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/10"
+                            title="Save this species to your collection"
+                          >
+                            SAVE
+                          </button>
                           <button
                             :if={MapSet.member?(@owned_hashes, sp.hash)}
                             type="button"
@@ -490,7 +540,7 @@ defmodule LeniesWeb.ArenaLive do
   end
 
   def handle_event("kill_species_init", %{"hash" => hash}, socket) do
-    {:noreply, assign(socket, :killing_hash, hash)}
+    {:noreply, assign(socket, killing_hash: hash, saving_hash: nil, save_error: nil)}
   end
 
   def handle_event("kill_species_cancel", _params, socket) do
@@ -507,6 +557,50 @@ defmodule LeniesWeb.ArenaLive do
 
       _ ->
         {:noreply, assign(socket, :killing_hash, nil)}
+    end
+  end
+
+  def handle_event("save_species_init", %{"hash" => hash}, socket) do
+    {:noreply, assign(socket, saving_hash: hash, save_error: nil, killing_hash: nil)}
+  end
+
+  def handle_event("save_species_cancel", _params, socket) do
+    {:noreply, assign(socket, saving_hash: nil, save_error: nil)}
+  end
+
+  def handle_event("save_species_confirm", %{"name" => name}, socket) do
+    %{current_scope: scope, world_handle: handle, saving_hash: hash} = socket.assigns
+
+    with %{user: %{} = user} <- scope,
+         h when is_binary(h) <- hash,
+         own_members = own_species_members(Lenies.Species.for_hash(handle, h), user.id),
+         %{} = snap <- pick_max_plasmid_member(own_members) do
+      attrs = %{
+        name: name,
+        color_hex: SpeciesColor.hex(handle, h),
+        energy_default: 10_000.0,
+        opcodes: Enum.map(snap.codeome, &Atom.to_string/1),
+        plasmids:
+          Enum.map(snap.plasmids, fn %Lenies.Plasmid{opcodes: ops} ->
+            %{opcodes: Enum.map(ops, &Atom.to_string/1)}
+          end)
+      }
+
+      case Lenies.Collection.create_codeome(user, attrs) do
+        {:ok, _codeome} ->
+          {:noreply,
+           socket
+           |> assign(saving_hash: nil, save_error: nil)
+           |> put_flash(:info, "Saved “#{name}” to your collection.")}
+
+        {:error, :name_taken} ->
+          {:noreply, assign(socket, :save_error, "Name “#{name}” already taken.")}
+
+        {:error, %Ecto.Changeset{}} ->
+          {:noreply, assign(socket, :save_error, "Invalid codeome — try another name.")}
+      end
+    else
+      _ -> {:noreply, assign(socket, saving_hash: nil, save_error: nil)}
     end
   end
 
@@ -742,6 +836,26 @@ defmodule LeniesWeb.ArenaLive do
       %{user: %{id: id}} -> MapSet.new(Lenies.Arena.owned_species_hashes(id))
       _ -> MapSet.new()
     end
+  end
+
+  # Pick the living member of a species carrying the most plasmids (ties: the
+  # first encountered). `for_hash/2` returns `{id, snapshot}` tuples; we save
+  # the snapshot's codeome + plasmids. Returns nil when no members are alive.
+  defp pick_max_plasmid_member([]), do: nil
+
+  defp pick_max_plasmid_member(members) do
+    {_id, snap} =
+      Enum.max_by(members, fn {_id, snap} -> length(Map.get(snap, :plasmids, [])) end)
+
+    snap
+  end
+
+  # Keep only the snapshots seeded by `user_id`. SAVE captures the user's own
+  # evolved member, never another seeder's — two users can seed an identical
+  # codeome (same hash), so `Species.for_hash/2` alone is not ownership-scoped.
+  # Mirrors `Lenies.Arena.kill_species`, which is likewise per-user scoped.
+  defp own_species_members(members, user_id) do
+    Enum.filter(members, fn {_id, snap} -> Map.get(snap, :seeder_user_id) == user_id end)
   end
 
   defp sort_key_fun(:seed), do: fn sp -> sp |> format_seed_origin() |> String.downcase() end

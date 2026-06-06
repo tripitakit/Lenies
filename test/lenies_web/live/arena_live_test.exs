@@ -199,4 +199,149 @@ defmodule LeniesWeb.ArenaLiveTest do
       assert html =~ "ARENA"
     end
   end
+
+  describe "species SAVE button" do
+    setup %{conn: conn} do
+      user = Lenies.AccountsFixtures.user_fixture()
+      :ok = Lenies.Arena.attach_viewer()
+      {:ok, handle} = Lenies.Worlds.handle(:arena)
+      :ok = Lenies.Worlds.pause(:arena)
+
+      hash = "ARENA-SAVE-SP"
+
+      :ets.insert(handle.tables.lenies, {
+        "asave1",
+        %{id: "asave1", codeome_hash: hash, lineage: {nil, 0},
+          seeder_user_id: user.id,
+          codeome: [:nop_1, :eat, :move],
+          plasmids: [Lenies.Plasmid.new([:nop_0])]}
+      })
+
+      :ets.insert(handle.tables.lenies, {
+        "asave3",
+        %{id: "asave3", codeome_hash: hash, lineage: {nil, 0},
+          seeder_user_id: user.id,
+          codeome: [:nop_1, :eat, :move],
+          plasmids: [Lenies.Plasmid.new([:nop_0]), Lenies.Plasmid.new([:nop_1]),
+                     Lenies.Plasmid.new([:eat])]}
+      })
+
+      on_exit(fn -> Lenies.Worlds.stop_world(:arena) end)
+      %{conn: conn, user: user, handle: handle, hash: hash}
+    end
+
+    test "SAVE button renders for an owned species", %{conn: conn, user: user, hash: hash} do
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/arena")
+
+      assert has_element?(
+               view,
+               "button[phx-click=save_species_init][phx-value-hash='#{hash}']"
+             )
+    end
+
+    test "no SAVE button for anonymous viewers", %{conn: conn, hash: hash} do
+      {:ok, view, _html} = live(conn, ~p"/arena")
+
+      refute has_element?(
+               view,
+               "button[phx-click=save_species_init][phx-value-hash='#{hash}']"
+             )
+    end
+
+    test "clicking SAVE opens the name bar; Cancel closes it", %{conn: conn, user: user, hash: hash} do
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/arena")
+
+      view
+      |> element("button[phx-click=save_species_init][phx-value-hash='#{hash}']")
+      |> render_click()
+
+      assert has_element?(view, "form[phx-submit=save_species_confirm]")
+
+      view |> element("button[phx-click=save_species_cancel]") |> render_click()
+
+      refute has_element?(view, "form[phx-submit=save_species_confirm]")
+    end
+
+    test "name_taken keeps the bar open with an error and creates nothing new", %{conn: conn, user: user, hash: hash} do
+      {:ok, _existing} =
+        Lenies.Collection.create_codeome(user, %{
+          name: "Taken",
+          color_hex: "#123456",
+          energy_default: 10_000.0,
+          opcodes: ["nop_0"]
+        })
+
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/arena")
+
+      view
+      |> element("button[phx-click=save_species_init][phx-value-hash='#{hash}']")
+      |> render_click()
+
+      html =
+        view
+        |> form("form[phx-submit=save_species_confirm]", %{name: "Taken"})
+        |> render_submit()
+
+      assert html =~ "already taken"
+      assert has_element?(view, "form[phx-submit=save_species_confirm]")
+      # exactly one codeome named "Taken" — no duplicate created
+      assert Lenies.Collection.list_codeomes(user)
+             |> Enum.count(&(&1.name == "Taken")) == 1
+    end
+
+    test "save ignores other users' members of the same species", %{conn: conn, user: user, handle: handle, hash: hash} do
+      other = Lenies.AccountsFixtures.user_fixture()
+
+      :ets.insert(handle.tables.lenies, {
+        "aforeign5",
+        %{id: "aforeign5", codeome_hash: hash, lineage: {nil, 0},
+          seeder_user_id: other.id,
+          codeome: [:nop_1, :eat, :move],
+          plasmids: [
+            Lenies.Plasmid.new([:nop_0]), Lenies.Plasmid.new([:nop_1]),
+            Lenies.Plasmid.new([:eat]), Lenies.Plasmid.new([:move]),
+            Lenies.Plasmid.new([:nop_0])
+          ]}
+      })
+
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/arena")
+
+      view
+      |> element("button[phx-click=save_species_init][phx-value-hash='#{hash}']")
+      |> render_click()
+
+      view
+      |> form("form[phx-submit=save_species_confirm]", %{name: "MineOnly"})
+      |> render_submit()
+
+      codeome =
+        Lenies.Collection.list_codeomes(user)
+        |> Enum.find(&(&1.name == "MineOnly"))
+
+      assert codeome
+      # the user's own max-plasmid member has 3 plasmids, not the foreign 5
+      assert length(codeome.plasmids) == 3
+    end
+
+    test "confirm saves codeome + the max-plasmid member's plasmids", %{conn: conn, user: user, hash: hash} do
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/arena")
+
+      view
+      |> element("button[phx-click=save_species_init][phx-value-hash='#{hash}']")
+      |> render_click()
+
+      view
+      |> form("form[phx-submit=save_species_confirm]", %{name: "EvolvedInArena"})
+      |> render_submit()
+
+      codeome =
+        Lenies.Collection.list_codeomes(user)
+        |> Enum.find(&(&1.name == "EvolvedInArena"))
+
+      assert codeome
+      assert codeome.opcodes == ["nop_1", "eat", "move"]
+      assert length(codeome.plasmids) == 3
+      refute has_element?(view, "form[phx-submit=save_species_confirm]")
+    end
+  end
 end
