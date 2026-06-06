@@ -656,6 +656,40 @@ defmodule Lenies.Stepper.WorldTest do
     end
   end
 
+  describe "seed_resources/2" do
+    test "fills every cell with a value in 15..45 inclusive" do
+      world = World.new() |> World.seed_resources(12345)
+
+      for x <- 0..63, y <- 0..63 do
+        r = world.cells[{x, y}].resource
+        assert r >= 15 and r <= 45, "cell {#{x},#{y}} had resource #{r}"
+      end
+    end
+
+    test "is deterministic — same seed yields identical cells" do
+      a = World.new() |> World.seed_resources(777)
+      b = World.new() |> World.seed_resources(777)
+
+      assert a.cells == b.cells
+    end
+
+    test "different seeds yield at least some different cells" do
+      a = World.new() |> World.seed_resources(1)
+      b = World.new() |> World.seed_resources(2)
+
+      refute a.cells == b.cells
+    end
+
+    test "leaves carcass / carcass_hue / lenie_id untouched" do
+      world = World.new() |> World.seed_resources(42)
+      cell = world.cells[{0, 0}]
+
+      assert cell.carcass == 0
+      assert cell.carcass_hue == 0
+      assert cell.lenie_id == nil
+    end
+  end
+
   describe "encode_grid_payload/1" do
     test "produces a map with w, h, cells list, lenies list" do
       world = World.new()
