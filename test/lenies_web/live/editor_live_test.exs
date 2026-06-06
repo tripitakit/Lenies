@@ -50,10 +50,10 @@ defmodule LeniesWeb.EditorLiveTest do
   end
 
   describe "plasmid panel render" do
-    test "shows + Plasmide and the chromosome chip", %{conn: conn} do
+    test "shows + Plasmid and the chromosome chip", %{conn: conn} do
       {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       assert has_element?(view, "[data-target-chip='chromosome']")
-      assert has_element?(view, "button", "+ Plasmide")
+      assert has_element?(view, "button", "+ Plasmid")
     end
 
     test "adding a plasmid renders its chip and listing", %{conn: conn} do
@@ -77,8 +77,8 @@ defmodule LeniesWeb.EditorLiveTest do
 
       render_hook(view, "open_stepper", %{})
       html = render(view)
-      # exec = chromosome ++ plasmid → the plasmid separator is present
-      assert html =~ "── plasmid ──"
+      # exec = chromosome ++ plasmid → the lettered plasmid separator is present
+      assert html =~ "── plasmid A ──"
     end
   end
 
@@ -883,16 +883,23 @@ defmodule LeniesWeb.EditorLiveTest do
 
     test "plasmid identity is shown as a letter, not a number", %{view: view} do
       html = render(view)
-      assert html =~ "Plasmide A"
+      assert html =~ "Plasmid A"
       assert has_element?(view, "[data-plasmid-chip='0']", "A")
     end
 
+    test "plasmid opcodes are colored by opcode class, like the chromosome", %{view: view} do
+      render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "move"})
+      # The row carries the `op op-<class>` modifier that drives the colour
+      # (it was a bare `codeome-block` before, hence all-white plasmid opcodes).
+      assert has_element?(view, "li[data-plasmid-op-idx='0'].op")
+    end
+
     test "delete-plasmid uses the app's custom confirm, not native data-confirm", %{view: view} do
-      assert has_element?(view, "button.codeome-plasmid-del-btn", "Elimina plasmide")
+      assert has_element?(view, "button.codeome-plasmid-del-btn", "Delete plasmid")
 
       render_hook(view, "plasmid_remove_init", %{})
       html = render(view)
-      assert html =~ "Eliminare?"
+      assert html =~ "Delete?"
       assert html =~ "plasmid_remove_confirm"
       # still present until confirmed
       assert :sys.get_state(view.pid).socket.assigns.plasmid_buffers != []

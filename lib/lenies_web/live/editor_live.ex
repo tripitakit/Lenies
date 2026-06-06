@@ -1246,7 +1246,7 @@ defmodule LeniesWeb.EditorLive do
         </section>
 
         <section class="codeome-plasmid-pane min-h-0">
-          <div class="codeome-listing-pane-title">Plasmidi</div>
+          <div class="codeome-listing-pane-title">Codeome</div>
 
           <div class="codeome-plasmid-chips" role="tablist">
             <button
@@ -1261,7 +1261,7 @@ defmodule LeniesWeb.EditorLive do
                 @active_target == :chromosome && "codeome-tool-btn-active"
               ]}
             >
-              Cromosoma
+              Chromosome
             </button>
 
             <%= for {_plasmid, i} <- Enum.with_index(@plasmid_buffers) do %>
@@ -1283,7 +1283,7 @@ defmodule LeniesWeb.EditorLive do
             <% end %>
 
             <button type="button" phx-click="add_plasmid" class="codeome-tool-btn">
-              + Plasmide
+              + Plasmid
             </button>
           </div>
 
@@ -1291,32 +1291,35 @@ defmodule LeniesWeb.EditorLive do
             <% {:plasmid, idx} -> %>
               <% plasmid = Enum.at(@plasmid_buffers, idx, []) %>
               <div class="codeome-plasmid-head">
-                <span>Plasmide {plasmid_letter(idx)}</span>
+                <span>Plasmid {plasmid_letter(idx)}</span>
                 <span class="opacity-70">{length(plasmid)}/{Lenies.Plasmid.max_length()}</span>
                 <%= if @plasmid_remove_confirming do %>
                   <div class="codeome-plasmid-confirm">
-                    <span class="codeome-plasmid-confirm-q">Eliminare?</span>
+                    <span class="codeome-plasmid-confirm-q">Delete?</span>
                     <button
                       type="button"
                       phx-click="plasmid_remove_confirm"
                       class="codeome-confirm-btn codeome-confirm-btn-danger"
                     >
-                      Sì
+                      Yes
                     </button>
                     <button type="button" phx-click="plasmid_remove_cancel" class="codeome-confirm-btn">
-                      Annulla
+                      Cancel
                     </button>
                   </div>
                 <% else %>
                   <button type="button" phx-click="plasmid_remove_init" class="codeome-plasmid-del-btn">
-                    Elimina plasmide
+                    Delete plasmid
                   </button>
                 <% end %>
               </div>
 
               <ol class="codeome-blocks">
                 <%= for {opcode, i} <- Enum.with_index(plasmid) do %>
-                  <li class="codeome-block" data-plasmid-op-idx={i}>
+                  <li
+                    class={"codeome-block op op-" <> Atom.to_string(Disassembler.opcode_class(opcode))}
+                    data-plasmid-op-idx={i}
+                  >
                     <span class="codeome-block-idx">{i}</span>
                     <span class="codeome-block-name">{Atom.to_string(opcode) |> String.upcase()}</span>
                     <span class="codeome-block-actions">
@@ -1358,8 +1361,8 @@ defmodule LeniesWeb.EditorLive do
 
             <% :chromosome -> %>
               <p class="codeome-snippets-empty">
-                Seleziona o crea un plasmide per modificarne gli opcode. Gli inserimenti
-                dalla palette vanno nel buffer selezionato.
+                Select or create a plasmid to edit its opcodes. Palette inserts go to
+                the selected buffer.
               </p>
           <% end %>
         </section>
@@ -1662,8 +1665,8 @@ defmodule LeniesWeb.EditorLive do
   defp category_label(:hgt), do: "Horizontal Code Transfer"
   defp category_label(other), do: Atom.to_string(other)
 
-  defp target_label(:chromosome), do: "Cromosoma"
-  defp target_label({:plasmid, i}), do: "Plasmide #{plasmid_letter(i)}"
+  defp target_label(:chromosome), do: "Chromosome"
+  defp target_label({:plasmid, i}), do: "Plasmid #{plasmid_letter(i)}"
 
   # Plasmid IDENTITY is shown as a letter (A, B, C…) so it never reads as a
   # quantity — counts (e.g. the species-table "N plasmids" badge) stay numeric.

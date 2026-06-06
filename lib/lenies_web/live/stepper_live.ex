@@ -17,7 +17,7 @@ defmodule LeniesWeb.StepperLive do
     # Ensure @loops is always present; it is set in the codeome update path
     # but guard here in case of unexpected call ordering.
     socket = assign_new(socket, :loops, fn -> [] end)
-    socket = assign_new(socket, :plasmid_starts, fn -> MapSet.new() end)
+    socket = assign_new(socket, :plasmid_starts, fn -> %{} end)
     session = socket.assigns.session
 
     # `gen` is the run generation this tick belongs to. `run`/`pause`/`reset`
@@ -319,8 +319,10 @@ defmodule LeniesWeb.StepperLive do
                 </svg>
                 <ol id="stepper-codeome-list" class="stepper-codeome-list" phx-hook="StepperFollowIP">
                   <%= for {op, idx} <- Enum.with_index(Lenies.Codeome.to_list(@session.exec_codeome)) do %>
-                    <%= if MapSet.member?(@plasmid_starts, idx) do %>
-                      <li class="stepper-codeome-divider" aria-hidden="true">── plasmid ──</li>
+                    <%= if ord = Map.get(@plasmid_starts, idx) do %>
+                      <li class="stepper-codeome-divider" aria-hidden="true">
+                        ── plasmid {plasmid_letter(ord)} ──
+                      </li>
                     <% end %>
                     <li
                       class={[
@@ -487,7 +489,13 @@ defmodule LeniesWeb.StepperLive do
     socket
     |> assign(:session, session)
     |> assign(:loops, JumpTargets.loops(Lenies.Codeome.to_list(session.exec_codeome)))
-    |> assign(:plasmid_starts, MapSet.new(Lenies.Stepper.plasmid_region_starts(session)))
+    |> assign(
+      :plasmid_starts,
+      session
+      |> Lenies.Stepper.plasmid_region_starts()
+      |> Enum.with_index()
+      |> Map.new()
+    )
     |> assign(
       :grid_payload_json,
       Jason.encode!(Lenies.Stepper.World.encode_grid_payload(session.world))
@@ -542,6 +550,11 @@ defmodule LeniesWeb.StepperLive do
 
   defp parse_int(n) when is_integer(n), do: n
   defp parse_int(_), do: nil
+
+  # Plasmid identity letter (A, B, C…) — matches the editor's plasmid panel so
+  # the stepper's "── plasmid A ──" separators line up with "Plasmid A" chips.
+  defp plasmid_letter(i) when i in 0..25, do: <<?A + i>>
+  defp plasmid_letter(i), do: "##{i + 1}"
 
   # "8" when plasmid-free, "8 (6 chromo + 2 plasmid)" when carrying plasmids.
   defp codeome_size_label(session) do
