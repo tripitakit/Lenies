@@ -96,11 +96,9 @@ defmodule Lenies.Arena do
   Kills all Lenies in the Arena whose seeder_user_id matches `user.id`.
   Returns `{:ok, count_killed}`. Idempotent.
 
-  Terminates each Lenie process via `DynamicSupervisor.terminate_child/2`, then
-  posts `:lenie_died` to the World on each Lenie's behalf so the cell is freed
-  and a carcass is left — mirroring the natural death path. (Lenie doesn't
-  trap exits, so terminate/2 is bypassed by a supervisor shutdown; we send
-  the cast ourselves to keep the world consistent.)
+  Stops each Lenie via `Lenies.Lenie.apoptose/1`, which runs the Lenie's own
+  `terminate/2` with its live state — so the cell it actually occupies is freed
+  and left as a carcass, exactly like the natural death path.
   """
   @spec apoptosis(map()) :: {:ok, non_neg_integer()}
   def apoptosis(user), do: GenServer.call(__MODULE__, {:apoptosis, user})
@@ -208,28 +206,30 @@ defmodule Lenies.Arena do
     {:reply, {:ok, count}, state}
   end
 
-  # Terminate the Lenies matched by `guard` (over the standard
-  # {id, seeder_user_id($2), pos($3), energy($4), codeome_hash($5)} bindings)
-  # and replay `:lenie_died` on each one's behalf so the World/ETS state stays
-  # consistent (Lenie doesn't trap exits, so a supervisor shutdown bypasses
-  # its terminate/2). Returns the count killed.
-  defp kill_user_lenies(user_id, guard) do
+  # Stop the Lenies matched by `guard` (over the
+  # {id, seeder_user_id($2), codeome_hash($5)} bindings) via `Lenie.apoptose/1`,
+  # which runs each Lenie's terminate/2 with its live state — so the carcass
+  # lands on the cell it actually occupies and that cell is freed. Reading
+  # pos/energy from the `:lenies` ETS snapshot here would use stale values (the
+  # snapshot lags the process by up to `:snapshot_every_batches` ticks), writing
+  # the carcass on an old cell and leaving the real one showing the live colour.
+  # Returns the count killed.
+  defp kill_user_lenies(_user_id, guard) do
     case Lenies.Worlds.handle(@world_id) do
       {:ok, handle} ->
         ms = [
-          {{:"$1", %{seeder_user_id: :"$2", pos: :"$3", energy: :"$4", codeome_hash: :"$5"}}, guard,
-           [{{:"$1", :"$3", :"$4", :"$5"}}]}
+          {{:"$1", %{seeder_user_id: :"$2", codeome_hash: :"$5"}}, guard, [:"$1"]}
         ]
 
-        rows = :ets.select(handle.tables.lenies, ms)
-        sup = Lenies.LenieSupervisor.via(@world_id)
+        ids = :ets.select(handle.tables.lenies, ms)
 
-        Enum.reduce(rows, 0, fn {id, pos, energy, hash}, acc ->
+        Enum.reduce(ids, 0, fn id, acc ->
           case Registry.lookup(Lenies.Registry, {:lenie, @world_id, id}) do
             [{pid, _}] ->
-              _ = DynamicSupervisor.terminate_child(sup, pid)
-              GenServer.cast(handle.pid, {:lenie_died, id, pos, energy, hash, user_id})
-              acc + 1
+              case safe_apoptose(pid) do
+                :ok -> acc + 1
+                :error -> acc
+              end
 
             [] ->
               acc
@@ -239,6 +239,14 @@ defmodule Lenies.Arena do
       :error ->
         0
     end
+  end
+
+  # The Lenie may die naturally between our ETS select and the call; treat a
+  # vanished/dead process as already gone rather than crashing apoptosis.
+  defp safe_apoptose(pid) do
+    Lenies.Lenie.apoptose(pid)
+  catch
+    :exit, _ -> :error
   end
 
   defp broadcast_lineage_changed(user_id) do

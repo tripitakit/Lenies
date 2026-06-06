@@ -70,6 +70,18 @@ defmodule Lenies.Lenie do
   def inspect_state(pid), do: GenServer.call(pid, :inspect_state)
 
   @doc """
+  Stop this Lenie now, leaving a carcass at its **current** cell.
+
+  Used by Arena apoptosis / kill-species. Returning `{:stop, :normal, …}` runs
+  `terminate/2` with the live `state.interp`, so the carcass lands on the cell
+  the Lenie actually occupies (and frees it). A plain supervisor shutdown would
+  bypass `terminate/2` (the Lenie doesn't trap exits), forcing the caller to
+  guess the cell from the lagging `:lenies` ETS snapshot — which leaves the real
+  cell still tagged with `lenie_id` and showing the original colour.
+  """
+  def apoptose(pid), do: GenServer.call(pid, :apoptose)
+
+  @doc """
   Synchronous call invoked by another Lenie's `:conjugate` opcode. Adds
   the plasmid to this Lenie's carried list and rebuilds the execution
   stream (the chromosome and its hash are left untouched). Returns `:ok`
@@ -201,6 +213,13 @@ defmodule Lenies.Lenie do
     }
 
     {:reply, snapshot, state}
+  end
+
+  def handle_call(:apoptose, _from, state) do
+    # Stop with :normal so the supervisor (restart: :temporary) doesn't restart
+    # us and no crash is logged. Returning :stop runs terminate/2, which drops
+    # the carcass at the live position and frees the cell.
+    {:stop, :normal, :ok, state}
   end
 
   @impl true

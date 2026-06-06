@@ -504,6 +504,61 @@ defmodule Lenies.ArenaTest do
       {:ok, _} = Lenies.Arena.apoptosis(user)
       assert_receive {:arena_lineage_changed, ^user_id}, 1_000
     end
+
+    test "apoptosis carcasses each Lenie's live cell, not its stale snapshot cell" do
+      # Freeze the :lenies ETS snapshot at spawn so the live cell diverges from
+      # it — the exact condition the old apoptosis (which read pos from that
+      # snapshot) got wrong, leaving the live cell still tagged with the Lenie's
+      # id and showing its original colour instead of a carcass.
+      prev = Application.get_env(:lenies, :snapshot_every_batches)
+      Application.put_env(:lenies, :snapshot_every_batches, 1_000_000)
+
+      on_exit(fn ->
+        if prev,
+          do: Application.put_env(:lenies, :snapshot_every_batches, prev),
+          else: Application.delete_env(:lenies, :snapshot_every_batches)
+      end)
+
+      user = Lenies.AccountsFixtures.user_fixture()
+      opcodes = ["nop_1", "store", "move", "move", "move", "move", "move", "move", "move", "move"]
+
+      {:ok, codeome} =
+        Lenies.Collection.create_codeome(user, %{
+          name: "Mover",
+          color_hex: "#abcdef",
+          energy_default: 5000.0,
+          opcodes: opcodes
+        })
+
+      {:ok, :seeded} = Lenies.Arena.seed(user, codeome.id)
+      Process.sleep(150)
+
+      # Pause so the live position stops changing, then read both positions.
+      :ok = Lenies.Worlds.pause(:arena)
+      Process.sleep(50)
+
+      {:ok, handle} = Lenies.Worlds.handle(:arena)
+      [{id, snap}] = :ets.tab2list(handle.tables.lenies)
+      [{pid, _}] = Registry.lookup(Lenies.Registry, {:lenie, :arena, id})
+      live_pos = Lenies.Lenie.inspect_state(pid).pos
+
+      assert live_pos != snap.pos,
+             "precondition: Lenie should have moved away from its frozen snapshot cell"
+
+      assert {:ok, 1} = Lenies.Arena.apoptosis(user)
+      Process.sleep(50)
+
+      cells = Map.new(:ets.tab2list(handle.tables.cells))
+      live_cell = Map.fetch!(cells, live_pos)
+
+      refute live_cell.lenie_id == id,
+             "live cell still tagged with the dead Lenie's id (ghost in original colour)"
+
+      assert live_cell.carcass > 0, "expected a carcass on the Lenie's live cell"
+
+      assert live_cell.carcass_hue == Lenies.SpeciesColor.hue_byte(handle, snap.codeome_hash),
+             "carcass should carry the dead species' hue"
+    end
   end
 
   describe "crash recovery / adopt" do
