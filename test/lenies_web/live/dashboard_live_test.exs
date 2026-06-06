@@ -1116,7 +1116,8 @@ defmodule LeniesWeb.DashboardLiveTest do
       |> render_submit()
 
       html = render(view)
-      assert html =~ "Sandbox full"
+      # The flash reflects the world's actual spawn_cap (50), not a hardcoded value.
+      assert html =~ "Sandbox full: max 50 alive Lenies"
     end
   end
 end

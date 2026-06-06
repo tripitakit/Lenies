@@ -522,7 +522,8 @@ defmodule LeniesWeb.ControlsPanelComponent do
   # When World rejects a spawn for hitting the cap, relay a flash to the
   # parent LiveView (LiveComponents can't put_flash directly).
   defp maybe_flash_cap_exceeded(socket, {:error, :spawn_cap_exceeded}) do
-    send(self(), {:flash, :info, "Sandbox full: max 10 alive Lenies"})
+    cap = Lenies.Worlds.get_config(socket.assigns.world_id).spawn_cap
+    send(self(), {:flash, :info, "Sandbox full: max #{cap} alive Lenies"})
     socket
   end
 
