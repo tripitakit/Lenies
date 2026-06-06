@@ -25,7 +25,8 @@ defmodule Lenies.Stepper do
             halt_reason: nil,
             last_action: nil,
             place_seed_mode: nil,
-            initial_plasmids: []
+            initial_plasmids: [],
+            resource_seed: nil
 
   @type t :: %__MODULE__{
           codeome: Codeome.t(),
@@ -39,7 +40,8 @@ defmodule Lenies.Stepper do
           halt_reason: nil | atom,
           last_action: nil | map,
           place_seed_mode: nil | map,
-          initial_plasmids: [Lenies.Plasmid.t()]
+          initial_plasmids: [Lenies.Plasmid.t()],
+          resource_seed: nil | integer
         }
 
   @spec start_session(Codeome.t(), keyword) :: t()
@@ -70,14 +72,20 @@ defmodule Lenies.Stepper do
       plasmids: plasmids
     }
 
-    {:ok, world} = World.new() |> World.place_lenie(@debug_id, debug_lenie)
+    resource_seed = Keyword.get(opts, :resource_seed, :rand.uniform(2_147_483_647))
+
+    {:ok, world} =
+      World.new()
+      |> World.seed_resources(resource_seed)
+      |> World.place_lenie(@debug_id, debug_lenie)
 
     %__MODULE__{
       codeome: codeome,
       exec_codeome: Lenie.build_exec_codeome(codeome, plasmids),
       interp: interp,
       world: world,
-      initial_plasmids: plasmids
+      initial_plasmids: plasmids,
+      resource_seed: resource_seed
     }
   end
 
@@ -221,7 +229,11 @@ defmodule Lenies.Stepper do
       session.world.lenies
       |> Enum.filter(fn {_id, l} -> l.kind == :seed end)
 
-    fresh = start_session(session.codeome, plasmids: session.initial_plasmids)
+    fresh =
+      start_session(session.codeome,
+        plasmids: session.initial_plasmids,
+        resource_seed: session.resource_seed
+      )
 
     new_world =
       Enum.reduce(seeds, fresh.world, fn {id, seed}, acc ->

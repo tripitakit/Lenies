@@ -279,6 +279,39 @@ defmodule Lenies.StepperTest do
     end
   end
 
+  describe "baseline resources" do
+    test "start_session seeds the mini-world with resources in 15..45" do
+      codeome = Codeome.from_list([:push1])
+      session = Stepper.start_session(codeome, [])
+
+      values = for {_pos, cell} <- session.world.cells, do: cell.resource
+      assert Enum.all?(values, &(&1 >= 15 and &1 <= 45))
+      assert Enum.any?(values, &(&1 > 0))
+    end
+
+    test "an explicit resource_seed is reproducible" do
+      codeome = Codeome.from_list([:push1])
+      a = Stepper.start_session(codeome, resource_seed: 999)
+      b = Stepper.start_session(codeome, resource_seed: 999)
+
+      assert a.world.cells == b.world.cells
+      assert a.resource_seed == 999
+    end
+
+    test "reset reproduces the identical resource distribution" do
+      codeome = Codeome.from_list([:push1])
+      session = Stepper.start_session(codeome, resource_seed: 555)
+
+      reset = Stepper.reset(session)
+
+      resources_of = fn s ->
+        for {pos, cell} <- s.world.cells, into: %{}, do: {pos, cell.resource}
+      end
+
+      assert resources_of.(reset) == resources_of.(session)
+    end
+  end
+
   describe "exec_codeome (extra-chromosomal)" do
     test "with no plasmids exec_codeome matches the chromosome size" do
       codeome = Codeome.from_list([:nop_0, :nop_1, :nop_1])
