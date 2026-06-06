@@ -167,7 +167,7 @@ defmodule LeniesWeb.DashboardLiveTest do
 
     {:ok, _view, html} = live(conn, ~p"/sandbox")
 
-    assert html =~ "+ 2 plasmids"
+    assert html =~ "2 plasmids"
   end
 
   test "species table shows a min–max range when members carry different plasmid loads",

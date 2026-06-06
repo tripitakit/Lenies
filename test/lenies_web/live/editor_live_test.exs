@@ -828,6 +828,28 @@ defmodule LeniesWeb.EditorLiveTest do
       assert :sys.get_state(view.pid).socket.assigns.plasmid_buffers == []
       assert :sys.get_state(view.pid).socket.assigns.active_target == :chromosome
     end
+
+    test "editing a live species member preloads its carried plasmids", %{
+      conn: conn,
+      handle: handle
+    } do
+      # A species member's carried plasmids live in its :lenies ETS snapshot;
+      # the :edit route must surface them in the panel (issue: "+ N plasmids"
+      # species were opening with an empty plasmid panel).
+      :ets.insert(
+        handle.tables.lenies,
+        {"withp",
+         %{
+           id: "withp",
+           codeome_hash: "EDIT-PLASMID-SP",
+           lineage: {nil, 0},
+           plasmids: [Lenies.Plasmid.new([:nop_1])]
+         }}
+      )
+
+      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/edit/EDIT-PLASMID-SP")
+      assert :sys.get_state(view.pid).socket.assigns.plasmid_buffers == [[:nop_1]]
+    end
   end
 
   describe "insert routing via active target" do
@@ -859,6 +881,23 @@ defmodule LeniesWeb.EditorLiveTest do
       %{view: view}
     end
 
+    test "plasmid identity is shown as a letter, not a number", %{view: view} do
+      html = render(view)
+      assert html =~ "Plasmide A"
+      assert has_element?(view, "[data-plasmid-chip='0']", "A")
+    end
+
+    test "delete-plasmid uses the app's custom confirm, not native data-confirm", %{view: view} do
+      assert has_element?(view, "button.codeome-plasmid-del-btn", "Elimina plasmide")
+
+      render_hook(view, "plasmid_remove_init", %{})
+      html = render(view)
+      assert html =~ "Eliminare?"
+      assert html =~ "plasmid_remove_confirm"
+      # still present until confirmed
+      assert :sys.get_state(view.pid).socket.assigns.plasmid_buffers != []
+    end
+
     test "delete removes an opcode from the active plasmid", %{view: view} do
       for op <- ["nop_1", "move", "eat"],
           do: render_hook(view, "edit_insert", %{"index" => 0, "opcode" => op})
@@ -875,11 +914,32 @@ defmodule LeniesWeb.EditorLiveTest do
       assert :sys.get_state(view.pid).socket.assigns.plasmid_buffers == [[:move, :nop_1]]
     end
 
-    test "remove deletes the active plasmid and resets target to chromosome", %{view: view} do
-      render_hook(view, "plasmid_remove", %{})
+    test "remove (init → confirm) deletes the active plasmid and resets target", %{view: view} do
+      # Destructive remove is a custom two-step confirm, not native data-confirm.
+      render_hook(view, "plasmid_remove_init", %{})
+      assert :sys.get_state(view.pid).socket.assigns.plasmid_remove_confirming == true
+
+      render_hook(view, "plasmid_remove_confirm", %{})
       state = :sys.get_state(view.pid).socket.assigns
       assert state.plasmid_buffers == []
       assert state.active_target == :chromosome
+      assert state.plasmid_remove_confirming == false
+    end
+
+    test "remove cancel keeps the plasmid and closes the confirm", %{view: view} do
+      render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "nop_1"})
+      render_hook(view, "plasmid_remove_init", %{})
+      render_hook(view, "plasmid_remove_cancel", %{})
+      state = :sys.get_state(view.pid).socket.assigns
+      assert state.plasmid_buffers == [[:nop_1]]
+      assert state.active_target == {:plasmid, 0}
+      assert state.plasmid_remove_confirming == false
+    end
+
+    test "switching target dismisses a pending remove confirm", %{view: view} do
+      render_hook(view, "plasmid_remove_init", %{})
+      render_hook(view, "set_target", %{"target" => "chromosome"})
+      refute :sys.get_state(view.pid).socket.assigns.plasmid_remove_confirming
     end
 
     test "insert past the cap is a no-op", %{view: view} do

@@ -72,6 +72,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:inline_edit_error, nil)
       |> assign(:jump_targets, LeniesWeb.JumpTargets.targets(buffer))
       |> assign(:show_stepper, false)
+      |> assign(:plasmid_remove_confirming, false)
 
     {:ok, socket}
   end
@@ -81,20 +82,26 @@ defmodule LeniesWeb.EditorLive do
   end
 
   defp init_for_route(:edit, %{"hash" => hash}, world_id, handle, _scope) do
-    buffer =
+    {buffer, plasmid_buffers} =
       case Lenies.Species.for_hash(handle, hash) do
-        [{sample_id, _} | _] ->
-          case safe_get_codeome(world_id, sample_id) do
-            {:ok, codeome} -> Lenies.Codeome.to_list(codeome)
-            _ -> []
-          end
+        [{sample_id, snap} | _] ->
+          chromosome =
+            case safe_get_codeome(world_id, sample_id) do
+              {:ok, codeome} -> Lenies.Codeome.to_list(codeome)
+              _ -> []
+            end
+
+          # The sample member's carried plasmids ride in its ETS snapshot as
+          # `%Lenies.Plasmid{}` structs; load them so the panel shows the whole
+          # organism the species-table badge advertises ("+ N plasmids").
+          plasmids = snap |> Map.get(:plasmids, []) |> Enum.map(& &1.opcodes)
+          {chromosome, plasmids}
 
         [] ->
-          []
+          {[], []}
       end
 
-    # Plasmids of a live Lenie are out of scope for this editor route.
-    {:edit, hash, buffer, []}
+    {:edit, hash, buffer, plasmid_buffers}
   end
 
   # Custom seed: "custom:<id>" — scoped to the current user.
@@ -377,7 +384,7 @@ defmodule LeniesWeb.EditorLive do
   end
 
   def handle_event("set_target", %{"target" => "chromosome"}, socket) do
-    {:noreply, assign(socket, :active_target, :chromosome)}
+    {:noreply, assign(socket, active_target: :chromosome, plasmid_remove_confirming: false)}
   end
 
   def handle_event("set_target", %{"target" => "plasmid", "index" => idx}, socket) do
@@ -388,7 +395,7 @@ defmodule LeniesWeb.EditorLive do
         do: {:plasmid, i},
         else: :chromosome
 
-    {:noreply, assign(socket, :active_target, target)}
+    {:noreply, assign(socket, active_target: target, plasmid_remove_confirming: false)}
   end
 
   def handle_event("add_plasmid", _params, socket) do
@@ -399,6 +406,7 @@ defmodule LeniesWeb.EditorLive do
      socket
      |> assign(:plasmid_buffers, new_plasmids)
      |> assign(:active_target, {:plasmid, new_idx})
+     |> assign(:plasmid_remove_confirming, false)
      |> assign_dirty()}
   end
 
@@ -410,7 +418,21 @@ defmodule LeniesWeb.EditorLive do
     {:noreply, update_active_plasmid(socket, &CodeomeBuffer.move(&1, to_int(from), to_int(to)))}
   end
 
-  def handle_event("plasmid_remove", _params, socket) do
+  # Removing a plasmid is destructive, so it goes through the app's custom
+  # two-step confirm (mirrors Sterilize/Kill/Apoptosis) instead of the browser's
+  # native `data-confirm` dialog.
+  def handle_event("plasmid_remove_init", _params, socket) do
+    case socket.assigns.active_target do
+      {:plasmid, _idx} -> {:noreply, assign(socket, :plasmid_remove_confirming, true)}
+      _ -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("plasmid_remove_cancel", _params, socket) do
+    {:noreply, assign(socket, :plasmid_remove_confirming, false)}
+  end
+
+  def handle_event("plasmid_remove_confirm", _params, socket) do
     case socket.assigns.active_target do
       {:plasmid, idx} ->
         new_plasmids = List.delete_at(socket.assigns.plasmid_buffers, idx)
@@ -418,10 +440,11 @@ defmodule LeniesWeb.EditorLive do
         {:noreply,
          socket
          |> commit_plasmid_change(new_plasmids)
-         |> assign(:active_target, :chromosome)}
+         |> assign(:active_target, :chromosome)
+         |> assign(:plasmid_remove_confirming, false)}
 
       _ ->
-        {:noreply, socket}
+        {:noreply, assign(socket, :plasmid_remove_confirming, false)}
     end
   end
 
@@ -1255,7 +1278,7 @@ defmodule LeniesWeb.EditorLive do
                   @active_target == {:plasmid, i} && "codeome-tool-btn-active"
                 ]}
               >
-                P{i + 1}
+                {plasmid_letter(i)}
               </button>
             <% end %>
 
@@ -1268,16 +1291,27 @@ defmodule LeniesWeb.EditorLive do
             <% {:plasmid, idx} -> %>
               <% plasmid = Enum.at(@plasmid_buffers, idx, []) %>
               <div class="codeome-plasmid-head">
-                <span>P{idx + 1}</span>
+                <span>Plasmide {plasmid_letter(idx)}</span>
                 <span class="opacity-70">{length(plasmid)}/{Lenies.Plasmid.max_length()}</span>
-                <button
-                  type="button"
-                  phx-click="plasmid_remove"
-                  class="codeome-action-btn"
-                  data-confirm="Eliminare questo plasmide?"
-                >
-                  Elimina plasmide
-                </button>
+                <%= if @plasmid_remove_confirming do %>
+                  <div class="codeome-plasmid-confirm">
+                    <span class="codeome-plasmid-confirm-q">Eliminare?</span>
+                    <button
+                      type="button"
+                      phx-click="plasmid_remove_confirm"
+                      class="codeome-confirm-btn codeome-confirm-btn-danger"
+                    >
+                      Sì
+                    </button>
+                    <button type="button" phx-click="plasmid_remove_cancel" class="codeome-confirm-btn">
+                      Annulla
+                    </button>
+                  </div>
+                <% else %>
+                  <button type="button" phx-click="plasmid_remove_init" class="codeome-plasmid-del-btn">
+                    Elimina plasmide
+                  </button>
+                <% end %>
               </div>
 
               <ol class="codeome-blocks">
@@ -1629,5 +1663,11 @@ defmodule LeniesWeb.EditorLive do
   defp category_label(other), do: Atom.to_string(other)
 
   defp target_label(:chromosome), do: "Cromosoma"
-  defp target_label({:plasmid, i}), do: "P#{i + 1}"
+  defp target_label({:plasmid, i}), do: "Plasmide #{plasmid_letter(i)}"
+
+  # Plasmid IDENTITY is shown as a letter (A, B, C…) so it never reads as a
+  # quantity — counts (e.g. the species-table "N plasmids" badge) stay numeric.
+  # Beyond 26 plasmids (never realistic) we fall back to a 1-based number.
+  defp plasmid_letter(i) when i in 0..25, do: <<?A + i>>
+  defp plasmid_letter(i), do: "##{i + 1}"
 end

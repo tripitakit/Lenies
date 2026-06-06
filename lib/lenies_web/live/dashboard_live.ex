@@ -319,7 +319,8 @@ defmodule LeniesWeb.DashboardLive do
                           {format_seed_origin(sp)}<span
                             :if={sp.plasmid_max > 0}
                             class="ml-1 text-[9px] text-yellow-300/80"
-                          >+ {plasmid_badge(sp.plasmid_min, sp.plasmid_max)}</span>
+                            title="Carried plasmid count across living members"
+                          >· {plasmid_badge(sp.plasmid_min, sp.plasmid_max)}</span>
                         </td>
                         <td class="text-right pl-3 whitespace-nowrap">{sp.size}</td>
                         <td class="text-right pl-3 whitespace-nowrap text-rose-300">
