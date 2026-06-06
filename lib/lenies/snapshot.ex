@@ -59,6 +59,12 @@ defmodule Lenies.Snapshot do
   # table can compute size/cost/max_gain on the first render after restore.
   @species_codeomes_sidecar "species_codeomes.bin"
 
+  # Per-world tuning config (`%Lenies.World.Config{}`) sidecar. Not an ETS
+  # table — it lives in the World GenServer state — so it rides alongside the
+  # ETS snapshot as a term-encoded map. Optional/best-effort: a legacy snapshot
+  # without it restores with the world's current (default) config.
+  @config_sidecar "config.bin"
+
   # \A and \z anchor to the very start/end of the string (unlike ^ and $
   # which PCRE allows to match before a trailing newline), preventing names
   # like "foo\n" from slipping through the validation.
@@ -76,13 +82,33 @@ defmodule Lenies.Snapshot do
   only after all temp writes succeed. Returns `:ok`, `{:error, :invalid_name}`,
   or `{:error, {table, reason}}` / `{:error, :io_error}` on failure.
   """
-  @spec save(Lenies.WorldHandle.t(), String.t()) ::
+  @spec save(Lenies.WorldHandle.t(), String.t(), Lenies.World.Config.t() | nil) ::
           :ok | {:error, :invalid_name | :io_error | {atom(), term()}}
-  def save(%Lenies.WorldHandle{} = handle, name) do
+  def save(%Lenies.WorldHandle{} = handle, name, config \\ nil) do
     with :ok <- validate_name(name) do
       dir = snapshot_dir(handle.id, name)
-      do_save(handle, dir)
+      do_save(handle, dir, config)
     end
+  end
+
+  @doc """
+  Load the per-world tuning config sidecar saved by `save/3`. Returns
+  `{:ok, config_map}` (a plain map of the `%Lenies.World.Config{}` fields) or
+  `:none` when absent/unreadable (legacy snapshot or best-effort failure).
+  """
+  @spec load_config(term(), String.t()) :: {:ok, map()} | :none
+  def load_config(world_id, name) do
+    path = Path.join(snapshot_dir(world_id, name), @config_sidecar)
+
+    with true <- File.exists?(path),
+         {:ok, content} <- File.read(path),
+         term when is_map(term) <- :erlang.binary_to_term(content, [:safe]) do
+      {:ok, term}
+    else
+      _ -> :none
+    end
+  rescue
+    _ -> :none
   end
 
   @doc """
@@ -249,7 +275,7 @@ defmodule Lenies.Snapshot do
   defp tab_path(dir, table), do: Path.join(dir, "#{table}.tab")
   defp tmp_path(dir, table), do: tab_path(dir, table) <> ".tmp"
 
-  defp do_save(handle, dir) do
+  defp do_save(handle, dir, config) do
     File.mkdir_p!(dir)
 
     write_result =
@@ -274,6 +300,7 @@ defmodule Lenies.Snapshot do
         # embedded in the snap (which Lenie.maybe_write_snapshot/1 does
         # since 2026-06-01) OR the cache is otherwise populated.
         _ = save_species_codeomes_sidecar(handle, dir)
+        _ = save_config_sidecar(dir, config)
 
         :ok
 
@@ -287,6 +314,21 @@ defmodule Lenies.Snapshot do
     e in [File.Error, File.RenameError] ->
       _ = e
       {:error, :io_error}
+  end
+
+  defp save_config_sidecar(_dir, nil), do: :ok
+
+  defp save_config_sidecar(dir, %Lenies.World.Config{} = config) do
+    # Store as a plain map (not the struct) so `binary_to_term(:safe)` on the
+    # read side never needs to materialise a struct from a tag it might not
+    # recognise; the load side merges it back over a fresh Config.
+    path = Path.join(dir, @config_sidecar)
+    tmp = path <> ".tmp"
+    File.write!(tmp, :erlang.term_to_binary(Map.from_struct(config)))
+    File.rename!(tmp, path)
+    :ok
+  rescue
+    _ -> :ok
   end
 
   defp save_species_codeomes_sidecar(handle, dir) do

@@ -298,6 +298,32 @@ defmodule Lenies.SandboxesTest do
     end
 
     @tag :tmp_dir
+    test "tuning settings survive disconnect → grace stop → reconnect", %{tmp_dir: tmp} do
+      Application.put_env(:lenies, :snapshot_root, tmp)
+      on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)
+
+      user_id = unique_user_id()
+      world_id = {:sandbox, user_id}
+      on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
+
+      # 1) Connect and tune two parameters away from their defaults.
+      :ok = Lenies.Sandboxes.attach(user_id)
+      :ok = Lenies.Worlds.tune(world_id, :eat_amount, 77)
+      :ok = Lenies.Worlds.tune(world_id, :tick_interval_ms, 999)
+
+      # 2) Disconnect → grace fires → world auto-saves (incl. config) + stops.
+      :ok = Lenies.Sandboxes.detach(user_id)
+      Process.sleep(1_000)
+      refute Lenies.Worlds.alive?(world_id)
+
+      # 3) Reconnect → restore must re-apply the tuned config.
+      :ok = Lenies.Sandboxes.attach(user_id)
+      config = Lenies.Worlds.get_config(world_id)
+      assert config.eat_amount == 77
+      assert config.tick_interval_ms == 999
+    end
+
+    @tag :tmp_dir
     test "first attach with NO auto snapshot starts an empty world", %{tmp_dir: tmp} do
       Application.put_env(:lenies, :snapshot_root, tmp)
       on_exit(fn -> Application.delete_env(:lenies, :snapshot_root) end)

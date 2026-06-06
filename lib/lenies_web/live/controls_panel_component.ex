@@ -84,6 +84,26 @@ defmodule LeniesWeb.ControlsPanelComponent do
           assign(socket, :paused?, paused?)
       end
 
+    # Mirror the world's LIVE tuning config so the sliders reflect the actual
+    # per-world settings rather than the global app-env defaults. Without this
+    # the sliders snap back to defaults after navigating away and back (the
+    # values live in the world's state.config, not in Application env).
+    socket =
+      case socket.assigns[:world_id] do
+        nil ->
+          assign_new(socket, :tune_config, fn -> Lenies.World.Config.defaults() end)
+
+        world_id ->
+          config =
+            try do
+              Lenies.Worlds.get_config(world_id)
+            catch
+              :exit, _ -> socket.assigns[:tune_config] || Lenies.World.Config.defaults()
+            end
+
+          assign(socket, :tune_config, config)
+      end
+
     # Default the selected seed to the first builtin seed on first render;
     # preserve the existing selection on subsequent re-renders.
     socket =
@@ -330,7 +350,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
                     id={"val-#{p.key}"}
                     class="text-cyan-300 font-bold tabular-nums ml-2 shrink-0"
                   >
-                    {Application.get_env(:lenies, p.key, p.min)}
+                    {Map.get(@tune_config, p.key, p.min)}
                   </span>
                 </div>
                 <input
@@ -340,7 +360,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
                   min={p.min}
                   max={p.max}
                   step={p.step}
-                  value={Application.get_env(:lenies, p.key, p.min)}
+                  value={Map.get(@tune_config, p.key, p.min)}
                   phx-hook="SliderValue"
                   data-value-target={"val-#{Atom.to_string(p.key)}"}
                   phx-debounce="100"

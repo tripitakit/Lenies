@@ -133,6 +133,7 @@ defmodule Lenies.Worlds do
   def pause(target), do: call(target, :pause)
   def resume(target), do: call(target, :resume)
   def paused?(target), do: call(target, :paused?)
+  def get_config(target), do: call(target, :get_config)
   def snapshot_stats(target), do: call(target, :snapshot_stats)
 
   @doc "Force a single synchronous tick in `target` (deterministic tests)."

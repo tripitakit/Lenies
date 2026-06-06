@@ -33,6 +33,20 @@ defmodule LeniesWeb.DashboardLiveTest do
     assert Lenies.Worlds.alive?(world_id)
   end
 
+  test "tuning sliders reflect the world's LIVE config, not app-env defaults", %{
+    conn: conn,
+    world_id: world_id
+  } do
+    # Default eat_amount is 20; tune the live world to a distinctive value.
+    :ok = Lenies.Worlds.tune(world_id, :eat_amount, 77)
+
+    {:ok, view, _html} = live(conn, ~p"/sandbox")
+
+    # The slider's value readout must show the world's current config (77),
+    # not the global Application default — this is the navigation-persistence fix.
+    assert has_element?(view, "#val-eat_amount", "77")
+  end
+
   test "mounts on /sandbox and renders dashboard panels", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/sandbox")
 

@@ -197,7 +197,7 @@ defmodule Lenies.World do
   end
 
   def handle_call({:save_snapshot, name}, _from, state) do
-    result = Lenies.Snapshot.save(state.handle, name)
+    result = Lenies.Snapshot.save(state.handle, name, state.config)
     {:reply, result, state}
   end
 
@@ -223,10 +223,20 @@ defmodule Lenies.World do
           "World #{inspect(state.world_id)} restored from snapshot \"#{name}\" — respawned #{respawned} Lenies"
         )
 
+        # Restore the per-world tuning config from its sidecar so the user's
+        # tunables survive a stop/restore (disconnect/reconnect, arena round-trip
+        # past the grace window). Legacy snapshots without the sidecar keep the
+        # world's current config.
+        restored_config =
+          case Lenies.Snapshot.load_config(state.world_id, name) do
+            {:ok, cfg_map} -> Lenies.World.Config.merge(state.config, cfg_map)
+            :none -> state.config
+          end
+
         # Bulk reload bypassed put_cell/4 — rebuild indices from the loaded
         # cells and publish the occupancy snapshot so the restored lenies appear
         # on the canvas without waiting for a tick (restore can run while paused).
-        new_state = reseed_indices(state)
+        new_state = reseed_indices(%{state | config: restored_config})
 
         # Stats payload: gives Telemetry + Dashboards everything they
         # need to refresh `:latest` without waiting for the next tick.
@@ -268,6 +278,10 @@ defmodule Lenies.World do
 
   def handle_call(:paused?, _from, state) do
     {:reply, state.paused?, state}
+  end
+
+  def handle_call(:get_config, _from, state) do
+    {:reply, state.config, state}
   end
 
   def handle_call({:tune, key, value}, _from, state) do
