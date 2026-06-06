@@ -312,6 +312,29 @@ defmodule Lenies.StepperTest do
     end
   end
 
+  describe "debug Lenie direction sync" do
+    test "world debug Lenie dir follows interp.dir after a turn" do
+      codeome = Codeome.from_list([:turn_right])
+      session = Stepper.start_session(codeome, [])
+      assert session.world.lenies["debug"].dir == :n
+
+      {:ok, session} = Stepper.step(session)
+
+      assert session.world.lenies["debug"].dir == session.interp.dir
+      refute session.interp.dir == :n
+    end
+
+    test "encode_grid_payload reflects the synced dir" do
+      codeome = Codeome.from_list([:turn_right])
+      session = Stepper.start_session(codeome, [])
+      {:ok, session} = Stepper.step(session)
+
+      payload = Lenies.Stepper.World.encode_grid_payload(session.world)
+      debug = Enum.find(payload.lenies, &(&1.kind == :debug))
+      assert debug.dir == session.interp.dir
+    end
+  end
+
   describe "exec_codeome (extra-chromosomal)" do
     test "with no plasmids exec_codeome matches the chromosome size" do
       codeome = Codeome.from_list([:nop_0, :nop_1, :nop_1])

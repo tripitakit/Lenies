@@ -123,6 +123,7 @@ defmodule Lenies.Stepper do
            session
            | interp: new_interp,
              exec_codeome: rebuilt_exec(session, new_interp),
+             world: sync_debug_lenie(session.world, new_interp),
              history: new_history,
              step_count: session.step_count + 1,
              status: :ready
@@ -137,7 +138,7 @@ defmodule Lenies.Stepper do
            session
            | interp: resolved_interp,
              exec_codeome: rebuilt_exec(session, resolved_interp),
-             world: new_world,
+             world: sync_debug_lenie(new_world, resolved_interp),
              history: new_history,
              step_count: session.step_count + 1,
              status: :ready
@@ -165,6 +166,20 @@ defmodule Lenies.Stepper do
       session.exec_codeome
     else
       Lenie.build_exec_codeome(session.codeome, new_interp.plasmids)
+    end
+  end
+
+  # Keep the debug Lenie's world record (dir + pos) aligned with the interpreter
+  # so the minimap renders the *current* facing. `:move` already syncs pos; this
+  # also propagates `turn` (dir), which arrives via the :cont branch that never
+  # otherwise touches the world.
+  defp sync_debug_lenie(%World{lenies: lenies} = world, interp) do
+    case Map.get(lenies, @debug_id) do
+      nil ->
+        world
+
+      rec ->
+        %{world | lenies: Map.put(lenies, @debug_id, %{rec | dir: interp.dir, pos: interp.pos})}
     end
   end
 
