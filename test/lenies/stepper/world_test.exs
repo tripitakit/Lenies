@@ -437,6 +437,33 @@ defmodule Lenies.Stepper.WorldTest do
       assert length(w2.child_slots["debug"].buffer) == 10
     end
 
+    test ":allocate with an out-of-bounds size pushes 0 and creates no slot (no crash)", %{
+      world: w,
+      interp: i
+    } do
+      # A mutated/evolved codeome can pop a negative, zero, or huge value as the
+      # requested size. The live world guards this (Config.codeome_length_bounds
+      # → :invalid_size); the stepper must too, otherwise List.duplicate/2 raised
+      # on negative sizes and crashed the whole stepper mid-RUN.
+      {:ok, w1} =
+        World.place_lenie(w, "debug", %{
+          codeome: %Lenies.Codeome{},
+          pos: {5, 5},
+          dir: :n,
+          energy: 1000.0,
+          kind: :debug,
+          plasmids: []
+        })
+
+      {min_size, max_size} = Lenies.Config.codeome_length_bounds()
+
+      for bad <- [-3, 0, min_size - 1, max_size + 1] do
+        {:ok, w2, i2} = World.apply_action({:allocate, bad, {5, 5}, :n}, w1, i, "debug")
+        assert i2.stack == [0], "size #{bad} should push 0 (failure)"
+        refute Map.has_key?(w2.child_slots, "debug"), "size #{bad} should not create a slot"
+      end
+    end
+
     test ":allocate refuses if all neighbour cells are blocked", %{world: w, interp: i} do
       {:ok, w1} =
         World.place_lenie(w, "debug", %{
