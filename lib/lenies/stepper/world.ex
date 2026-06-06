@@ -140,10 +140,16 @@ defmodule Lenies.Stepper.World do
       %{lenie_id: target_id} when is_binary(target_id) ->
         damage = Application.get_env(:lenies, :attack_damage, 10)
         target = world.lenies[target_id]
+
+        # Mirror the live world: reward the attacker with exactly what the
+        # victim loses (never more than it had); drive energy below zero with
+        # the full damage to decide lethality.
+        actual = min(damage, max(target.energy, 0))
         new_energy = target.energy - damage
+        new_interp = %{interp | energy: interp.energy + actual}
 
         if new_energy <= 0 do
-          carcass_value = max(0, trunc(target.energy * 0.5))
+          carcass_value = max(0, trunc(new_energy * 0.5))
 
           new_cells =
             Map.update!(world.cells, front, fn c ->
@@ -151,10 +157,10 @@ defmodule Lenies.Stepper.World do
             end)
 
           new_lenies = Map.delete(world.lenies, target_id)
-          {:ok, %{world | cells: new_cells, lenies: new_lenies}, interp}
+          {:ok, %{world | cells: new_cells, lenies: new_lenies}, new_interp}
         else
           new_lenies = Map.update!(world.lenies, target_id, fn t -> %{t | energy: new_energy} end)
-          {:ok, %{world | lenies: new_lenies}, interp}
+          {:ok, %{world | lenies: new_lenies}, new_interp}
         end
 
       _ ->

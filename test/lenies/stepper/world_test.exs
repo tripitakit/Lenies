@@ -2,6 +2,7 @@ defmodule Lenies.Stepper.WorldTest do
   use ExUnit.Case, async: true
 
   alias Lenies.Stepper.World
+  alias Lenies.Interpreter.State
 
   describe "new/0" do
     test "returns a 64×64 world with all empty cells and no Lenies" do
@@ -372,7 +373,10 @@ defmodule Lenies.Stepper.WorldTest do
 
       refute Map.has_key?(w3.lenies, "seed-1")
       assert w3.cells[{6, 5}].lenie_id == nil
-      assert w3.cells[{6, 5}].carcass > 0
+      # carcass is computed from post-hit energy (new semantics: carcass-at-death)
+      damage = Application.get_env(:lenies, :attack_damage, 10)
+      post_hit = 5.0 - damage
+      assert w3.cells[{6, 5}].carcass == max(0, trunc(post_hit * 0.5))
     end
 
     test ":defend is a no-op on the world state", %{world: w, interp: i} do
@@ -687,6 +691,59 @@ defmodule Lenies.Stepper.WorldTest do
       assert cell.carcass == 0
       assert cell.carcass_hue == 0
       assert cell.lenie_id == nil
+    end
+  end
+
+  defp world_with_target(target_energy) do
+    # attacker (debug) at {32,32} facing :e; target seed at {33,32}
+    {:ok, world} =
+      World.new()
+      |> World.place_lenie("debug", %{
+        codeome: %Lenies.Codeome{}, pos: {32, 32}, dir: :e,
+        energy: 1000.0, kind: :debug, plasmids: []
+      })
+
+    {:ok, world} =
+      World.place_lenie(world, "victim", %{
+        codeome: %Lenies.Codeome{}, pos: {33, 32}, dir: :n,
+        energy: target_energy, kind: :seed, plasmids: []
+      })
+
+    world
+  end
+
+  defp attacker_interp do
+    %State{ip: 0, stack: [], slots: %{0 => 0, 1 => 0, 2 => 0, 3 => 0},
+            call_stack: [], age: 0, energy: 1000.0, pos: {32, 32}, dir: :e, plasmids: []}
+  end
+
+  describe "apply_action :attack reward" do
+    test "non-lethal hit: attacker gains exactly what victim loses" do
+      world = world_with_target(100)
+      interp = attacker_interp()
+
+      {:ok, new_world, new_interp} =
+        World.apply_action({:attack, {32, 32}, :e}, world, interp, "debug")
+
+      damage = Application.get_env(:lenies, :attack_damage, 10)
+      assert new_world.lenies["victim"].energy == 100 - damage
+      assert new_interp.energy == 1000.0 + damage
+    end
+
+    test "lethal hit: victim removed, carcass from post-hit energy, capped reward" do
+      damage = Application.get_env(:lenies, :attack_damage, 10)
+      world = world_with_target(damage - 1)
+      interp = attacker_interp()
+
+      {:ok, new_world, new_interp} =
+        World.apply_action({:attack, {32, 32}, :e}, world, interp, "debug")
+
+      refute Map.has_key?(new_world.lenies, "victim")
+      new_energy = (damage - 1) - damage
+      assert new_world.cells[{33, 32}].carcass == max(0, trunc(new_energy * 0.5))
+      assert new_world.cells[{33, 32}].lenie_id == nil
+      # reward is capped at what the victim actually had
+      assert new_interp.energy == 1000.0 + (damage - 1)
     end
   end
 
