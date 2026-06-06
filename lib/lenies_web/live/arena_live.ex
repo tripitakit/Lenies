@@ -573,7 +573,8 @@ defmodule LeniesWeb.ArenaLive do
 
     with %{user: %{} = user} <- scope,
          h when is_binary(h) <- hash,
-         %{} = snap <- pick_max_plasmid_member(Lenies.Species.for_hash(handle, h)) do
+         own_members = own_species_members(Lenies.Species.for_hash(handle, h), user.id),
+         %{} = snap <- pick_max_plasmid_member(own_members) do
       attrs = %{
         name: name,
         color_hex: SpeciesColor.hex(handle, h),
@@ -847,6 +848,14 @@ defmodule LeniesWeb.ArenaLive do
       Enum.max_by(members, fn {_id, snap} -> length(Map.get(snap, :plasmids, [])) end)
 
     snap
+  end
+
+  # Keep only the snapshots seeded by `user_id`. SAVE captures the user's own
+  # evolved member, never another seeder's — two users can seed an identical
+  # codeome (same hash), so `Species.for_hash/2` alone is not ownership-scoped.
+  # Mirrors `Lenies.Arena.kill_species`, which is likewise per-user scoped.
+  defp own_species_members(members, user_id) do
+    Enum.filter(members, fn {_id, snap} -> Map.get(snap, :seeder_user_id) == user_id end)
   end
 
   defp sort_key_fun(:seed), do: fn sp -> sp |> format_seed_origin() |> String.downcase() end
