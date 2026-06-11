@@ -968,248 +968,21 @@ defmodule LeniesWeb.EditorLive do
       class="lenies-dashboard codeome-editor-page h-full w-full overflow-hidden"
     >
       <Layouts.flash_group flash={@flash} />
-      <header class="codeome-editor-page-header">
-        <.link
-          navigate={~p"/sandbox"}
-          class="text-xs px-2 py-0.5 border border-cyan-500/40 hover:bg-cyan-500/10"
-        >
-          ← Back
-        </.link>
-        <h1 class="text-sm flex-1">
-          <%= if @mode == :new_seed do %>
-            New Seed
-          <% else %>
-            Edit: {String.slice(@selected_hash || "", 0..15)}…
-          <% end %>
-        </h1>
-
-        <span class="text-[10px]">
-          <%= case @validation do %>
-            <% {:ok, info} -> %>
-              <span class="text-emerald-300">✓ valid</span>
-              <span class="opacity-60">({info.len} ops, {info.non_nops} non-nop)</span>
-            <% {:error, errors} -> %>
-              <span class="text-amber-300">⚠</span>
-              <span class="opacity-80">
-                {Enum.map_join(errors, ", ", &format_validation_error/1)}
-              </span>
-          <% end %>
-        </span>
-
-        <%= if @dirty do %>
-          <span class="text-amber-300 text-[10px]">●dirty</span>
-        <% end %>
-
-        <% valid? = match?({:ok, _}, @validation) %>
-        <div
-          class="editor-transport flex items-center gap-1"
-          role="group"
-          aria-label="Debug transport"
-        >
-          <button
-            type="button"
-            phx-click="stepper_reset"
-            disabled={is_nil(@session)}
-            class="stepper-btn"
-            title="Reset (step 0)"
-          >
-            ⏮
-          </button>
-          <button
-            type="button"
-            phx-click="stepper_step_back"
-            disabled={is_nil(@session)}
-            class="stepper-btn"
-            title="Step back"
-          >
-            ⬅
-          </button>
-          <button
-            type="button"
-            phx-click="stepper_step"
-            disabled={!valid?}
-            class="stepper-btn stepper-btn-primary"
-            title="Step"
-          >
-            ▶
-          </button>
-          <%= if @session && @session.status == :running do %>
-            <button type="button" phx-click="stepper_pause" class="stepper-btn" title="Pause">
-              ⏸ Pause
-            </button>
-          <% else %>
-            <button
-              type="button"
-              phx-click="stepper_run"
-              disabled={!valid?}
-              class="stepper-btn"
-              title="Run"
-            >
-              ▶▶ Run
-            </button>
-          <% end %>
-          <button
-            type="button"
-            phx-click="stepper_stop"
-            disabled={is_nil(@session)}
-            class="stepper-btn"
-            title="Stop (close session)"
-          >
-            ⏹
-          </button>
-          <form phx-change="stepper_set_speed" class="stepper-speed-form">
-            <label class="stepper-speed-label" for="stepper-run-speed">{@run_speed}/s</label>
-            <input
-              id="stepper-run-speed"
-              type="range"
-              name="value"
-              min="1"
-              max={Lenies.Stepper.world_ops_per_sec()}
-              value={@run_speed}
-              class="stepper-speed-slider"
-            />
-          </form>
-          <%= if @session do %>
-            <span class="stepper-step-counter">
-              Step #{@session.step_count} · {status_label(@session.status)}
-            </span>
-          <% end %>
-        </div>
-
-        <button
-          type="button"
-          phx-click="cancel_edit"
-          data-confirm={if @dirty, do: "Discard codeome edits?"}
-          class="text-xs px-2 py-0.5 border border-slate-500 hover:bg-slate-700"
-        >
-          Cancel
-        </button>
-
-        <button
-          type="button"
-          phx-click="open_spawn_form"
-          disabled={!match?({:ok, _}, @validation)}
-          class="text-xs px-2 py-0.5 border border-emerald-500/60 text-emerald-200 hover:bg-emerald-900/40 disabled:opacity-40"
-        >
-          Spawn
-        </button>
-
-        <%!-- Visible in BOTH :new_seed and :edit modes. In :edit mode it
-              opens a fork-only save form (server-side uniqueness check on
-              (owner, name) — see Lenies.Collection.create_codeome/2), which
-              is the missing piece of the "evolve in Sandbox → save → seed
-              in Arena" loop. --%>
-        <button
-          type="button"
-          phx-click="open_save_form"
-          disabled={!match?({:ok, _}, @validation)}
-          class="text-xs px-2 py-0.5 border border-violet-500/60 text-violet-200 hover:bg-violet-900/40 disabled:opacity-40"
-        >
-          Save
-        </button>
-      </header>
-
-      <%= if @show_spawn_form do %>
-        <form
-          phx-submit="submit_spawn"
-          class="flex gap-2 items-center text-[11px] p-2 border-b border-emerald-500/30"
-        >
-          <button
-            type="button"
-            phx-click="cancel_spawn_form"
-            class="px-2 py-0.5 border border-slate-500"
-          >
-            Cancel
-          </button>
-          <button type="submit" class="px-2 py-0.5 border border-emerald-500/60 text-emerald-200">
-            Spawn
-          </button>
-        </form>
-      <% end %>
-
-      <%= if @show_save_form do %>
-        <form
-          id="save-seed-form"
-          phx-submit="submit_save_seed"
-          class="flex flex-wrap gap-2 items-center justify-end text-[11px] p-2 border-b border-violet-500/30"
-        >
-          <label class="flex gap-1 items-center">
-            <span class="opacity-70">name</span>
-            <input
-              type="text"
-              name="seed_name"
-              required
-              minlength="1"
-              maxlength="40"
-              placeholder="my replicator v1"
-              value={@save_prefill && @save_prefill.name}
-              class="text-xs"
-            />
-          </label>
-          <label class="flex gap-1 items-center">
-            <span class="opacity-70">color</span>
-            <input
-              type="color"
-              name="color_hex"
-              value={
-                (@save_prefill && @save_prefill.color_hex) ||
-                  suggested_color(@genome.chromosome, @world_handle)
-              }
-              class="w-12 h-6"
-            />
-          </label>
-          <label class="flex gap-1 items-center">
-            <span class="opacity-70">energy</span>
-            <input
-              type="number"
-              name="energy_default"
-              value={(@save_prefill && @save_prefill.energy_default) || 10_000}
-              min="1"
-              max="1000000"
-              class="w-24 text-xs"
-            />
-          </label>
-          <button
-            type="button"
-            phx-click="cancel_save_form"
-            class="px-2 py-0.5 border border-slate-500"
-          >
-            Cancel
-          </button>
-          <button type="submit" class="px-2 py-0.5 border border-violet-500/60 text-violet-200">
-            Save
-          </button>
-          <%= if @save_form_error do %>
-            <span class="text-red-400 text-[11px] ml-2" role="alert">{@save_form_error}</span>
-          <% end %>
-        </form>
-
-        <%= if @save_confirm do %>
-          <div
-            class="flex gap-2 items-center justify-end text-[11px] p-2 border-b border-amber-500/40 bg-amber-950/30"
-            role="alertdialog"
-            aria-labelledby="overwrite-confirm-label"
-          >
-            <span id="overwrite-confirm-label" class="text-amber-200">
-              Overwrite “{@save_confirm.name}”? The saved codeome will be replaced.
-            </span>
-            <button
-              type="button"
-              phx-click="confirm_overwrite"
-              class="px-2 py-0.5 border border-amber-500/60 text-amber-200 hover:bg-amber-900/40"
-            >
-              Overwrite
-            </button>
-            <button
-              type="button"
-              phx-click="cancel_overwrite"
-              class="px-2 py-0.5 border border-slate-500"
-            >
-              Cancel
-            </button>
-          </div>
-        <% end %>
-      <% end %>
+      <EditorComponents.Header.header
+        mode={@mode}
+        selected_hash={@selected_hash}
+        validation={@validation}
+        dirty={@dirty}
+        session={@session}
+        run_speed={@run_speed}
+        show_spawn_form={@show_spawn_form}
+        show_save_form={@show_save_form}
+        save_form_error={@save_form_error}
+        save_confirm={@save_confirm}
+        save_prefill={@save_prefill}
+        genome={@genome}
+        world_handle={@world_handle}
+      />
 
       <div
         id="editor-grid"
@@ -1818,13 +1591,6 @@ defmodule LeniesWeb.EditorLive do
     end
   end
 
-  defp status_label(:ready), do: "ready"
-  defp status_label(:running), do: "running"
-  defp status_label(:paused), do: "paused"
-  defp status_label(:halted), do: "halted"
-  defp status_label(:breakpoint_hit), do: "breakpoint"
-  defp status_label(:safety_cap_reached), do: "safety cap"
-
   # Inserts `opcodes` at the caret (replace-on-insert when a selection is
   # active). The caret's section decides where the run lands.
   defp insert_at_caret(socket, opcodes) when is_list(opcodes) do
@@ -1918,18 +1684,6 @@ defmodule LeniesWeb.EditorLive do
     |> put_flash(:info, "Saved “#{codeome.name}” ✓")
   end
 
-  defp suggested_color(buffer, world_handle) do
-    hash =
-      buffer
-      |> Lenies.Codeome.from_list()
-      |> Lenies.Codeome.hash()
-
-    case world_handle do
-      %Lenies.WorldHandle{} = handle -> Lenies.SpeciesColor.hex(handle, hash)
-      _ -> hash |> :erlang.phash2(255) |> Kernel.+(1) |> Lenies.SpeciesColor.byte_to_hex()
-    end
-  end
-
   # Compact numeric display for the energy panel: integers as-is,
   # floats rounded to 1 decimal (drops the `.0` when whole).
   defp fmt_num(n) when is_integer(n), do: Integer.to_string(n)
@@ -1943,15 +1697,6 @@ defmodule LeniesWeb.EditorLive do
       :erlang.float_to_binary(rounded, decimals: 1)
     end
   end
-
-  defp format_validation_error({:too_short, opts}),
-    do: "too short (#{opts[:got]} ops, min #{opts[:min]})"
-
-  defp format_validation_error({:too_long, opts}),
-    do: "too long (#{opts[:got]} ops, max #{opts[:max]})"
-
-  defp format_validation_error({:insufficient_non_nops, opts}),
-    do: "too few non-nops (#{opts[:got]}, min #{opts[:min]})"
 
   # Splits a free-text input on whitespace and commas, lowercases, then
   # validates each token against the known opcode set. Returns
