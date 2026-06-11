@@ -51,6 +51,37 @@ defmodule Lenies.Collection do
     end)
   end
 
+  @doc """
+  Fetch one codeome by (trimmed) name, scoped to `user`. Nil when the user
+  owns no codeome with that name. Used by the editor's save flow to decide
+  whether to show the overwrite-confirm dialog.
+  """
+  def get_codeome_by_name(%{id: owner_id}, name) when is_binary(name) do
+    trimmed = String.trim(name)
+
+    Repo.one(from c in Codeome, where: c.owner_id == ^owner_id and c.name == ^trimmed)
+  end
+
+  @doc """
+  Update-or-create on `(owner, name)` — the confirmed-overwrite path of the
+  editor's save flow. Updates the existing row's content in place (same id,
+  so anything referencing the codeome keeps working); degrades to a plain
+  create when the row vanished between the confirm dialog and the submit.
+  `{:error, :name_taken}` can still surface from the create-race (two tabs);
+  the caller re-presents the confirm dialog in that case.
+  """
+  def overwrite_codeome(%{id: _} = user, attrs) do
+    case get_codeome_by_name(user, Map.get(attrs, :name, "")) do
+      nil ->
+        create_codeome(user, attrs)
+
+      %Codeome{} = existing ->
+        existing
+        |> Codeome.changeset(attrs)
+        |> Repo.update()
+    end
+  end
+
   @doc "Delete a codeome by id, scoped to `user`."
   def delete_codeome(%{id: owner_id}, id) do
     with cid when not is_nil(cid) <- normalize_id(id),
