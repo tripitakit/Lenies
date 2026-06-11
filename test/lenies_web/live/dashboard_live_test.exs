@@ -252,8 +252,8 @@ defmodule LeniesWeb.DashboardLiveTest do
   test "Seed dropdown is rendered with available seeds", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/sandbox")
     assert html =~ "Seed"
-    assert html =~ "Minimal Replicator"
-    assert html =~ "Carnivore"
+    assert html =~ "Reflex"
+    assert html =~ "Ancestor"
   end
 
   test "clicking Spawn triggers world spawn_lenie", %{conn: conn, handle: handle} do
@@ -262,7 +262,7 @@ defmodule LeniesWeb.DashboardLiveTest do
     pop_before = :ets.info(handle.tables.lenies, :size) || 0
 
     view
-    |> form("form[phx-submit='spawn_seed']", %{seed_id: "minimal_replicator"})
+    |> form("form[phx-submit='spawn_seed']", %{seed_id: "ancestor"})
     |> render_submit()
 
     Process.sleep(100)
@@ -1112,7 +1112,7 @@ defmodule LeniesWeb.DashboardLiveTest do
       # this exercises the engine-level :spawn_cap_exceeded path and verifies
       # the flash relay from LiveComponent → parent LiveView fires.
       view
-      |> form("form[phx-submit='spawn_seed']", %{seed_id: "minimal_replicator"})
+      |> form("form[phx-submit='spawn_seed']", %{seed_id: "ancestor"})
       |> render_submit()
 
       html = render(view)
