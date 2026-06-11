@@ -684,6 +684,16 @@
   overflow: hidden;
 }
 
+.codeome-section-divider {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: rgb(167 139 250 / 0.8); /* violet-400-ish, matches plasmid identity */
+  padding: 6px 4px 2px;
+  user-select: none;
+}
+.codeome-genome-panel { display: flex; flex-direction: column; gap: 6px; padding: 6px; }
+.codeome-genome-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+
 .lenies-dashboard .codeome-block-selected {
   outline: 1px solid #67e8f9;
   background: rgba(103, 232, 249, 0.12);

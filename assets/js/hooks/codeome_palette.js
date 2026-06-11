@@ -47,8 +47,9 @@ const CodeomePalette = {
           // listing without it.
           onAdd: (evt) => {
             const idxAttr = evt.item?.dataset?.idx;
-            if (idxAttr !== undefined) {
-              this.pushEvent("edit_delete", { index: idxAttr });
+            const section = evt.item?.dataset?.section;
+            if (idxAttr !== undefined && section) {
+              this.pushEvent("edit_delete", { section, index: idxAttr });
             }
             evt.item.remove();
           },
@@ -56,20 +57,15 @@ const CodeomePalette = {
       );
     });
 
-    // Double-click a chip = append that opcode to the end of the buffer.
-    // We compute the current buffer length by counting the editable
-    // blocks rendered in the listing — the server's edit_insert handler
-    // expects an integer index, and N (= current length) places the new
-    // opcode after the last existing one.
+    // Double-click a chip = insert that opcode at the caret. The server
+    // owns the caret position (and its section), so the hook only needs to
+    // forward the opcode.
     this.dblclickHandler = (event) => {
       const chip = event.target.closest(".palette-chip");
       if (!chip || !this.el.contains(chip)) return;
       const opcode = chip.dataset.opcode;
       if (!opcode) return;
-      const blocks = document.querySelectorAll(
-        ".codeome-blocks .codeome-block-editable",
-      );
-      this.pushEvent("edit_insert", { index: blocks.length, opcode });
+      this.pushEvent("edit_insert_at_caret", { opcode });
     };
     this.el.addEventListener("dblclick", this.dblclickHandler);
   },

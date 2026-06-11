@@ -49,36 +49,121 @@ defmodule LeniesWeb.EditorLiveTest do
     assert html =~ "0 ops"
   end
 
-  describe "plasmid panel render" do
-    test "shows + Plasmid and the chromosome chip", %{conn: conn} do
+  describe "genome panel render" do
+    test "shows + Plasmid and the Chromosome row in the Genome tab", %{conn: conn} do
       {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
-      assert has_element?(view, "[data-target-chip='chromosome']")
+      assert has_element?(view, "button[phx-value-section='chromosome']", "Chromosome")
       assert has_element?(view, "button", "+ Plasmid")
     end
 
-    test "adding a plasmid renders its chip and listing", %{conn: conn} do
+    test "adding a plasmid renders its row and central listing", %{conn: conn} do
       {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       render_hook(view, "add_plasmid", %{})
-      render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "nop_1"})
+      render_hook(view, "edit_insert", %{"section" => "p0", "index" => 0, "opcode" => "nop_1"})
       html = render(view)
-      assert html =~ ~s(data-plasmid-chip="0")
+      assert html =~ ~s(data-plasmid-row="0")
       assert html =~ "NOP_1"
       assert html =~ "1/#{Lenies.Plasmid.max_length()}"
     end
 
-    test "opening Debug stepper carries authored plasmids into exec", %{conn: conn} do
+    test "authored plasmids render in the central listing with a divider", %{conn: conn} do
       {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
-      render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "nop_0"})
-      render_hook(view, "edit_insert", %{"index" => 1, "opcode" => "move"})
+
+      render_hook(view, "edit_insert", %{
+        "section" => "chromosome",
+        "index" => 0,
+        "opcode" => "nop_0"
+      })
+
+      render_hook(view, "edit_insert", %{
+        "section" => "chromosome",
+        "index" => 1,
+        "opcode" => "move"
+      })
 
       render_hook(view, "add_plasmid", %{})
-      render_hook(view, "set_target", %{"target" => "plasmid", "index" => "0"})
-      render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "nop_1"})
+      render_hook(view, "edit_insert", %{"section" => "p0", "index" => 0, "opcode" => "nop_1"})
 
-      render_hook(view, "open_stepper", %{})
       html = render(view)
       # exec = chromosome ++ plasmid → the lettered plasmid separator is present
-      assert html =~ "── plasmid A ──"
+      assert html =~ "plasmid A"
+    end
+  end
+
+  describe "sectioned genome editing" do
+    test "plasmid code renders in the central listing with a divider and flat indices",
+         %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+
+      # build: 2 chromosome ops, one plasmid with 1 op
+      render_submit(view, "submit_opcode_text", %{"opcodes" => "push0 add"})
+      render_click(view, "add_plasmid", %{})
+      render_submit(view, "submit_opcode_text", %{"opcodes" => "move"})
+
+      html = render(view)
+      assert html =~ "plasmid A"
+      # plasmid op displays its FLAT exec index (002), not 0
+      assert html =~ ~r/002.*MOVE/s
+      assert has_element?(view, "#codeome-blocks-p0 .codeome-block-editable")
+    end
+
+    test "add_plasmid moves the caret into the new section so inserts land there",
+         %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+      render_submit(view, "submit_opcode_text", %{"opcodes" => "push0"})
+      render_click(view, "add_plasmid", %{})
+      render_submit(view, "submit_opcode_text", %{"opcodes" => "eat eat"})
+
+      assert has_element?(view, "#codeome-blocks-p0 [data-idx='1']")
+      refute has_element?(view, "#codeome-blocks-chromosome [data-idx='1']")
+    end
+
+    test "caret crosses the section divider with move_caret", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+      render_submit(view, "submit_opcode_text", %{"opcodes" => "push0"})
+      render_click(view, "add_plasmid", %{})
+
+      # caret is at the end of plasmid p0 (empty -> gap 0); move up twice:
+      # gap 0 of p0 -> last gap of chromosome (1) -> gap 0 of chromosome
+      render_click(view, "move_caret", %{"dir" => "up"})
+      render_click(view, "move_caret", %{"dir" => "up"})
+      assert has_element?(view, "#codeome-blocks-chromosome [data-gap='0'].codeome-gap-caret")
+    end
+
+    test "selection operations carry the section", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+      render_click(view, "add_plasmid", %{})
+      render_submit(view, "submit_opcode_text", %{"opcodes" => "eat move"})
+
+      render_click(view, "select_block", %{"section" => "p0", "index" => 0, "shift" => false})
+      render_click(view, "copy_selection", %{})
+      render_click(view, "place_caret", %{"section" => "chromosome", "gap" => 0})
+      render_click(view, "paste_clipboard", %{})
+
+      assert has_element?(view, "#codeome-blocks-chromosome [data-idx='0']")
+      html = render(view)
+      assert html =~ ~r/codeome-blocks-chromosome.*EAT/s
+    end
+
+    test "undo reverts a plasmid edit (history now covers the whole genome)",
+         %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+      render_click(view, "add_plasmid", %{})
+      render_submit(view, "submit_opcode_text", %{"opcodes" => "eat"})
+      assert has_element?(view, "#codeome-blocks-p0 .codeome-block-editable")
+
+      render_click(view, "undo", %{})
+      refute has_element?(view, "#codeome-blocks-p0 .codeome-block-editable")
+    end
+
+    test "removing a plasmid goes through the two-step confirm in the Genome tab",
+         %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+      render_click(view, "add_plasmid", %{})
+      render_click(view, "plasmid_remove_init", %{"index" => 0})
+      assert render(view) =~ "Delete?"
+      render_click(view, "plasmid_remove_confirm", %{})
+      refute has_element?(view, "#codeome-blocks-p0")
     end
   end
 
@@ -133,7 +218,11 @@ defmodule LeniesWeb.EditorLiveTest do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     refute render(view) =~ "●dirty"
 
-    render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "push0"})
+    render_hook(view, "edit_insert", %{
+      "section" => "chromosome",
+      "index" => 0,
+      "opcode" => "push0"
+    })
 
     html = render(view)
     assert html =~ "1 ops"
@@ -142,12 +231,23 @@ defmodule LeniesWeb.EditorLiveTest do
 
   test "delete handler removes the opcode at the given index", %{conn: conn} do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
-    render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "push0"})
-    render_hook(view, "edit_insert", %{"index" => 1, "opcode" => "push1"})
-    render_hook(view, "edit_delete", %{"index" => "0"})
+
+    render_hook(view, "edit_insert", %{
+      "section" => "chromosome",
+      "index" => 0,
+      "opcode" => "push0"
+    })
+
+    render_hook(view, "edit_insert", %{
+      "section" => "chromosome",
+      "index" => 1,
+      "opcode" => "push1"
+    })
+
+    render_hook(view, "edit_delete", %{"section" => "chromosome", "index" => "0"})
 
     html = render(view)
-    assert html =~ "Codeome — 1 ops"
+    assert html =~ "Genome — 1 ops"
     # After deleting index 0 (PUSH0), the sole remaining editable block is PUSH1.
     editable_blocks =
       Regex.scan(~r/codeome-block-editable[^>]*>.*?codeome-block-name[^>]*>\s*([A-Z0-9]+)/s, html)
@@ -164,7 +264,7 @@ defmodule LeniesWeb.EditorLiveTest do
     |> render_submit()
 
     html = render(view)
-    assert html =~ "Codeome — 3 ops"
+    assert html =~ "Genome — 3 ops"
     assert html =~ "PUSH0"
     assert html =~ "PUSH1"
     assert html =~ "ADD"
@@ -179,7 +279,7 @@ defmodule LeniesWeb.EditorLiveTest do
     |> render_submit()
 
     html = render(view)
-    assert html =~ "Codeome — 2 ops"
+    assert html =~ "Genome — 2 ops"
   end
 
   test "submit_opcode_text rejects all-or-nothing on invalid token and surfaces error",
@@ -192,7 +292,7 @@ defmodule LeniesWeb.EditorLiveTest do
 
     html = render(view)
     # buffer unchanged
-    assert html =~ "Codeome — 0 ops"
+    assert html =~ "Genome — 0 ops"
     # error visible with the unknown tokens listed
     assert html =~ "unknown: foobar, baz"
     # input value preserved so user can edit it
@@ -207,7 +307,7 @@ defmodule LeniesWeb.EditorLiveTest do
     |> render_submit()
 
     html = render(view)
-    assert html =~ "Codeome — 0 ops"
+    assert html =~ "Genome — 0 ops"
     refute html =~ "palette-text-input-error"
   end
 
@@ -220,7 +320,13 @@ defmodule LeniesWeb.EditorLiveTest do
 
     test "click selects a single block and highlights it", %{conn: conn} do
       view = seeded_editor(conn)
-      html = render_hook(view, "select_block", %{"index" => 2, "shift" => false})
+
+      html =
+        render_hook(view, "select_block", %{
+          "section" => "chromosome",
+          "index" => 2,
+          "shift" => false
+        })
 
       assert html =~ ~r/codeome-block-editable[^"]*codeome-block-selected[^>]*data-idx="2"/ or
                html =~ ~r/data-idx="2"[^>]*codeome-block-selected/
@@ -228,8 +334,20 @@ defmodule LeniesWeb.EditorLiveTest do
 
     test "shift-click extends a range from the anchor", %{conn: conn} do
       view = seeded_editor(conn)
-      render_hook(view, "select_block", %{"index" => 1, "shift" => false})
-      html = render_hook(view, "select_block", %{"index" => 3, "shift" => true})
+
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 1,
+        "shift" => false
+      })
+
+      html =
+        render_hook(view, "select_block", %{
+          "section" => "chromosome",
+          "index" => 3,
+          "shift" => true
+        })
+
       assert html =~ ~s(data-idx="1")
       selected_count = Regex.scan(~r/codeome-block-selected/, html) |> length()
       assert selected_count == 3
@@ -237,14 +355,27 @@ defmodule LeniesWeb.EditorLiveTest do
 
     test "clear_selection removes all highlights", %{conn: conn} do
       view = seeded_editor(conn)
-      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 0,
+        "shift" => false
+      })
+
       html = render_hook(view, "clear_selection", %{})
       refute html =~ "codeome-block-selected"
     end
 
     test "non-numeric index is a safe no-op", %{conn: conn} do
       view = seeded_editor(conn)
-      html = render_hook(view, "select_block", %{"index" => "abc", "shift" => false})
+
+      html =
+        render_hook(view, "select_block", %{
+          "section" => "chromosome",
+          "index" => "abc",
+          "shift" => false
+        })
+
       refute html =~ "codeome-block-selected"
     end
   end
@@ -257,15 +388,25 @@ defmodule LeniesWeb.EditorLiveTest do
     end
 
     defp listing_opcodes(html) do
-      Regex.scan(~r/codeome-block-name">([A-Z0-9_]+)</, html)
+      Regex.scan(~r/codeome-block-name">\s*([A-Z0-9_]+)\s*</, html)
       |> Enum.map(fn [_, name] -> name end)
     end
 
     test "copy then paste replaces the active selection with the clipboard", %{conn: conn} do
       view = seeded_editor2(conn)
       # Select blocks 0..1 (PUSH0, PUSH1) and copy them.
-      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
-      render_hook(view, "select_block", %{"index" => 1, "shift" => true})
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 0,
+        "shift" => false
+      })
+
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 1,
+        "shift" => true
+      })
+
       render_hook(view, "copy_selection", %{})
       # Paste with the selection still active: replaces selected blocks with the clipboard.
       # clipboard=[push0,push1], delete {0,1} → [add,move,eat], insert at 0 → [push0,push1,add,move,eat]
@@ -277,8 +418,19 @@ defmodule LeniesWeb.EditorLiveTest do
 
     test "cut removes the range and fills the clipboard", %{conn: conn} do
       view = seeded_editor2(conn)
-      render_hook(view, "select_block", %{"index" => 1, "shift" => false})
-      render_hook(view, "select_block", %{"index" => 2, "shift" => true})
+
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 1,
+        "shift" => false
+      })
+
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 2,
+        "shift" => true
+      })
+
       html = render_hook(view, "cut_selection", %{})
       assert listing_opcodes(html) == ["PUSH0", "MOVE", "EAT"]
       refute html =~ "codeome-block-selected"
@@ -291,15 +443,32 @@ defmodule LeniesWeb.EditorLiveTest do
 
     test "delete_selection removes the range", %{conn: conn} do
       view = seeded_editor2(conn)
-      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
-      render_hook(view, "select_block", %{"index" => 2, "shift" => true})
+
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 0,
+        "shift" => false
+      })
+
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 2,
+        "shift" => true
+      })
+
       html = render_hook(view, "delete_selection", %{})
       assert listing_opcodes(html) == ["MOVE", "EAT"]
     end
 
     test "duplicate_selection inserts a copy right after", %{conn: conn} do
       view = seeded_editor2(conn)
-      render_hook(view, "select_block", %{"index" => 3, "shift" => false})
+
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 3,
+        "shift" => false
+      })
+
       html = render_hook(view, "duplicate_selection", %{})
       assert listing_opcodes(html) == ["PUSH0", "PUSH1", "ADD", "MOVE", "MOVE", "EAT"]
       # the duplicate (single MOVE at idx 4) is selected
@@ -321,13 +490,19 @@ defmodule LeniesWeb.EditorLiveTest do
     end
 
     defp names(html) do
-      Regex.scan(~r/codeome-block-name">([A-Z0-9_]+)</, html)
+      Regex.scan(~r/codeome-block-name">\s*([A-Z0-9_]+)\s*</, html)
       |> Enum.map(fn [_, n] -> n end)
     end
 
     test "undo reverts the last mutation; redo reapplies it", %{conn: conn} do
       view = seeded_editor3(conn)
-      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 0,
+        "shift" => false
+      })
+
       html_after_delete = render_hook(view, "delete_selection", %{})
       assert names(html_after_delete) == ["PUSH1", "ADD"]
 
@@ -346,9 +521,18 @@ defmodule LeniesWeb.EditorLiveTest do
 
     test "a new mutation after undo clears the redo stack", %{conn: conn} do
       view = seeded_editor3(conn)
-      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 0,
+        "shift" => false
+      })
+
       render_hook(view, "delete_selection", %{})
       render_hook(view, "undo", %{})
+      # Caret is clamped (not auto-moved to the end) after undo, so move it to
+      # the end before the new mutation to keep the append deterministic.
+      render_hook(view, "move_caret_end", %{"to" => "end"})
       render_hook(view, "submit_opcode_text", %{"opcodes" => "move"})
       html = render_hook(view, "redo", %{})
       assert names(html) == ["PUSH0", "PUSH1", "ADD", "MOVE"]
@@ -369,7 +553,12 @@ defmodule LeniesWeb.EditorLiveTest do
     test "paste is undoable", %{conn: conn} do
       view = seeded_editor3(conn)
       # Copy block 0, clear the selection, then paste at end (gap 3).
-      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 0,
+        "shift" => false
+      })
+
       render_hook(view, "copy_selection", %{})
       render_hook(view, "move_caret_end", %{"to" => "end"})
       pasted = render_hook(view, "paste_clipboard", %{})
@@ -415,15 +604,25 @@ defmodule LeniesWeb.EditorLiveTest do
     end
 
     defp names4(html) do
-      Regex.scan(~r/codeome-block-name">([A-Z0-9_]+)</, html)
+      Regex.scan(~r/codeome-block-name">\s*([A-Z0-9_]+)\s*</, html)
       |> Enum.map(fn [_, n] -> n end)
     end
 
     test "save selection as snippet, then insert it", %{conn: conn} do
       {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
-      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
-      render_hook(view, "select_block", %{"index" => 1, "shift" => true})
+
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 0,
+        "shift" => false
+      })
+
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 1,
+        "shift" => true
+      })
 
       html = render_hook(view, "submit_snippet", %{"snippet_name" => "Pair"})
       assert html =~ "Pair"
@@ -455,7 +654,13 @@ defmodule LeniesWeb.EditorLiveTest do
     } do
       {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
-      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 0,
+        "shift" => false
+      })
+
       render_hook(view, "open_snippet_form", %{})
       html = render_hook(view, "submit_snippet", %{"snippet_name" => "---"})
       assert Lenies.Snippets.Store.all() == []
@@ -473,14 +678,26 @@ defmodule LeniesWeb.EditorLiveTest do
     test "copy button enables once a block is selected", %{conn: conn} do
       {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
-      html = render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+
+      html =
+        render_hook(view, "select_block", %{
+          "section" => "chromosome",
+          "index" => 0,
+          "shift" => false
+        })
+
       refute html =~ ~r/phx-click="copy_selection"[^>]*disabled/
     end
 
     test "clicking the Delete toolbar button removes the selection", %{conn: conn} do
       {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
-      render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+
+      render_hook(view, "select_block", %{
+        "section" => "chromosome",
+        "index" => 0,
+        "shift" => false
+      })
 
       html =
         view
@@ -488,7 +705,7 @@ defmodule LeniesWeb.EditorLiveTest do
         |> render_click()
 
       names =
-        Regex.scan(~r/codeome-block-name">([A-Z0-9_]+)</, html)
+        Regex.scan(~r/codeome-block-name">\s*([A-Z0-9_]+)\s*</, html)
         |> Enum.map(fn [_, n] -> n end)
 
       assert names == ["PUSH1", "ADD"]
@@ -506,15 +723,17 @@ defmodule LeniesWeb.EditorLiveTest do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0"})
     # buffer len 1; caret defaults to end (gap 1). Click gap 0.
-    render_hook(view, "place_caret", %{"gap" => 0})
-    assert has_element?(view, "[data-caret-at='0']")
-    refute has_element?(view, "[data-caret-at='1']")
+    render_hook(view, "place_caret", %{"section" => "chromosome", "gap" => 0})
+    assert has_element?(view, "#codeome-blocks-chromosome [data-gap='0'].codeome-gap-caret")
+    refute has_element?(view, "#codeome-blocks-chromosome [data-gap='1'].codeome-gap-caret")
   end
 
   test "clicking a block selects exactly that block", %{conn: conn} do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
-    render_hook(view, "select_block", %{"index" => 1, "shift" => false})
+
+    render_hook(view, "select_block", %{"section" => "chromosome", "index" => 1, "shift" => false})
+
     assert has_element?(view, ".codeome-block-selected[data-idx='1']")
     refute has_element?(view, ".codeome-block-selected[data-idx='0']")
   end
@@ -524,40 +743,48 @@ defmodule LeniesWeb.EditorLiveTest do
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
     render_hook(view, "move_caret", %{"dir" => "up", "extend" => false})
     render_hook(view, "move_caret", %{"dir" => "up", "extend" => false})
-    assert has_element?(view, "[data-caret-at='0']")
+    assert has_element?(view, "#codeome-blocks-chromosome [data-gap='0'].codeome-gap-caret")
     render_hook(view, "move_caret", %{"dir" => "down", "extend" => false})
-    assert has_element?(view, "[data-caret-at='1']")
+    assert has_element?(view, "#codeome-blocks-chromosome [data-gap='1'].codeome-gap-caret")
   end
 
   test "Home and End place the caret at the buffer ends", %{conn: conn} do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
     render_hook(view, "move_caret_end", %{"to" => "start"})
-    assert has_element?(view, "[data-caret-at='0']")
+    assert has_element?(view, "#codeome-blocks-chromosome [data-gap='0'].codeome-gap-caret")
     render_hook(view, "move_caret_end", %{"to" => "end"})
-    assert has_element?(view, "[data-caret-at='3']")
+    assert has_element?(view, "#codeome-blocks-chromosome [data-gap='3'].codeome-gap-caret")
   end
 
   test "palette insert lands at the caret, not at the end", %{conn: conn} do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 add"})
-    render_hook(view, "place_caret", %{"gap" => 1})
-    render_hook(view, "edit_insert", %{"index" => 1, "opcode" => "push1"})
+    render_hook(view, "place_caret", %{"section" => "chromosome", "gap" => 1})
+
+    render_hook(view, "edit_insert", %{
+      "section" => "chromosome",
+      "index" => 1,
+      "opcode" => "push1"
+    })
+
     assert render(view) =~ "PUSH1"
-    assert has_element?(view, "[data-caret-at='2']")
+    assert has_element?(view, "#codeome-blocks-chromosome [data-gap='2'].codeome-gap-caret")
   end
 
   test "inserting with an active selection replaces it", %{conn: conn} do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
-    render_hook(view, "select_block", %{"index" => 1, "shift" => false})
-    render_hook(view, "select_block", %{"index" => 2, "shift" => true})
+
+    render_hook(view, "select_block", %{"section" => "chromosome", "index" => 1, "shift" => false})
+
+    render_hook(view, "select_block", %{"section" => "chromosome", "index" => 2, "shift" => true})
     render_hook(view, "submit_opcode_text", %{"opcodes" => "eat"})
     html = render(view)
     assert html =~ "2 ops"
 
     block_names =
-      Regex.scan(~r/codeome-block-name">([A-Z0-9_]+)</, html)
+      Regex.scan(~r/codeome-block-name">\s*([A-Z0-9_]+)\s*</, html)
       |> Enum.map(fn [_, n] -> n end)
 
     assert block_names == ["PUSH0", "EAT"]
@@ -567,34 +794,42 @@ defmodule LeniesWeb.EditorLiveTest do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     :ok = Lenies.Snippets.Store.save(%{id: "twoops", name: "twoops", opcodes: [:push0, :push1]})
     render_hook(view, "submit_opcode_text", %{"opcodes" => "add eat"})
-    render_hook(view, "place_caret", %{"gap" => 1})
+    render_hook(view, "place_caret", %{"section" => "chromosome", "gap" => 1})
     render_hook(view, "insert_snippet", %{"id" => "twoops"})
-    assert has_element?(view, "[data-caret-at='3']")
+    assert has_element?(view, "#codeome-blocks-chromosome [data-gap='3'].codeome-gap-caret")
   end
 
   test "dropping a snippet at a gap inserts it there", %{conn: conn} do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     :ok = Lenies.Snippets.Store.save(%{id: "pp", name: "pp", opcodes: [:push0, :push1]})
     render_hook(view, "submit_opcode_text", %{"opcodes" => "add eat"})
-    render_hook(view, "insert_snippet_at", %{"id" => "pp", "index" => 1})
+
+    render_hook(view, "insert_snippet_at", %{
+      "id" => "pp",
+      "section" => "chromosome",
+      "index" => 1
+    })
+
     assert render(view) =~ "4 ops"
-    assert has_element?(view, "[data-caret-at='3']")
+    assert has_element?(view, "#codeome-blocks-chromosome [data-gap='3'].codeome-gap-caret")
   end
 
   # Helper: extract the ordered list of opcode names from the listing pane blocks.
   # Regex targets .codeome-block-name spans which only appear in the listing, not
   # the palette chips (which use class "palette-chip", not "codeome-block-name").
   defp listing_names(html) do
-    Regex.scan(~r/codeome-block-name">([A-Z0-9_]+)</, html)
+    Regex.scan(~r/codeome-block-name">\s*([A-Z0-9_]+)\s*</, html)
     |> Enum.map(fn [_, name] -> name end)
   end
 
   test "move_range relocates the selected block range", %{conn: conn} do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add eat"})
-    render_hook(view, "select_block", %{"index" => 0, "shift" => false})
-    render_hook(view, "select_block", %{"index" => 1, "shift" => true})
-    render_hook(view, "move_range", %{"to" => 4})
+
+    render_hook(view, "select_block", %{"section" => "chromosome", "index" => 0, "shift" => false})
+
+    render_hook(view, "select_block", %{"section" => "chromosome", "index" => 1, "shift" => true})
+    render_hook(view, "move_range", %{"section" => "chromosome", "to" => 4})
     html = render(view)
     # Buffer should be [add, eat, push0, push1] after moving range {0,1} to gap 4.
     # Using listing_names to verify buffer order — avoids matching palette chip text.
@@ -604,7 +839,9 @@ defmodule LeniesWeb.EditorLiveTest do
   test "Alt+arrow nudges the selection down by one", %{conn: conn} do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
-    render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+
+    render_hook(view, "select_block", %{"section" => "chromosome", "index" => 0, "shift" => false})
+
     render_hook(view, "move_range_step", %{"dir" => "down"})
     html = render(view)
     # Buffer should be [push1, push0, add] after nudging push0 down by one.
@@ -614,7 +851,9 @@ defmodule LeniesWeb.EditorLiveTest do
   test "duplicate copies the selection after itself and selects the copy", %{conn: conn} do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
-    render_hook(view, "select_block", %{"index" => 0, "shift" => false})
+
+    render_hook(view, "select_block", %{"section" => "chromosome", "index" => 0, "shift" => false})
+
     render_hook(view, "duplicate_selection", %{})
     assert render(view) =~ "3 ops"
     # The copy is at index 1 (immediately after the original at index 0).
@@ -624,11 +863,11 @@ defmodule LeniesWeb.EditorLiveTest do
   test "undo collapses the caret to the end of the restored buffer", %{conn: conn} do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
-    render_hook(view, "place_caret", %{"gap" => 3})
+    render_hook(view, "place_caret", %{"section" => "chromosome", "gap" => 3})
     render_hook(view, "submit_opcode_text", %{"opcodes" => "eat"})
     render_hook(view, "undo", %{})
-    assert has_element?(view, "[data-caret-at='3']")
-    refute has_element?(view, "[data-caret-at='4']")
+    assert has_element?(view, "#codeome-blocks-chromosome [data-gap='3'].codeome-gap-caret")
+    refute has_element?(view, "#codeome-blocks-chromosome [data-gap='4'].codeome-gap-caret")
   end
 
   # Note: we use listing_names/1 (already defined above) to check the buffer
@@ -637,7 +876,13 @@ defmodule LeniesWeb.EditorLiveTest do
   test "submit_replace swaps the opcode at an index", %{conn: conn} do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
-    render_hook(view, "submit_replace", %{"index" => 1, "opcode" => "eat"})
+
+    render_hook(view, "submit_replace", %{
+      "section" => "chromosome",
+      "index" => 1,
+      "opcode" => "eat"
+    })
+
     html = render(view)
     assert listing_names(html) == ["PUSH0", "EAT", "ADD"]
   end
@@ -647,11 +892,17 @@ defmodule LeniesWeb.EditorLiveTest do
   } do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
-    render_hook(view, "start_inline_edit", %{"index" => 0})
-    render_hook(view, "submit_replace", %{"index" => 0, "opcode" => "notreal"})
+    render_hook(view, "start_inline_edit", %{"section" => "chromosome", "index" => 0})
+
+    render_hook(view, "submit_replace", %{
+      "section" => "chromosome",
+      "index" => 0,
+      "opcode" => "notreal"
+    })
+
     html = render(view)
     # buffer unchanged (still 2 ops)
-    assert html =~ "Codeome — 2 ops"
+    assert html =~ "Genome — 2 ops"
     # editor still open
     assert html =~ "codeome-inline-input"
     # error shown
@@ -663,8 +914,14 @@ defmodule LeniesWeb.EditorLiveTest do
   test "submit_replace with a valid opcode closes the editor", %{conn: conn} do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1 add"})
-    render_hook(view, "start_inline_edit", %{"index" => 1})
-    render_hook(view, "submit_replace", %{"index" => 1, "opcode" => "eat"})
+    render_hook(view, "start_inline_edit", %{"section" => "chromosome", "index" => 1})
+
+    render_hook(view, "submit_replace", %{
+      "section" => "chromosome",
+      "index" => 1,
+      "opcode" => "eat"
+    })
+
     html = render(view)
     assert listing_names(html) == ["PUSH0", "EAT", "ADD"]
     refute html =~ "codeome-inline-input"
@@ -673,7 +930,7 @@ defmodule LeniesWeb.EditorLiveTest do
   test "cancel_inline_edit closes the inline editor", %{conn: conn} do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "submit_opcode_text", %{"opcodes" => "push0 push1"})
-    render_hook(view, "start_inline_edit", %{"index" => 0})
+    render_hook(view, "start_inline_edit", %{"section" => "chromosome", "index" => 0})
     assert render(view) =~ "codeome-inline-input"
     render_hook(view, "cancel_inline_edit", %{})
     refute render(view) =~ "codeome-inline-input"
@@ -813,20 +1070,18 @@ defmodule LeniesWeb.EditorLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/sandbox/editor/seed/custom:#{seed.id}")
 
-      assert :sys.get_state(view.pid).socket.assigns.plasmid_buffers == [[:nop_1]]
-      assert :sys.get_state(view.pid).socket.assigns.active_target == :chromosome
+      assert :sys.get_state(view.pid).socket.assigns.genome.plasmids == [[:nop_1]]
     end
 
     test "opening a built-in seed preloads its plasmid", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/sandbox/editor/seed/minimal_replicator")
-      plasmids = :sys.get_state(view.pid).socket.assigns.plasmid_buffers
+      plasmids = :sys.get_state(view.pid).socket.assigns.genome.plasmids
       assert plasmids == [Lenies.Codeomes.MinimalReplicator.plasmid()]
     end
 
     test "opening /new has no plasmids", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
-      assert :sys.get_state(view.pid).socket.assigns.plasmid_buffers == []
-      assert :sys.get_state(view.pid).socket.assigns.active_target == :chromosome
+      assert :sys.get_state(view.pid).socket.assigns.genome.plasmids == []
     end
 
     test "editing a live species member preloads its carried plasmids", %{
@@ -848,115 +1103,106 @@ defmodule LeniesWeb.EditorLiveTest do
       )
 
       {:ok, view, _html} = live(conn, ~p"/sandbox/editor/edit/EDIT-PLASMID-SP")
-      assert :sys.get_state(view.pid).socket.assigns.plasmid_buffers == [[:nop_1]]
+      assert :sys.get_state(view.pid).socket.assigns.genome.plasmids == [[:nop_1]]
     end
   end
 
-  describe "insert routing via active target" do
-    test "palette insert goes to chromosome by default", %{conn: conn} do
+  describe "insert routing via section" do
+    test "chromosome insert goes to the chromosome", %{conn: conn} do
       {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
-      render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "move"})
+
+      render_hook(view, "edit_insert", %{
+        "section" => "chromosome",
+        "index" => 0,
+        "opcode" => "move"
+      })
+
       state = :sys.get_state(view.pid).socket.assigns
-      assert state.buffer == [:move]
-      assert state.plasmid_buffers == []
+      assert state.genome.chromosome == [:move]
+      assert state.genome.plasmids == []
     end
 
-    test "with a plasmid target, palette insert appends to that plasmid", %{conn: conn} do
+    test "a p0 insert appends to that plasmid", %{conn: conn} do
       {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       render_hook(view, "add_plasmid", %{})
-      render_hook(view, "set_target", %{"target" => "plasmid", "index" => "0"})
-      render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "nop_1"})
+      render_hook(view, "edit_insert", %{"section" => "p0", "index" => 0, "opcode" => "nop_1"})
       state = :sys.get_state(view.pid).socket.assigns
-      assert state.buffer == []
-      assert state.plasmid_buffers == [[:nop_1]]
-      assert state.active_target == {:plasmid, 0}
+      assert state.genome.chromosome == []
+      assert state.genome.plasmids == [[:nop_1]]
     end
   end
 
-  describe "plasmid mutators" do
+  describe "plasmid mutators (central listing)" do
     setup %{conn: conn} do
       {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
       render_hook(view, "add_plasmid", %{})
-      render_hook(view, "set_target", %{"target" => "plasmid", "index" => "0"})
       %{view: view}
     end
 
     test "plasmid identity is shown as a letter, not a number", %{view: view} do
       html = render(view)
       assert html =~ "Plasmid A"
-      assert has_element?(view, "[data-plasmid-chip='0']", "A")
+      assert html =~ "plasmid A"
     end
 
     test "plasmid opcodes are colored by opcode class, like the chromosome", %{view: view} do
-      render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "move"})
-      # The row carries the `op op-<class>` modifier that drives the colour
-      # (it was a bare `codeome-block` before, hence all-white plasmid opcodes).
-      assert has_element?(view, "li[data-plasmid-op-idx='0'].op")
+      render_hook(view, "edit_insert", %{"section" => "p0", "index" => 0, "opcode" => "move"})
+      # The plasmid block carries the `op op-<class>` modifier (the same as the
+      # chromosome) since it renders in the central listing now.
+      assert has_element?(view, "#codeome-blocks-p0 .codeome-block-editable.op")
     end
 
     test "delete-plasmid uses the app's custom confirm, not native data-confirm", %{view: view} do
-      assert has_element?(view, "button.codeome-plasmid-del-btn", "Delete plasmid")
+      assert has_element?(view, "button.codeome-plasmid-del-btn")
 
-      render_hook(view, "plasmid_remove_init", %{})
+      render_hook(view, "plasmid_remove_init", %{"index" => 0})
       html = render(view)
       assert html =~ "Delete?"
       assert html =~ "plasmid_remove_confirm"
       # still present until confirmed
-      assert :sys.get_state(view.pid).socket.assigns.plasmid_buffers != []
+      assert :sys.get_state(view.pid).socket.assigns.genome.plasmids != []
     end
 
-    test "delete removes an opcode from the active plasmid", %{view: view} do
-      for op <- ["nop_1", "move", "eat"],
-          do: render_hook(view, "edit_insert", %{"index" => 0, "opcode" => op})
+    test "delete removes an opcode from the plasmid", %{view: view} do
+      for {op, i} <- Enum.with_index(["nop_1", "move", "eat"]),
+          do: render_hook(view, "edit_insert", %{"section" => "p0", "index" => i, "opcode" => op})
 
-      render_hook(view, "plasmid_delete_op", %{"index" => "1"})
-      assert :sys.get_state(view.pid).socket.assigns.plasmid_buffers == [[:nop_1, :eat]]
+      render_hook(view, "edit_delete", %{"section" => "p0", "index" => "1"})
+      assert :sys.get_state(view.pid).socket.assigns.genome.plasmids == [[:nop_1, :eat]]
     end
 
-    test "reorder moves an opcode within the active plasmid", %{view: view} do
-      for op <- ["nop_1", "move"],
-          do: render_hook(view, "edit_insert", %{"index" => 0, "opcode" => op})
+    test "reorder moves an opcode within the plasmid", %{view: view} do
+      for {op, i} <- Enum.with_index(["nop_1", "move"]),
+          do: render_hook(view, "edit_insert", %{"section" => "p0", "index" => i, "opcode" => op})
 
-      render_hook(view, "plasmid_reorder", %{"from" => "0", "to" => "2"})
-      assert :sys.get_state(view.pid).socket.assigns.plasmid_buffers == [[:move, :nop_1]]
+      render_hook(view, "edit_reorder", %{"section" => "p0", "from" => "0", "to" => "1"})
+      assert :sys.get_state(view.pid).socket.assigns.genome.plasmids == [[:move, :nop_1]]
     end
 
-    test "remove (init → confirm) deletes the active plasmid and resets target", %{view: view} do
+    test "remove (init → confirm) deletes the plasmid", %{view: view} do
       # Destructive remove is a custom two-step confirm, not native data-confirm.
-      render_hook(view, "plasmid_remove_init", %{})
-      assert :sys.get_state(view.pid).socket.assigns.plasmid_remove_confirming == true
+      render_hook(view, "plasmid_remove_init", %{"index" => 0})
+      assert :sys.get_state(view.pid).socket.assigns.plasmid_remove_confirming == 0
 
       render_hook(view, "plasmid_remove_confirm", %{})
       state = :sys.get_state(view.pid).socket.assigns
-      assert state.plasmid_buffers == []
-      assert state.active_target == :chromosome
-      assert state.plasmid_remove_confirming == false
+      assert state.genome.plasmids == []
+      assert state.plasmid_remove_confirming == nil
     end
 
     test "remove cancel keeps the plasmid and closes the confirm", %{view: view} do
-      render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "nop_1"})
-      render_hook(view, "plasmid_remove_init", %{})
+      render_hook(view, "edit_insert", %{"section" => "p0", "index" => 0, "opcode" => "nop_1"})
+      render_hook(view, "plasmid_remove_init", %{"index" => 0})
       render_hook(view, "plasmid_remove_cancel", %{})
       state = :sys.get_state(view.pid).socket.assigns
-      assert state.plasmid_buffers == [[:nop_1]]
-      assert state.active_target == {:plasmid, 0}
-      assert state.plasmid_remove_confirming == false
+      assert state.genome.plasmids == [[:nop_1]]
+      assert state.plasmid_remove_confirming == nil
     end
 
-    test "switching target dismisses a pending remove confirm", %{view: view} do
-      render_hook(view, "plasmid_remove_init", %{})
-      render_hook(view, "set_target", %{"target" => "chromosome"})
+    test "adding a plasmid dismisses a pending remove confirm", %{view: view} do
+      render_hook(view, "plasmid_remove_init", %{"index" => 0})
+      render_hook(view, "add_plasmid", %{})
       refute :sys.get_state(view.pid).socket.assigns.plasmid_remove_confirming
-    end
-
-    test "insert past the cap is a no-op", %{view: view} do
-      cap = Lenies.Plasmid.max_length()
-
-      for _ <- 1..(cap + 5),
-          do: render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "nop_0"})
-
-      [plasmid] = :sys.get_state(view.pid).socket.assigns.plasmid_buffers
-      assert length(plasmid) == cap
     end
   end
 
@@ -968,16 +1214,15 @@ defmodule LeniesWeb.EditorLiveTest do
 
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
 
-    # Build the chromosome first while the active target is still :chromosome
-    # (submit_opcode_text always inserts into the chromosome buffer).
+    # Build the chromosome first (the caret starts at the chromosome end, so
+    # submit_opcode_text inserts into the chromosome buffer).
     render_hook(view, "submit_opcode_text", %{
       "opcodes" => "push0 push1 add move eat push0 push1 add move eat"
     })
 
-    # Author a plasmid with a single opcode.
+    # Author a plasmid with a single opcode (edit into section p0).
     render_hook(view, "add_plasmid", %{})
-    render_hook(view, "set_target", %{"target" => "plasmid", "index" => "0"})
-    render_hook(view, "edit_insert", %{"index" => 0, "opcode" => "nop_1"})
+    render_hook(view, "edit_insert", %{"section" => "p0", "index" => 0, "opcode" => "nop_1"})
 
     # a second, empty plasmid that must be dropped on save
     render_hook(view, "add_plasmid", %{})

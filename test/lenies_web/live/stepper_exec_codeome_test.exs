@@ -4,6 +4,9 @@ defmodule LeniesWeb.StepperExecCodeomeTest do
 
   @moduletag timeout: 20_000
 
+  # Re-covered by editor_debug_test.exs in the unification plan (Task 8); file deleted in Task 10.
+  @moduletag :skip
+
   setup :register_and_log_in_user
 
   setup %{user: user} do

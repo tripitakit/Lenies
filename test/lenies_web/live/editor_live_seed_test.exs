@@ -26,18 +26,27 @@ defmodule LeniesWeb.EditorLiveSeedTest do
 
   test "loads a builtin seed's opcodes into the editor", %{conn: conn} do
     seed = hd(Lenies.Seeds.all())
-    expected = Lenies.Codeome.to_list(seed.codeome)
-    n = length(expected)
+    chromosome = Lenies.Codeome.to_list(seed.codeome)
+
+    plasmid_ops =
+      case Map.get(seed, :plasmid) do
+        nil -> []
+        ops -> ops
+      end
+
+    # The listing title "Genome — N ops" reflects the whole exec genome
+    # (chromosome ++ plasmids), the same geography the interpreter executes.
+    n = length(chromosome) + length(plasmid_ops)
 
     {:ok, _view, html} = live(conn, ~p"/sandbox/editor/seed/#{Atom.to_string(seed.id)}")
 
-    # The listing-pane title "Codeome — N ops" is the only HTML element that
-    # reflects exactly `length(@buffer)`. The palette and the datalist also
-    # contain opcode names, but neither of them changes between a loaded buffer
-    # and an empty one, so matching an opcode name would be a false positive.
-    # An empty /sandbox/editor/new renders "Codeome — 0 ops"; a loaded seed
-    # renders "Codeome — N ops" with N > 0.
-    assert html =~ "Codeome — #{n} ops"
+    # The listing-pane title "Genome — N ops" is the only HTML element that
+    # reflects exactly the exec-genome length. The palette and the datalist
+    # also contain opcode names, but neither of them changes between a loaded
+    # genome and an empty one, so matching an opcode name would be a false
+    # positive. An empty /sandbox/editor/new renders "Genome — 0 ops"; a
+    # loaded seed renders "Genome — N ops" with N > 0.
+    assert html =~ "Genome — #{n} ops"
     assert n > 0
   end
 
@@ -68,8 +77,8 @@ defmodule LeniesWeb.EditorLiveSeedTest do
     {:ok, _view, html} = live(conn, ~p"/sandbox/editor/seed/custom:#{codeome.id}")
 
     # Same reliable signal as the builtin test: the listing-pane title
-    # "Codeome — 3 ops" proves the buffer was loaded, not just that opcode
+    # "Genome — 3 ops" proves the buffer was loaded, not just that opcode
     # names appear in the palette.
-    assert html =~ "Codeome — #{length(opcodes)} ops"
+    assert html =~ "Genome — #{length(opcodes)} ops"
   end
 end

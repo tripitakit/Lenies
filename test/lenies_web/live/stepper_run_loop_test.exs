@@ -7,6 +7,9 @@ defmodule LeniesWeb.StepperRunLoopTest do
   # cap the timeout so it fails fast instead of hanging for the default 60s.
   @moduletag timeout: 20_000
 
+  # Re-covered by editor_debug_test.exs in the unification plan (Task 8); file deleted in Task 10.
+  @moduletag :skip
+
   setup :register_and_log_in_user
 
   setup %{user: user} do
@@ -14,15 +17,20 @@ defmodule LeniesWeb.StepperRunLoopTest do
     world_id = {:sandbox, user.id}
     {:ok, _h} = Lenies.Worlds.handle(world_id)
     :ok = Lenies.Worlds.pause(world_id)
+
     for mod <- [Lenies.Manual, Lenies.Snippets.Store] do
       if Process.whereis(mod) == nil, do: {:ok, _} = mod.start_link([])
     end
+
     on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
     :ok
   end
 
-  defp sc(view), do: (Regex.run(~r/Step #(\d+)/, render(view)) |> Enum.at(1) |> String.to_integer())
-  defp set_speed(view, s), do: view |> element("form.stepper-speed-form") |> render_change(%{"value" => to_string(s)})
+  defp sc(view), do: Regex.run(~r/Step #(\d+)/, render(view)) |> Enum.at(1) |> String.to_integer()
+
+  defp set_speed(view, s),
+    do: view |> element("form.stepper-speed-form") |> render_change(%{"value" => to_string(s)})
+
   defp run(view), do: view |> element("button[phx-click='run']") |> render_click()
   defp pause(view), do: view |> element("button[phx-click='pause']") |> render_click()
   defp reset(view), do: view |> element("button[phx-click='reset']") |> render_click()
@@ -38,9 +46,11 @@ defmodule LeniesWeb.StepperRunLoopTest do
   test "the speed slider controls the RUN rate", %{conn: conn} do
     view = open_stepper(conn, 300)
 
-    set_speed(view, 4)            # 250ms delay
+    # 250ms delay
+    set_speed(view, 4)
     run(view)
-    Process.sleep(60)            # let the immediate tick settle
+    # let the immediate tick settle
+    Process.sleep(60)
     c0 = sc(view)
     Process.sleep(800)
     pause(view)
@@ -48,7 +58,8 @@ defmodule LeniesWeb.StepperRunLoopTest do
 
     reset(view)
 
-    set_speed(view, 40)           # 25ms delay
+    # 25ms delay
+    set_speed(view, 40)
     run(view)
     Process.sleep(60)
     d0 = sc(view)
@@ -77,10 +88,12 @@ defmodule LeniesWeb.StepperRunLoopTest do
     end
 
     reset(view)
-    set_speed(view, 50)            # 20ms delay
+    # 20ms delay
+    set_speed(view, 50)
     run(view)
     Process.sleep(700)
-    pause(view)                    # must return promptly (single loop, not flooded)
+    # must return promptly (single loop, not flooded)
+    pause(view)
     n = sc(view)
 
     # A single 50/s loop over ~700ms is ~35 steps; many parallel loops are far more.

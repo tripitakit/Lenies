@@ -16,7 +16,7 @@ defmodule LeniesWeb.EditorLive do
   alias LeniesWeb.Disassembler
   alias LeniesWeb.CodeomeBuffer
   alias LeniesWeb.EditorHistory
-  alias LeniesWeb.EditorCaret
+  alias LeniesWeb.{GenomeBuffer, GenomeCaret}
 
   require Logger
 
@@ -37,7 +37,7 @@ defmodule LeniesWeb.EditorLive do
 
     scope = socket.assigns.current_scope
 
-    {mode, selected_hash, buffer, plasmid_buffers} =
+    {mode, selected_hash, genome, save_prefill} =
       init_for_route(socket.assigns.live_action, params, world_id, world_handle, scope)
 
     socket =
@@ -46,39 +46,36 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:world_handle, world_handle)
       |> assign(:mode, mode)
       |> assign(:selected_hash, selected_hash)
-      |> assign(:buffer, buffer)
-      |> assign(:original_buffer, buffer)
-      |> assign(:plasmid_buffers, plasmid_buffers)
-      |> assign(:original_plasmid_buffers, plasmid_buffers)
-      |> assign(:active_target, :chromosome)
+      |> assign(:genome, genome)
+      |> assign(:original_genome, genome)
       |> assign(:dirty, false)
-      |> assign(:validation, LeniesWeb.CodeomeBuffer.validate(buffer))
-      |> assign(:economics, current_economics(buffer))
+      |> assign(:validation, GenomeBuffer.validate(genome))
+      |> assign(:economics, current_economics(genome))
+      |> assign(:jump_targets, LeniesWeb.JumpTargets.targets(GenomeBuffer.to_exec_list(genome)))
       |> assign(:show_spawn_form, false)
       |> assign(:show_save_form, false)
       |> assign(:save_form_error, nil)
+      |> assign(:save_prefill, save_prefill)
       |> assign(:current_chapter, @default_chapter)
       |> assign(:manual_collapsed?, false)
       |> assign(:text_input_value, "")
       |> assign(:text_input_error, nil)
-      |> assign(:caret, length(buffer))
-      |> assign(:anchor, length(buffer))
       |> assign(:clipboard, [])
       |> assign(:history, EditorHistory.new(100))
       |> assign(:snippets, Lenies.Snippets.Store.all())
       |> assign(:show_snippet_form, false)
       |> assign(:snippet_form_error, nil)
-      |> assign(:editing_index, nil)
+      |> assign(:editing_addr, nil)
       |> assign(:inline_edit_error, nil)
-      |> assign(:jump_targets, LeniesWeb.JumpTargets.targets(buffer))
-      |> assign(:show_stepper, false)
-      |> assign(:plasmid_remove_confirming, false)
+      |> assign(:right_tab, :genome)
+      |> assign(:plasmid_remove_confirming, nil)
+      |> put_caret(GenomeCaret.end_of(genome))
 
     {:ok, socket}
   end
 
   defp init_for_route(:new, _params, _world_id, _handle, _scope) do
-    {:new_seed, nil, [], []}
+    {:new_seed, nil, GenomeBuffer.new(), nil}
   end
 
   defp init_for_route(:edit, %{"hash" => hash}, world_id, handle, _scope) do
@@ -101,30 +98,40 @@ defmodule LeniesWeb.EditorLive do
           {[], []}
       end
 
-    {:edit, hash, buffer, plasmid_buffers}
+    {:edit, hash, GenomeBuffer.new(buffer, plasmid_buffers), nil}
   end
 
   # Custom seed: "custom:<id>" — scoped to the current user.
   defp init_for_route(:seed, %{"seed_id" => "custom:" <> id}, _world_id, _handle, scope) do
-    {buffer, plasmid_buffers} =
-      case Lenies.Collection.get_codeome(scope.user, id) do
-        %Lenies.Collection.Codeome{} = entry ->
-          {Lenies.Collection.to_opcode_atoms(entry),
-           Lenies.Collection.to_plasmid_structs(entry) |> Enum.map(& &1.opcodes)}
+    case Lenies.Collection.get_codeome(scope.user, id) do
+      %Lenies.Collection.Codeome{} = entry ->
+        genome =
+          GenomeBuffer.new(
+            Lenies.Collection.to_opcode_atoms(entry),
+            Lenies.Collection.to_plasmid_structs(entry) |> Enum.map(& &1.opcodes)
+          )
 
-        _ ->
-          {[], []}
-      end
+        # Loading one of your saved codeomes pre-fills the save form so the
+        # edit -> save (overwrite) loop doesn't ask you to retype anything.
+        prefill = %{
+          name: entry.name,
+          color_hex: entry.color_hex,
+          energy_default: trunc(entry.energy_default)
+        }
 
-    {:new_seed, nil, buffer, plasmid_buffers}
+        {:new_seed, nil, genome, prefill}
+
+      _ ->
+        {:new_seed, nil, GenomeBuffer.new(), nil}
+    end
   end
 
   # Builtin seed by id atom.
   defp init_for_route(:seed, %{"seed_id" => sid}, _world_id, _handle, _scope) do
-    {buffer, plasmid_buffers} =
+    genome =
       case safe_seed_atom(sid) do
         nil ->
-          {[], []}
+          GenomeBuffer.new()
 
         atom ->
           case Lenies.Seeds.get(atom) do
@@ -135,14 +142,14 @@ defmodule LeniesWeb.EditorLive do
                   ops -> [ops]
                 end
 
-              {Lenies.Codeome.to_list(codeome), plasmids}
+              GenomeBuffer.new(Lenies.Codeome.to_list(codeome), plasmids)
 
             _ ->
-              {[], []}
+              GenomeBuffer.new()
           end
       end
 
-    {:new_seed, nil, buffer, plasmid_buffers}
+    {:new_seed, nil, genome, nil}
   end
 
   # Resolve a seed-id string to its atom. We match against the ids returned by
@@ -196,45 +203,63 @@ defmodule LeniesWeb.EditorLive do
     {:noreply, socket}
   end
 
-  def handle_event("edit_delete", %{"index" => index_str}, socket) do
-    index = String.to_integer(index_str)
-    new_buffer = LeniesWeb.CodeomeBuffer.delete(socket.assigns.buffer, index)
+  def handle_event("edit_delete", %{"section" => sec, "index" => index}, socket) do
+    section = decode_section(sec)
+    idx = to_int(index)
+
+    new_genome =
+      GenomeBuffer.update_section(socket.assigns.genome, section, &CodeomeBuffer.delete(&1, idx))
 
     {:noreply,
      socket
-     |> put_caret(EditorCaret.place(length(new_buffer)))
-     |> commit_buffer_change(new_buffer)}
+     |> put_caret(GenomeCaret.place(section, max(idx, 0)))
+     |> commit_genome_change(new_genome)}
   end
 
-  def handle_event("edit_reorder", %{"from" => from, "to" => to}, socket) do
-    new_buffer = LeniesWeb.CodeomeBuffer.move(socket.assigns.buffer, from, to)
+  def handle_event("edit_reorder", %{"section" => sec, "from" => from, "to" => to}, socket) do
+    section = decode_section(sec)
+
+    new_genome =
+      GenomeBuffer.update_section(
+        socket.assigns.genome,
+        section,
+        &CodeomeBuffer.move(&1, to_int(from), to_int(to))
+      )
 
     {:noreply,
      socket
-     |> put_caret(EditorCaret.place(length(new_buffer)))
-     |> commit_buffer_change(new_buffer)}
+     |> put_caret(
+       GenomeCaret.place(
+         section,
+         min(to_int(to) + 1, length(GenomeBuffer.get_section(new_genome, section) || []))
+       )
+     )
+     |> commit_genome_change(new_genome)}
   end
 
-  def handle_event("edit_insert", %{"index" => index, "opcode" => opcode_str}, socket)
-      when is_integer(index) and is_binary(opcode_str) do
-    try do
-      opcode = String.to_existing_atom(opcode_str)
+  def handle_event(
+        "edit_insert",
+        %{"section" => sec, "index" => index, "opcode" => opcode_str},
+        socket
+      )
+      when is_binary(opcode_str) do
+    section = decode_section(sec)
 
-      if Lenies.Codeome.Opcodes.known?(opcode) do
-        case socket.assigns.active_target do
-          :chromosome ->
-            # `index` from a palette drop is authoritative: move caret, insert.
-            socket = put_caret(socket, EditorCaret.place(index))
-            {:noreply, insert_at_caret(socket, [opcode])}
+    case to_known_opcode(String.downcase(opcode_str)) do
+      {:ok, opcode} ->
+        socket = put_caret(socket, GenomeCaret.place(section, to_int(index)))
+        {:noreply, insert_at_caret(socket, [opcode])}
 
-          {:plasmid, i} ->
-            {:noreply, insert_into_plasmid(socket, i, opcode)}
-        end
-      else
+      :error ->
         {:noreply, socket}
-      end
-    rescue
-      ArgumentError -> {:noreply, socket}
+    end
+  end
+
+  # Palette double-click: append at the caret, wherever it lives.
+  def handle_event("edit_insert_at_caret", %{"opcode" => opcode_str}, socket) do
+    case to_known_opcode(String.downcase(to_string(opcode_str))) do
+      {:ok, opcode} -> {:noreply, insert_at_caret(socket, [opcode])}
+      :error -> {:noreply, socket}
     end
   end
 
@@ -252,7 +277,7 @@ defmodule LeniesWeb.EditorLive do
     # 500.0 — the form no longer collects count or energy.
     case socket.assigns.validation do
       {:ok, _} ->
-        codeome = LeniesWeb.CodeomeBuffer.to_codeome(socket.assigns.buffer)
+        codeome = LeniesWeb.CodeomeBuffer.to_codeome(socket.assigns.genome.chromosome)
         seed_origin = spawn_seed_origin(socket.assigns)
 
         Lenies.Worlds.spawn_lenie(socket.assigns.world_id, codeome,
@@ -287,10 +312,10 @@ defmodule LeniesWeb.EditorLive do
           name: name,
           color_hex: color,
           energy_default: parse_clamped(energy_str, 1, 1_000_000, 10_000) * 1.0,
-          opcodes: Enum.map(socket.assigns.buffer, &Atom.to_string/1),
+          opcodes: Enum.map(socket.assigns.genome.chromosome, &Atom.to_string/1),
           plasmids:
-            socket.assigns.plasmid_buffers
-            |> non_empty_plasmid_buffers()
+            socket.assigns.genome.plasmids
+            |> Enum.reject(&(&1 == []))
             |> Enum.map(fn ops -> %{opcodes: Enum.map(ops, &Atom.to_string/1)} end)
         }
 
@@ -349,127 +374,65 @@ defmodule LeniesWeb.EditorLive do
     end
   end
 
-  def handle_event("select_block", %{"index" => index, "shift" => shift}, socket) do
-    index = to_int(index)
-    len = length(socket.assigns.buffer)
+  def handle_event("place_caret", %{"section" => sec, "gap" => gap} = params, socket) do
+    section = decode_section(sec)
+    len = length(GenomeBuffer.get_section(socket.assigns.genome, section) || [])
+    gap = to_int(gap) |> max(0) |> min(len)
 
-    if index < 0 or index >= len do
+    new_pair =
+      if params["shift"] in [true, "true"] do
+        GenomeCaret.extend_to_gap(caret_pair(socket), section, gap)
+      else
+        GenomeCaret.place(section, gap)
+      end
+
+    {:noreply, put_caret(socket, new_pair)}
+  end
+
+  def handle_event("select_block", %{"section" => sec, "index" => index} = params, socket) do
+    section = decode_section(sec)
+    idx = to_int(index)
+    buf = GenomeBuffer.get_section(socket.assigns.genome, section) || []
+
+    if idx < 0 or idx >= length(buf) do
       {:noreply, socket}
     else
-      pair = caret_pair(socket)
-
       new_pair =
-        if shift in [true, "true"] do
-          EditorCaret.extend_to_block(pair, index)
+        if params["shift"] in [true, "true"] do
+          GenomeCaret.extend_to_block(caret_pair(socket), section, idx)
         else
-          EditorCaret.select_block(index)
+          GenomeCaret.select_block(section, idx)
         end
 
       {:noreply, put_caret(socket, new_pair)}
     end
   end
 
-  def handle_event("place_caret", %{"gap" => gap} = params, socket) do
-    gap = to_int(gap) |> max(0) |> min(length(socket.assigns.buffer))
-    shift = params["shift"]
-
-    new_pair =
-      if shift in [true, "true"] do
-        EditorCaret.extend_to_gap(caret_pair(socket), gap)
-      else
-        EditorCaret.place(gap)
-      end
-
-    {:noreply, put_caret(socket, new_pair)}
-  end
-
-  def handle_event("set_target", %{"target" => "chromosome"}, socket) do
-    {:noreply, assign(socket, active_target: :chromosome, plasmid_remove_confirming: false)}
-  end
-
-  def handle_event("set_target", %{"target" => "plasmid", "index" => idx}, socket) do
-    i = to_int(idx)
-
-    target =
-      if i >= 0 and i < length(socket.assigns.plasmid_buffers),
-        do: {:plasmid, i},
-        else: :chromosome
-
-    {:noreply, assign(socket, active_target: target, plasmid_remove_confirming: false)}
-  end
-
-  def handle_event("add_plasmid", _params, socket) do
-    new_plasmids = socket.assigns.plasmid_buffers ++ [[]]
-    new_idx = length(new_plasmids) - 1
-
-    {:noreply,
-     socket
-     |> assign(:plasmid_buffers, new_plasmids)
-     |> assign(:active_target, {:plasmid, new_idx})
-     |> assign(:plasmid_remove_confirming, false)
-     |> assign_dirty()}
-  end
-
-  def handle_event("plasmid_delete_op", %{"index" => index}, socket) do
-    {:noreply, update_active_plasmid(socket, &CodeomeBuffer.delete(&1, to_int(index)))}
-  end
-
-  def handle_event("plasmid_reorder", %{"from" => from, "to" => to}, socket) do
-    {:noreply, update_active_plasmid(socket, &CodeomeBuffer.move(&1, to_int(from), to_int(to)))}
-  end
-
-  # Removing a plasmid is destructive, so it goes through the app's custom
-  # two-step confirm (mirrors Sterilize/Kill/Apoptosis) instead of the browser's
-  # native `data-confirm` dialog.
-  def handle_event("plasmid_remove_init", _params, socket) do
-    case socket.assigns.active_target do
-      {:plasmid, _idx} -> {:noreply, assign(socket, :plasmid_remove_confirming, true)}
-      _ -> {:noreply, socket}
-    end
-  end
-
-  def handle_event("plasmid_remove_cancel", _params, socket) do
-    {:noreply, assign(socket, :plasmid_remove_confirming, false)}
-  end
-
-  def handle_event("plasmid_remove_confirm", _params, socket) do
-    case socket.assigns.active_target do
-      {:plasmid, idx} ->
-        new_plasmids = List.delete_at(socket.assigns.plasmid_buffers, idx)
-
-        {:noreply,
-         socket
-         |> commit_plasmid_change(new_plasmids)
-         |> assign(:active_target, :chromosome)
-         |> assign(:plasmid_remove_confirming, false)}
-
-      _ ->
-        {:noreply, assign(socket, :plasmid_remove_confirming, false)}
-    end
-  end
-
   def handle_event("move_caret", %{"dir" => dir} = params, socket) do
-    len = length(socket.assigns.buffer)
     d = if dir == "up", do: :up, else: :down
-    pair = caret_pair(socket)
 
     new_pair =
       if params["extend"] in [true, "true"] do
-        EditorCaret.extend(pair, d, len)
+        GenomeCaret.extend(caret_pair(socket), d, socket.assigns.genome)
       else
-        EditorCaret.move(pair, d, len)
+        GenomeCaret.move(caret_pair(socket), d, socket.assigns.genome)
       end
 
     {:noreply, put_caret(socket, new_pair)}
   end
 
   def handle_event("move_caret_end", %{"to" => to}, socket) do
-    gap = if to == "start", do: 0, else: length(socket.assigns.buffer)
-    {:noreply, put_caret(socket, EditorCaret.place(gap))}
+    pair =
+      if to == "start",
+        do: GenomeCaret.place(:chromosome, 0),
+        else: GenomeCaret.end_of(socket.assigns.genome)
+
+    {:noreply, put_caret(socket, pair)}
   end
 
   def handle_event("clear_selection", _params, socket) do
-    {:noreply, put_caret(socket, EditorCaret.place(socket.assigns.caret))}
+    {section, gap} = socket.assigns.caret
+    {:noreply, put_caret(socket, GenomeCaret.place(section, gap))}
   end
 
   def handle_event("copy_selection", _params, socket) do
@@ -477,8 +440,9 @@ defmodule LeniesWeb.EditorLive do
       nil ->
         {:noreply, socket}
 
-      range ->
-        {:noreply, assign(socket, :clipboard, CodeomeBuffer.slice(socket.assigns.buffer, range))}
+      {section, range} ->
+        buf = GenomeBuffer.get_section(socket.assigns.genome, section)
+        {:noreply, assign(socket, :clipboard, CodeomeBuffer.slice(buf, range))}
     end
   end
 
@@ -487,15 +451,22 @@ defmodule LeniesWeb.EditorLive do
       nil ->
         {:noreply, socket}
 
-      range ->
-        clip = CodeomeBuffer.slice(socket.assigns.buffer, range)
-        new_buffer = CodeomeBuffer.delete_range(socket.assigns.buffer, range)
+      {section, range} ->
+        buf = GenomeBuffer.get_section(socket.assigns.genome, section)
+        clip = CodeomeBuffer.slice(buf, range)
+
+        new_genome =
+          GenomeBuffer.update_section(
+            socket.assigns.genome,
+            section,
+            &CodeomeBuffer.delete_range(&1, range)
+          )
 
         {:noreply,
          socket
          |> assign(:clipboard, clip)
-         |> put_caret(EditorCaret.after_delete_range(range))
-         |> commit_buffer_change(new_buffer)}
+         |> put_caret(GenomeCaret.after_delete_range(section, range))
+         |> commit_genome_change(new_genome)}
     end
   end
 
@@ -511,16 +482,22 @@ defmodule LeniesWeb.EditorLive do
       nil ->
         {:noreply, socket}
 
-      {_lo, hi} = range ->
-        clip = CodeomeBuffer.slice(socket.assigns.buffer, range)
+      {section, {_lo, hi} = range} ->
+        buf = GenomeBuffer.get_section(socket.assigns.genome, section)
+        clip = CodeomeBuffer.slice(buf, range)
         at = hi + 1
-        new_buffer = CodeomeBuffer.insert_many(socket.assigns.buffer, at, clip)
-        dup = EditorCaret.select_inserted(at, length(clip))
+
+        new_genome =
+          GenomeBuffer.update_section(
+            socket.assigns.genome,
+            section,
+            &CodeomeBuffer.insert_many(&1, at, clip)
+          )
 
         {:noreply,
          socket
-         |> put_caret(dup)
-         |> commit_buffer_change(new_buffer)}
+         |> put_caret(GenomeCaret.select_inserted(section, at, length(clip)))
+         |> commit_genome_change(new_genome)}
     end
   end
 
@@ -529,85 +506,101 @@ defmodule LeniesWeb.EditorLive do
       nil ->
         {:noreply, socket}
 
-      range ->
-        new_buffer = CodeomeBuffer.delete_range(socket.assigns.buffer, range)
+      {section, range} ->
+        new_genome =
+          GenomeBuffer.update_section(
+            socket.assigns.genome,
+            section,
+            &CodeomeBuffer.delete_range(&1, range)
+          )
 
         {:noreply,
          socket
-         |> put_caret(EditorCaret.after_delete_range(range))
-         |> commit_buffer_change(new_buffer)}
+         |> put_caret(GenomeCaret.after_delete_range(section, range))
+         |> commit_genome_change(new_genome)}
     end
   end
 
-  def handle_event("move_range", %{"to" => to}, socket) do
-    case current_range(socket) do
-      nil ->
-        {:noreply, socket}
+  def handle_event("move_range", %{"section" => sec, "to" => to}, socket) do
+    with {section, {lo, hi} = range} <- current_range(socket),
+         true <- decode_section(sec) == section do
+      buf = GenomeBuffer.get_section(socket.assigns.genome, section)
+      to_gap = to_int(to) |> max(0) |> min(length(buf))
 
-      {lo, hi} = range ->
-        to_gap = to_int(to) |> max(0) |> min(length(socket.assigns.buffer))
-        new_buffer = CodeomeBuffer.move_range(socket.assigns.buffer, range, to_gap)
-        n = hi - lo + 1
-        new_lo = if to_gap <= lo, do: to_gap, else: to_gap - n
-        new_lo = if to_gap > lo and to_gap <= hi + 1, do: lo, else: new_lo
+      new_genome =
+        GenomeBuffer.update_section(
+          socket.assigns.genome,
+          section,
+          &CodeomeBuffer.move_range(&1, range, to_gap)
+        )
 
-        {:noreply,
-         socket
-         |> put_caret(EditorCaret.select_inserted(new_lo, n))
-         |> commit_buffer_change(new_buffer)}
+      n = hi - lo + 1
+      new_lo = if to_gap <= lo, do: to_gap, else: to_gap - n
+      new_lo = if to_gap > lo and to_gap <= hi + 1, do: lo, else: new_lo
+
+      {:noreply,
+       socket
+       |> put_caret(GenomeCaret.select_inserted(section, new_lo, n))
+       |> commit_genome_change(new_genome)}
+    else
+      _ -> {:noreply, socket}
     end
   end
 
   def handle_event("move_range_step", %{"dir" => dir}, socket) do
-    len = length(socket.assigns.buffer)
-
     case current_range(socket) do
       nil ->
         {:noreply, socket}
 
-      {lo, hi} = range ->
+      {section, {lo, hi} = range} ->
+        buf = GenomeBuffer.get_section(socket.assigns.genome, section)
+        len = length(buf)
         to_gap = if dir == "up", do: max(lo - 1, 0), else: min(hi + 2, len)
 
         if (dir == "up" and lo == 0) or (dir == "down" and hi + 1 >= len) do
           {:noreply, socket}
         else
-          new_buffer = CodeomeBuffer.move_range(socket.assigns.buffer, range, to_gap)
+          new_genome =
+            GenomeBuffer.update_section(
+              socket.assigns.genome,
+              section,
+              &CodeomeBuffer.move_range(&1, range, to_gap)
+            )
+
           n = hi - lo + 1
           new_lo = if dir == "up", do: lo - 1, else: lo + 1
 
           {:noreply,
            socket
-           |> put_caret(EditorCaret.select_inserted(new_lo, n))
-           |> commit_buffer_change(new_buffer)}
+           |> put_caret(GenomeCaret.select_inserted(section, new_lo, n))
+           |> commit_genome_change(new_genome)}
         end
     end
   end
 
   def handle_event("undo", _params, socket) do
-    case EditorHistory.undo(socket.assigns.history, socket.assigns.buffer) do
+    case EditorHistory.undo(socket.assigns.history, socket.assigns.genome) do
       :none ->
         {:noreply, socket}
 
-      {prev_buffer, history} ->
+      {prev_genome, history} ->
         {:noreply,
          socket
          |> assign(:history, history)
-         |> put_caret(EditorCaret.place(length(prev_buffer)))
-         |> apply_buffer_change(prev_buffer)}
+         |> apply_genome_change(prev_genome)}
     end
   end
 
   def handle_event("redo", _params, socket) do
-    case EditorHistory.redo(socket.assigns.history, socket.assigns.buffer) do
+    case EditorHistory.redo(socket.assigns.history, socket.assigns.genome) do
       :none ->
         {:noreply, socket}
 
-      {next_buffer, history} ->
+      {next_genome, history} ->
         {:noreply,
          socket
          |> assign(:history, history)
-         |> put_caret(EditorCaret.place(length(next_buffer)))
-         |> apply_buffer_change(next_buffer)}
+         |> apply_genome_change(next_genome)}
     end
   end
 
@@ -620,8 +613,9 @@ defmodule LeniesWeb.EditorLive do
   end
 
   def handle_event("submit_snippet", %{"snippet_name" => name}, socket) do
-    with range when not is_nil(range) <- current_range(socket),
-         opcodes <- CodeomeBuffer.slice(socket.assigns.buffer, range),
+    with {section, range} <- current_range(socket),
+         buf <- GenomeBuffer.get_section(socket.assigns.genome, section),
+         opcodes <- CodeomeBuffer.slice(buf, range),
          id <- Lenies.Slug.slugify(name),
          :ok <- Lenies.Snippets.Store.save(%{id: id, name: name, opcodes: opcodes}) do
       {:noreply,
@@ -674,12 +668,14 @@ defmodule LeniesWeb.EditorLive do
     end
   end
 
-  def handle_event("insert_snippet_at", %{"id" => id, "index" => index}, socket) do
-    at = to_int(index) |> max(0) |> min(length(socket.assigns.buffer))
+  def handle_event("insert_snippet_at", %{"id" => id, "section" => sec, "index" => index}, socket) do
+    section = decode_section(sec)
+    len = length(GenomeBuffer.get_section(socket.assigns.genome, section) || [])
+    at = to_int(index) |> max(0) |> min(len)
 
     case Lenies.Snippets.Store.get(id) do
       %{opcodes: ops} when ops != [] ->
-        socket = put_caret(socket, EditorCaret.place(at))
+        socket = put_caret(socket, GenomeCaret.place(section, at))
         {:noreply, insert_at_caret(socket, ops)}
 
       _ ->
@@ -692,63 +688,113 @@ defmodule LeniesWeb.EditorLive do
     {:noreply, assign(socket, :snippets, Lenies.Snippets.Store.all())}
   end
 
-  def handle_event("submit_replace", %{"index" => index, "opcode" => opcode_str}, socket) do
+  def handle_event(
+        "submit_replace",
+        %{"section" => sec, "index" => index, "opcode" => opcode_str},
+        socket
+      ) do
+    section = decode_section(sec)
     idx = to_int(index)
+    buf = GenomeBuffer.get_section(socket.assigns.genome, section) || []
 
     cond do
-      idx < 0 or idx >= length(socket.assigns.buffer) ->
-        {:noreply, assign(socket, editing_index: nil, inline_edit_error: nil)}
+      idx < 0 or idx >= length(buf) ->
+        {:noreply, assign(socket, editing_addr: nil, inline_edit_error: nil)}
 
       true ->
         case to_known_opcode(String.downcase(to_string(opcode_str))) do
           {:ok, opcode} ->
-            new_buffer = CodeomeBuffer.replace(socket.assigns.buffer, idx, opcode)
+            new_genome =
+              GenomeBuffer.update_section(
+                socket.assigns.genome,
+                section,
+                &CodeomeBuffer.replace(&1, idx, opcode)
+              )
 
             {:noreply,
              socket
-             |> assign(editing_index: nil, inline_edit_error: nil)
-             |> commit_buffer_change(new_buffer)}
+             |> assign(editing_addr: nil, inline_edit_error: nil)
+             |> commit_genome_change(new_genome)}
 
           :error ->
-            {:noreply, assign(socket, editing_index: idx, inline_edit_error: "unknown opcode")}
+            {:noreply,
+             assign(socket, editing_addr: {section, idx}, inline_edit_error: "unknown opcode")}
         end
     end
   end
 
-  def handle_event("start_inline_edit", %{"index" => index}, socket) do
-    {:noreply, assign(socket, editing_index: to_int(index), inline_edit_error: nil)}
+  def handle_event("start_inline_edit", %{"section" => sec, "index" => index}, socket) do
+    {:noreply,
+     assign(socket, editing_addr: {decode_section(sec), to_int(index)}, inline_edit_error: nil)}
   end
 
   def handle_event("cancel_inline_edit", _params, socket) do
-    {:noreply, assign(socket, editing_index: nil, inline_edit_error: nil)}
+    {:noreply, assign(socket, editing_addr: nil, inline_edit_error: nil)}
   end
 
-  def handle_event("open_stepper", _params, socket) do
-    {:noreply, assign(socket, :show_stepper, true)}
+  def handle_event("jump_to_flat", %{"flat" => flat}, socket) do
+    case GenomeBuffer.section_at(socket.assigns.genome, to_int(flat)) do
+      nil -> {:noreply, socket}
+      {section, idx} -> {:noreply, put_caret(socket, GenomeCaret.place(section, idx))}
+    end
   end
 
-  # The mini-world canvas hook (StepperCanvas) lives inside a
-  # `phx-update="ignore"` subtree, so `pushEventTo` with a component
-  # selector hit corner-cases on event routing. Hook now uses plain
-  # `pushEvent` to the parent LiveView (this one); we forward to the
-  # LiveComponent via `send_update`.
-  def handle_event("stepper:canvas_click", %{"x" => x, "y" => y}, socket) do
-    send_update(LeniesWeb.StepperLive, id: "stepper-modal", canvas_click: %{x: x, y: y})
-    {:noreply, socket}
+  def handle_event("add_plasmid", _params, socket) do
+    new_genome = GenomeBuffer.add_plasmid(socket.assigns.genome)
+    new_section = {:plasmid, GenomeBuffer.plasmid_count(new_genome) - 1}
+
+    {:noreply,
+     socket
+     |> assign(:plasmid_remove_confirming, nil)
+     |> put_caret(GenomeCaret.place(new_section, 0))
+     |> commit_genome_change(new_genome)}
+  end
+
+  def handle_event("plasmid_remove_init", %{"index" => index}, socket) do
+    idx = to_int(index)
+
+    if idx >= 0 and idx < GenomeBuffer.plasmid_count(socket.assigns.genome) do
+      {:noreply, assign(socket, :plasmid_remove_confirming, idx)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("plasmid_remove_cancel", _params, socket) do
+    {:noreply, assign(socket, :plasmid_remove_confirming, nil)}
+  end
+
+  def handle_event("plasmid_remove_confirm", _params, socket) do
+    case socket.assigns.plasmid_remove_confirming do
+      nil ->
+        {:noreply, socket}
+
+      idx ->
+        new_genome = GenomeBuffer.remove_plasmid(socket.assigns.genome, idx)
+
+        {:noreply,
+         socket
+         |> assign(:plasmid_remove_confirming, nil)
+         |> commit_genome_change(new_genome)}
+    end
+  end
+
+  def handle_event("set_right_tab", %{"tab" => tab}, socket) do
+    {:noreply, assign(socket, :right_tab, if(tab == "debug", do: :debug, else: :genome))}
+  end
+
+  def handle_event("goto_section", %{"section" => sec}, socket) do
+    section = decode_section(sec)
+
+    case GenomeBuffer.get_section(socket.assigns.genome, section) do
+      nil -> {:noreply, socket}
+      _buf -> {:noreply, put_caret(socket, GenomeCaret.place(section, 0))}
+    end
   end
 
   @impl true
   def handle_info(:sandboxes_manager_up, socket) do
     :ok = Lenies.Sandboxes.attach(socket.assigns.current_scope.user.id)
-    {:noreply, socket}
-  end
-
-  def handle_info(:close_stepper, socket) do
-    {:noreply, assign(socket, :show_stepper, false)}
-  end
-
-  def handle_info({:stepper_tick, component_id, gen}, socket) do
-    send_update(LeniesWeb.StepperLive, id: component_id, tick: gen)
     {:noreply, socket}
   end
 
@@ -794,16 +840,6 @@ defmodule LeniesWeb.EditorLive do
         <%= if @dirty do %>
           <span class="text-amber-300 text-[10px]">●dirty</span>
         <% end %>
-
-        <button
-          type="button"
-          phx-click="open_stepper"
-          disabled={@buffer == []}
-          class="text-xs px-2 py-0.5 border border-amber-500/60 text-amber-200 disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Open codeome stepper (debug)"
-        >
-          Debug
-        </button>
 
         <button
           type="button"
@@ -879,7 +915,7 @@ defmodule LeniesWeb.EditorLive do
             <input
               type="color"
               name="color_hex"
-              value={suggested_color(@buffer, @world_handle)}
+              value={suggested_color(@genome.chromosome, @world_handle)}
               class="w-12 h-6"
             />
           </label>
@@ -924,7 +960,7 @@ defmodule LeniesWeb.EditorLive do
 
         <section class="codeome-palette-pane min-h-0">
           <div class="codeome-palette-pane-title">
-            Opcodes — drag, dblclick, or type → {target_label(@active_target)}
+            Opcodes — drag, dblclick, or type → the caret's section
           </div>
 
           <form phx-submit="submit_opcode_text" class="palette-text-input-form">
@@ -1066,9 +1102,7 @@ defmodule LeniesWeb.EditorLive do
               </div>
             </div>
           </div>
-          <% range = EditorCaret.derive_range({@caret, @anchor}) %>
-          <% len = length(@buffer) %>
-          <% template_nops = template_nop_indices(@buffer) %>
+          <% range = GenomeCaret.derive_range({@caret, @anchor}) %>
           <div class="codeome-toolbar">
             <button
               type="button"
@@ -1145,247 +1179,241 @@ defmodule LeniesWeb.EditorLive do
               Save as snippet
             </button>
           </div>
-          <div class="codeome-listing-pane-title">Codeome — {len} ops</div>
+          <div class="codeome-listing-pane-title">
+            Genome — {length(GenomeBuffer.to_exec_list(@genome))} ops
+          </div>
           <datalist id="opcode-datalist">
             <%= for op <- Lenies.Codeome.Opcodes.all() do %>
               <option value={Atom.to_string(op)}></option>
             <% end %>
           </datalist>
-          <div
-            class="codeome-blocks"
-            id={"codeome-blocks-#{@mode}-#{@selected_hash || "new"}"}
-            phx-hook="CodeomeSortable"
-          >
-            <%= for {opcode, idx} <- Enum.with_index(@buffer) do %>
+          <% template_nops = template_nop_indices(GenomeBuffer.to_exec_list(@genome)) %>
+          <div id="codeome-listing" class="codeome-listing-sections">
+            <%= for {section, buf} <- GenomeBuffer.sections(@genome) do %>
+              <% sec = encode_section(section) %>
+              <%= if section != :chromosome do %>
+                <div class="codeome-section-divider" data-section-divider={sec}>
+                  ── plasmid {plasmid_letter(elem(section, 1))} ({length(buf)}/{Lenies.Plasmid.max_length()}) ──
+                </div>
+              <% end %>
               <div
-                class={["codeome-gap", caret_here?(@caret, idx) && "codeome-gap-caret"]}
-                data-gap={idx}
-                data-caret-at={(caret_here?(@caret, idx) && idx) || nil}
-                phx-click="place_caret"
-                phx-value-gap={idx}
+                class="codeome-blocks"
+                id={"codeome-blocks-" <> sec}
+                data-section={sec}
+                phx-hook="CodeomeSortable"
               >
-              </div>
-              <div
-                class={[
-                  "codeome-block codeome-block-editable op op-" <>
-                    Atom.to_string(Disassembler.opcode_class(opcode)),
-                  selected?(range, idx) && "codeome-block-selected",
-                  MapSet.member?(template_nops, idx) && "codeome-template-nop"
-                ]}
-                data-idx={idx}
-              >
-                <span class="codeome-drag-handle" title="Drag to reorder">≡</span>
-                <span class="codeome-block-idx">
-                  {String.pad_leading(Integer.to_string(idx), 3, "0")}
-                </span>
-                <%= if idx == @editing_index do %>
-                  <form phx-submit="submit_replace" class="codeome-inline-edit">
-                    <input type="hidden" name="index" value={idx} />
-                    <input
-                      type="text"
-                      name="opcode"
-                      value={Atom.to_string(opcode)}
-                      list="opcode-datalist"
-                      autocomplete="off"
-                      spellcheck="false"
-                      phx-blur="cancel_inline_edit"
-                      phx-keydown="cancel_inline_edit"
-                      phx-key="Escape"
-                      phx-mounted={JS.focus()}
-                      class="codeome-inline-input"
-                    />
-                    <%= if @inline_edit_error do %>
-                      <span class="codeome-inline-error" title={@inline_edit_error}>⚠</span>
-                    <% end %>
-                  </form>
-                <% else %>
-                  <span class="codeome-block-name">{Atom.to_string(opcode) |> String.upcase()}</span>
-                <% end %>
-                <%= case Map.get(@jump_targets, idx) do %>
-                  <% {:ok, target} -> %>
-                    <button
-                      type="button"
-                      phx-click="place_caret"
-                      phx-value-gap={target}
-                      class="codeome-jump-badge"
-                      title={"Jumps to ##{target}"}
-                    >
-                      → {String.pad_leading(Integer.to_string(target), 3, "0")}
-                    </button>
-                  <% :not_found -> %>
-                    <span
-                      class="codeome-jump-badge codeome-jump-badge-missing"
-                      title="No template match"
-                    >
-                      → ✕
-                    </span>
-                  <% nil -> %>
-                <% end %>
-                <span class="codeome-block-actions">
-                  <button
-                    type="button"
-                    phx-click="edit_delete"
-                    phx-value-index={idx}
-                    class="codeome-action-btn"
-                    title="Delete"
+                <%= for {opcode, idx} <- Enum.with_index(buf) do %>
+                  <% flat = GenomeBuffer.flat_index(@genome, section, idx) %>
+                  <div
+                    class={["codeome-gap", caret_here?(@caret, section, idx) && "codeome-gap-caret"]}
+                    data-section={sec}
+                    data-gap={idx}
+                    phx-click="place_caret"
+                    phx-value-section={sec}
+                    phx-value-gap={idx}
                   >
-                    ⨯
-                  </button>
-                </span>
-              </div>
-            <% end %>
-            <div
-              class={["codeome-gap codeome-gap-end", caret_here?(@caret, len) && "codeome-gap-caret"]}
-              data-gap={len}
-              data-caret-at={(caret_here?(@caret, len) && len) || nil}
-              phx-click="place_caret"
-              phx-value-gap={len}
-            >
-            </div>
-          </div>
-        </section>
-
-        <section class="codeome-plasmid-pane min-h-0">
-          <div class="codeome-listing-pane-title">Codeome</div>
-
-          <div class="codeome-plasmid-chips" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={@active_target == :chromosome}
-              data-target-chip="chromosome"
-              phx-click="set_target"
-              phx-value-target="chromosome"
-              class={[
-                "codeome-tool-btn",
-                @active_target == :chromosome && "codeome-tool-btn-active"
-              ]}
-            >
-              Chromosome
-            </button>
-
-            <%= for {_plasmid, i} <- Enum.with_index(@plasmid_buffers) do %>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={@active_target == {:plasmid, i}}
-                data-plasmid-chip={i}
-                phx-click="set_target"
-                phx-value-target="plasmid"
-                phx-value-index={i}
-                class={[
-                  "codeome-tool-btn",
-                  @active_target == {:plasmid, i} && "codeome-tool-btn-active"
-                ]}
-              >
-                {plasmid_letter(i)}
-              </button>
-            <% end %>
-
-            <button type="button" phx-click="add_plasmid" class="codeome-tool-btn">
-              + Plasmid
-            </button>
-          </div>
-
-          <%= case @active_target do %>
-            <% {:plasmid, idx} -> %>
-              <% plasmid = Enum.at(@plasmid_buffers, idx, []) %>
-              <div class="codeome-plasmid-head">
-                <span>Plasmid {plasmid_letter(idx)}</span>
-                <span class="opacity-70">{length(plasmid)}/{Lenies.Plasmid.max_length()}</span>
-                <%= if @plasmid_remove_confirming do %>
-                  <div class="codeome-plasmid-confirm">
-                    <span class="codeome-plasmid-confirm-q">Delete?</span>
-                    <button
-                      type="button"
-                      phx-click="plasmid_remove_confirm"
-                      class="codeome-confirm-btn codeome-confirm-btn-danger"
-                    >
-                      Yes
-                    </button>
-                    <button type="button" phx-click="plasmid_remove_cancel" class="codeome-confirm-btn">
-                      Cancel
-                    </button>
                   </div>
-                <% else %>
-                  <button type="button" phx-click="plasmid_remove_init" class="codeome-plasmid-del-btn">
-                    Delete plasmid
-                  </button>
-                <% end %>
-              </div>
-
-              <ol class="codeome-blocks">
-                <%= for {opcode, i} <- Enum.with_index(plasmid) do %>
-                  <li
-                    class={"codeome-block op op-" <> Atom.to_string(Disassembler.opcode_class(opcode))}
-                    data-plasmid-op-idx={i}
+                  <div
+                    class={[
+                      "codeome-block codeome-block-editable op op-" <>
+                        Atom.to_string(Disassembler.opcode_class(opcode)),
+                      selected?(range, section, idx) && "codeome-block-selected",
+                      MapSet.member?(template_nops, flat) && "codeome-template-nop"
+                    ]}
+                    data-section={sec}
+                    data-idx={idx}
+                    data-flat={flat}
                   >
-                    <span class="codeome-block-idx">{i}</span>
-                    <span class="codeome-block-name">{Atom.to_string(opcode) |> String.upcase()}</span>
+                    <span class="codeome-drag-handle" title="Drag to reorder">≡</span>
+                    <span class="codeome-block-idx">
+                      {String.pad_leading(Integer.to_string(flat), 3, "0")}
+                    </span>
+                    <%= if @editing_addr == {section, idx} do %>
+                      <form phx-submit="submit_replace" class="codeome-inline-edit">
+                        <input type="hidden" name="section" value={sec} />
+                        <input type="hidden" name="index" value={idx} />
+                        <input
+                          type="text"
+                          name="opcode"
+                          value={Atom.to_string(opcode)}
+                          list="opcode-datalist"
+                          autocomplete="off"
+                          spellcheck="false"
+                          phx-blur="cancel_inline_edit"
+                          phx-keydown="cancel_inline_edit"
+                          phx-key="Escape"
+                          phx-mounted={JS.focus()}
+                          class="codeome-inline-input"
+                        />
+                        <%= if @inline_edit_error do %>
+                          <span class="codeome-inline-error" title={@inline_edit_error}>⚠</span>
+                        <% end %>
+                      </form>
+                    <% else %>
+                      <span class="codeome-block-name">
+                        {Atom.to_string(opcode) |> String.upcase()}
+                      </span>
+                    <% end %>
+                    <%= case Map.get(@jump_targets, flat) do %>
+                      <% {:ok, target} -> %>
+                        <button
+                          type="button"
+                          phx-click="jump_to_flat"
+                          phx-value-flat={target}
+                          class="codeome-jump-badge"
+                          title={"Jumps to ##{target}"}
+                        >
+                          → {String.pad_leading(Integer.to_string(target), 3, "0")}
+                        </button>
+                      <% :not_found -> %>
+                        <span
+                          class="codeome-jump-badge codeome-jump-badge-missing"
+                          title="No template match"
+                        >
+                          → ✕
+                        </span>
+                      <% nil -> %>
+                    <% end %>
                     <span class="codeome-block-actions">
                       <button
-                        :if={i > 0}
                         type="button"
-                        phx-click="plasmid_reorder"
-                        phx-value-from={i}
-                        phx-value-to={i - 1}
+                        phx-click="edit_delete"
+                        phx-value-section={sec}
+                        phx-value-index={idx}
                         class="codeome-action-btn"
-                        title="Su"
-                      >
-                        ▲
-                      </button>
-                      <button
-                        :if={i < length(plasmid) - 1}
-                        type="button"
-                        phx-click="plasmid_reorder"
-                        phx-value-from={i}
-                        phx-value-to={i + 1}
-                        class="codeome-action-btn"
-                        title="Giù"
-                      >
-                        ▼
-                      </button>
-                      <button
-                        type="button"
-                        phx-click="plasmid_delete_op"
-                        phx-value-index={i}
-                        class="codeome-action-btn"
-                        title="Elimina"
+                        title="Delete"
                       >
                         ⨯
                       </button>
                     </span>
-                  </li>
+                  </div>
                 <% end %>
-              </ol>
+                <div
+                  class={[
+                    "codeome-gap codeome-gap-end",
+                    caret_here?(@caret, section, length(buf)) && "codeome-gap-caret"
+                  ]}
+                  data-section={sec}
+                  data-gap={length(buf)}
+                  phx-click="place_caret"
+                  phx-value-section={sec}
+                  phx-value-gap={length(buf)}
+                >
+                </div>
+              </div>
+            <% end %>
+          </div>
+        </section>
 
-            <% :chromosome -> %>
+        <section class="codeome-plasmid-pane min-h-0">
+          <div class="codeome-plasmid-chips" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={@right_tab == :genome}
+              phx-click="set_right_tab"
+              phx-value-tab="genome"
+              class={["codeome-tool-btn", @right_tab == :genome && "codeome-tool-btn-active"]}
+            >
+              Genome
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={@right_tab == :debug}
+              phx-click="set_right_tab"
+              phx-value-tab="debug"
+              class={["codeome-tool-btn", @right_tab == :debug && "codeome-tool-btn-active"]}
+            >
+              Debug
+            </button>
+          </div>
+
+          <%= if @right_tab == :genome do %>
+            <div class="codeome-genome-panel">
+              <div class="codeome-genome-row">
+                <button
+                  type="button"
+                  phx-click="goto_section"
+                  phx-value-section="chromosome"
+                  class="codeome-tool-btn"
+                >
+                  Chromosome
+                </button>
+                <span class="opacity-70">{length(@genome.chromosome)} ops</span>
+              </div>
+
+              <%= for {buf, i} <- Enum.with_index(@genome.plasmids) do %>
+                <div class="codeome-genome-row" data-plasmid-row={i}>
+                  <button
+                    type="button"
+                    phx-click="goto_section"
+                    phx-value-section={"p#{i}"}
+                    class="codeome-tool-btn"
+                  >
+                    Plasmid {plasmid_letter(i)}
+                  </button>
+                  <span class="opacity-70">{length(buf)}/{Lenies.Plasmid.max_length()}</span>
+                  <%= if @plasmid_remove_confirming == i do %>
+                    <span class="codeome-plasmid-confirm">
+                      <span class="codeome-plasmid-confirm-q">Delete?</span>
+                      <button
+                        type="button"
+                        phx-click="plasmid_remove_confirm"
+                        class="codeome-confirm-btn codeome-confirm-btn-danger"
+                      >
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        phx-click="plasmid_remove_cancel"
+                        class="codeome-confirm-btn"
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  <% else %>
+                    <button
+                      type="button"
+                      phx-click="plasmid_remove_init"
+                      phx-value-index={i}
+                      class="codeome-plasmid-del-btn"
+                    >
+                      ⨯
+                    </button>
+                  <% end %>
+                </div>
+              <% end %>
+
+              <button type="button" phx-click="add_plasmid" class="codeome-tool-btn">
+                + Plasmid
+              </button>
               <p class="codeome-snippets-empty">
-                Select or create a plasmid to edit its opcodes. Palette inserts go to
-                the selected buffer.
+                Plasmid code is edited in the central listing, below its divider.
               </p>
+            </div>
+          <% else %>
+            <p class="codeome-snippets-empty">No active debug session.</p>
           <% end %>
         </section>
       </div>
-
-      <%= if @show_stepper do %>
-        <.live_component
-          module={LeniesWeb.StepperLive}
-          id="stepper-modal"
-          codeome={LeniesWeb.CodeomeBuffer.to_codeome(@buffer)}
-          plasmids={Enum.map(non_empty_plasmid_buffers(@plasmid_buffers), &Lenies.Plasmid.new/1)}
-          current_user={@current_scope && @current_scope.user}
-        />
-      <% end %>
     </div>
     """
   end
 
   defp caret_pair(socket), do: {socket.assigns.caret, socket.assigns.anchor}
 
-  defp put_caret(socket, {c, a}), do: assign(socket, caret: c, anchor: a)
+  defp put_caret(socket, {caret, anchor}), do: assign(socket, caret: caret, anchor: anchor)
 
-  defp current_range(socket), do: EditorCaret.derive_range(caret_pair(socket))
+  defp current_range(socket), do: GenomeCaret.derive_range(caret_pair(socket))
+
+  # Param/DOM section encoding: "chromosome" | "p0", "p1", ...
+  defp decode_section("chromosome"), do: :chromosome
+  defp decode_section("p" <> i), do: {:plasmid, to_int(i)}
+  defp decode_section(_), do: :chromosome
+
+  defp encode_section(:chromosome), do: "chromosome"
+  defp encode_section({:plasmid, i}), do: "p#{i}"
 
   defp maybe_assign(socket, _key, nil), do: socket
   defp maybe_assign(socket, key, value), do: assign(socket, key, value)
@@ -1407,124 +1435,72 @@ defmodule LeniesWeb.EditorLive do
 
   defp spawn_seed_origin(_), do: nil
 
-  defp selected?(nil, _idx), do: false
-  defp selected?({lo, hi}, idx), do: idx >= lo and idx <= hi
+  defp selected?(nil, _section, _idx), do: false
+  defp selected?({s, {lo, hi}}, section, idx), do: s == section and idx >= lo and idx <= hi
 
-  defp caret_here?(caret, gap), do: caret == gap
+  defp caret_here?({s, gap}, section, g), do: s == section and gap == g
 
   defp has_selection?(nil), do: false
-  defp has_selection?({_lo, _hi}), do: true
+  defp has_selection?(_range), do: true
 
   defp has_clipboard?([]), do: false
   defp has_clipboard?(list) when is_list(list), do: true
 
-  # Central buffer-mutation entry point: records the pre-change buffer onto
-  # the undo history (clearing redo) before applying the new buffer.
-  # NOTE: history snapshots only the buffer list. If it ever expands to
-  # capture selection/UI state, this must be called BEFORE any such assign
-  # mutation on the socket (paste/duplicate set selection before committing).
-  defp commit_buffer_change(socket, new_buffer) do
-    history = EditorHistory.record(socket.assigns.history, socket.assigns.buffer)
+  # Central genome-mutation entry point: snapshot the pre-change genome for
+  # undo, then apply. Task 9 adds the hot-restart side effect inside
+  # apply_genome_change — keep all mutations flowing through here.
+  defp commit_genome_change(socket, new_genome) do
+    history = EditorHistory.record(socket.assigns.history, socket.assigns.genome)
 
     socket
     |> assign(:history, history)
-    |> apply_buffer_change(new_buffer)
+    |> apply_genome_change(new_genome)
   end
 
-  defp apply_buffer_change(socket, new_buffer) do
+  defp apply_genome_change(socket, new_genome) do
     socket
-    |> assign(:buffer, new_buffer)
-    |> assign(:validation, LeniesWeb.CodeomeBuffer.validate(new_buffer))
-    |> assign(:economics, current_economics(new_buffer))
-    |> assign(:jump_targets, LeniesWeb.JumpTargets.targets(new_buffer))
-    |> assign_dirty()
-  end
-
-  # Dirty if either the chromosome or the plasmid set differs from what was
-  # loaded. Both originals are assigned at mount, so a plain compare suffices.
-  defp assign_dirty(socket) do
-    dirty =
-      socket.assigns.buffer != socket.assigns.original_buffer or
-        socket.assigns.plasmid_buffers != socket.assigns.original_plasmid_buffers
-
-    assign(socket, :dirty, dirty)
-  end
-
-  # Append an opcode to the end of plasmid `idx` (minimal editing: no caret).
-  # No-op if the index is gone or the plasmid is already at the cap.
-  defp insert_into_plasmid(socket, idx, opcode) do
-    plasmids = socket.assigns.plasmid_buffers
-
-    case Enum.at(plasmids, idx) do
-      nil ->
-        socket
-
-      plasmid ->
-        if length(plasmid) >= Lenies.Plasmid.max_length() do
-          socket
-        else
-          new_plasmid = CodeomeBuffer.insert(plasmid, length(plasmid), opcode)
-          commit_plasmid_change(socket, List.replace_at(plasmids, idx, new_plasmid))
-        end
-    end
-  end
-
-  # The plasmid buffers the user has actually filled — empties are authoring
-  # placeholders and never persisted or executed.
-  defp non_empty_plasmid_buffers(plasmid_buffers) when is_list(plasmid_buffers),
-    do: Enum.reject(plasmid_buffers, &(&1 == []))
-
-  defp commit_plasmid_change(socket, new_plasmid_buffers) do
-    socket
-    |> assign(:plasmid_buffers, new_plasmid_buffers)
-    |> assign_dirty()
-  end
-
-  # Apply `fun` to the currently-targeted plasmid buffer; no-op off a plasmid.
-  defp update_active_plasmid(socket, fun) when is_function(fun, 1) do
-    case socket.assigns.active_target do
-      {:plasmid, idx} ->
-        plasmids = socket.assigns.plasmid_buffers
-
-        case Enum.at(plasmids, idx) do
-          nil -> socket
-          plasmid -> commit_plasmid_change(socket, List.replace_at(plasmids, idx, fun.(plasmid)))
-        end
-
-      _ ->
-        socket
-    end
+    |> assign(:genome, new_genome)
+    |> assign(:validation, GenomeBuffer.validate(new_genome))
+    |> assign(:economics, current_economics(new_genome))
+    |> assign(:jump_targets, LeniesWeb.JumpTargets.targets(GenomeBuffer.to_exec_list(new_genome)))
+    |> put_caret(GenomeCaret.clamp(caret_pair(socket), new_genome))
+    |> assign(:dirty, new_genome != socket.assigns.original_genome)
   end
 
   # Reads `eat_amount` / `attack_damage` from Application env at the
-  # moment the buffer changes so the editor reflects whatever the user
+  # moment the genome changes so the editor reflects whatever the user
   # has set on the dashboard's Tuning Live sliders. No PubSub
   # subscription on purpose: tuning rarely shifts mid-edit, and the
-  # numbers refresh on the next buffer change anyway.
-  defp current_economics(buffer) do
+  # numbers refresh on the next genome change anyway.
+  defp current_economics(genome) do
     eat_amount = Application.get_env(:lenies, :eat_amount, 20)
     attack_damage = Application.get_env(:lenies, :attack_damage, 10)
-    LeniesWeb.CodeomeBuffer.economics(buffer, eat_amount, attack_damage)
+    GenomeBuffer.economics(genome, eat_amount, attack_damage)
   end
 
-  # Inserts `opcodes` at the caret. If a selection is active, deletes it first
-  # (replace-on-insert), then inserts at the range start, leaving a collapsed
-  # caret immediately after the inserted run.
+  # Inserts `opcodes` at the caret (replace-on-insert when a selection is
+  # active). The caret's section decides where the run lands.
   defp insert_at_caret(socket, opcodes) when is_list(opcodes) do
-    {buffer, at} =
+    {genome, section, at} =
       case current_range(socket) do
         nil ->
-          {socket.assigns.buffer, socket.assigns.caret}
+          {section, gap} = socket.assigns.caret
+          {socket.assigns.genome, section, gap}
 
-        {lo, _hi} = range ->
-          {CodeomeBuffer.delete_range(socket.assigns.buffer, range), lo}
+        {section, {lo, _hi} = range} ->
+          {GenomeBuffer.update_section(
+             socket.assigns.genome,
+             section,
+             &CodeomeBuffer.delete_range(&1, range)
+           ), section, lo}
       end
 
-    new_buffer = CodeomeBuffer.insert_many(buffer, at, opcodes)
+    new_genome =
+      GenomeBuffer.update_section(genome, section, &CodeomeBuffer.insert_many(&1, at, opcodes))
 
     socket
-    |> put_caret(EditorCaret.after_insert(at, length(opcodes)))
-    |> commit_buffer_change(new_buffer)
+    |> put_caret(GenomeCaret.after_insert(section, at, length(opcodes)))
+    |> commit_genome_change(new_genome)
   end
 
   # `select_block` indices come from the editor's own JS hook (always
@@ -1664,9 +1640,6 @@ defmodule LeniesWeb.EditorLive do
   # transfer class is the exception: its atom (:hgt) is not a readable name.
   defp category_label(:hgt), do: "Horizontal Code Transfer"
   defp category_label(other), do: Atom.to_string(other)
-
-  defp target_label(:chromosome), do: "Chromosome"
-  defp target_label({:plasmid, i}), do: "Plasmid #{plasmid_letter(i)}"
 
   # Plasmid IDENTITY is shown as a letter (A, B, C…) so it never reads as a
   # quantity — counts (e.g. the species-table "N plasmids" badge) stay numeric.
