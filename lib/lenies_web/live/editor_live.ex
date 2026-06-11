@@ -86,7 +86,7 @@ defmodule LeniesWeb.EditorLive do
   end
 
   defp init_for_route(:edit, %{"hash" => hash}, world_id, handle, _scope) do
-    {buffer, plasmid_buffers} =
+    {chromosome, plasmids} =
       case Lenies.Species.for_hash(handle, hash) do
         [{sample_id, snap} | _] ->
           chromosome =
@@ -105,7 +105,7 @@ defmodule LeniesWeb.EditorLive do
           {[], []}
       end
 
-    {:edit, hash, GenomeBuffer.new(buffer, plasmid_buffers), nil}
+    {:edit, hash, GenomeBuffer.new(chromosome, plasmids), nil}
   end
 
   # Custom seed: "custom:<id>" — scoped to the current user.

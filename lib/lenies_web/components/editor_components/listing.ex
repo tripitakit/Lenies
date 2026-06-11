@@ -13,7 +13,7 @@ defmodule LeniesWeb.EditorComponents.Listing do
   attr :caret, :any, required: true
   attr :anchor, :any, required: true
   attr :clipboard, :list, required: true
-  attr :history, :any, required: true
+  attr :history, EditorHistory, required: true
   attr :economics, :map, required: true
   attr :jump_targets, :map, required: true
   attr :editing_addr, :any, default: nil
@@ -359,7 +359,8 @@ defmodule LeniesWeb.EditorComponents.Listing do
   defp has_clipboard?([]), do: false
   defp has_clipboard?(list) when is_list(list), do: true
 
-  # twin of EditorLive.encode_section/1 (the param/DOM section encoding).
+  # Param/DOM section encoding (render-only; the inverse of the handler-side
+  # EditorLive.decode_section/1).
   defp encode_section(:chromosome), do: "chromosome"
   defp encode_section({:plasmid, i}), do: "p#{i}"
 

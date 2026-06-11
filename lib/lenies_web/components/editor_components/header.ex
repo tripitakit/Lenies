@@ -152,11 +152,10 @@ defmodule LeniesWeb.EditorComponents.Header do
         Spawn
       </button>
 
-      <%!-- Visible in BOTH :new_seed and :edit modes. In :edit mode it
-            opens a fork-only save form (server-side uniqueness check on
-            (owner, name) — see Lenies.Collection.create_codeome/2), which
-            is the missing piece of the "evolve in Sandbox → save → seed
-            in Arena" loop. --%>
+      <%!-- Opens the save form (name/colour/energy). A name already in the
+            user's collection — including the one this buffer was loaded from —
+            prompts an overwrite confirm/cancel dialog; a fresh name creates a
+            new entry. See Lenies.Collection.overwrite_codeome/2. --%>
       <button
         type="button"
         phx-click="open_save_form"
