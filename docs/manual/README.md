@@ -1,7 +1,7 @@
 # Lenies Programming Manual
 
 A programmer-friendly introduction to writing codeomes for the Lenies simulator.
-From your first 16-opcode walker to a self-tuning replicator and horizontal
+From your first move-and-eat loop to a self-tuning replicator and horizontal
 gene transfer, with every VM concept, opcode, and idiom explained from first
 principles.
 
@@ -36,14 +36,14 @@ instructions in the top-level project README at
 - [Chapter 0 — Introduction](00-introduction.md) — what a Lenie is, the world it lives in
 - [Chapter 1 — VM Anatomy](01-vm-anatomy.md) — execution state and the ring
 - [Chapter 2 — Opcode Reference](02-opcode-reference.md) — all 38 opcodes
-- [Chapter 3 — Your First Codeome: The Walker](03-first-codeome.md)
-- [Chapter 4 — Loops and Templates](04-loops-and-templates.md) — the Forager
-- [Chapter 5 — Memory and Arithmetic](05-memory-and-arithmetic.md) — Counter-walker, Turning forager
-- [Chapter 6 — Procedures](06-procedures.md) — call_t/ret, Subroutine forager
+- [Chapter 3 — Your First Codeome: The Crawler](03-first-codeome.md)
+- [Chapter 4 — Loops and Templates](04-loops-and-templates.md) — Reflex (rung 1)
+- [Chapter 5 — Memory and Arithmetic](05-memory-and-arithmetic.md) — Stepper, Wanderer
+- [Chapter 6 — Procedures](06-procedures.md) — call_t/ret, Subroutine Crawler, Architect (rung 3)
 - [Chapter 7 — Replication](07-replication.md) — Mini-replicator, Sustainable replicator
 - [Chapter 8 — Energy Economy](08-energy-economy.md) — budget, break-even, copy errors
-- [Chapter 9 — The MinimalReplicator Dissected](09-minimal-replicator.md) — the canonical hand-tuned replicator
-- [Chapter 10 — Conjugation and Plasmids](10-conjugation-and-plasmids.md) — horizontal gene transfer; writing your own conjugable plasmid
+- [Chapter 9 — The Ancestor Dissected](09-ancestor.md) — rung 2, the canonical replicator
+- [Chapter 10 — Conjugation and Plasmids](10-conjugation-and-plasmids.md) — Symbiont (rung 4); horizontal gene transfer and writing your own plasmid
 - [Chapter 11 — Cookbook](11-cookbook.md) — consolidated recipe book: constants, control flow, loops, slots, stack manipulation, self-inspection, anchor hygiene
 - [Appendix: LLM Knowledge Base](LLM-APPENDIX.md) — single-file reference for AI coding agents writing Lenies codeomes
 - [Appendix: Stack Machines & Stack-Based Languages](A-stack-machines.md) — the wider family Lenies belongs to, and where it breaks ranks

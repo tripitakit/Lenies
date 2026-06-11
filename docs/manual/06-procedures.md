@@ -7,7 +7,9 @@ function table. What it has instead is two opcodes — `call_t` and `ret` — th
 and `ret` brings it back. That is the entire mechanism. Everything else is convention.
 
 This chapter explains the mechanics, the costs, when to use procedures, and how to build a
-refactored Forager whose eat-and-move behaviour lives in one place instead of two.
+sense-branch creature whose eat-and-move behaviour lives in one procedure instead of two copies.
+The structured, recursive seed **Architect** (rung 3) is built entirely on this mechanism — its
+`MAIN` calls `FORAGE` and `REPLICATE`, and `FORAGE` in turn calls a nested `STEER`.
 
 ---
 
@@ -198,16 +200,16 @@ Keep a short index at the top of your codeome comments listing each anchor and i
 
 ---
 
-## 6  The Subroutine Forager
+## 6  The Subroutine Crawler
 
-We will refactor the chapter-4 Forager so that `:eat; :move` lives in a single procedure, called
-from two places:
+We will build a sense-branch creature like Reflex from chapter 4, but with `:eat; :move` factored
+into a single procedure, called from two places:
 
 1. After a successful `sense_front` (food detected — eat and move forward).
 2. After a random `turn_right` (turn to a new heading then immediately step forward).
 
-The second call site is a slight behavioural change: the original chapter-4 Forager turned in place
-and looped; this version takes a step after each turn, covering ground more actively.
+The second call site is a slight behavioural change: Reflex turned in place and looped; this version
+takes a step after each turn, covering ground more actively.
 
 ### 6.1  Anchor selection
 
@@ -370,7 +372,7 @@ frame for this procedure, and `ret` falls through to the cell after `:ret`. If t
 branch when called the "wrong" way.
 
 This dual-entry idiom is occasionally useful for evolved code but is generally fragile in
-hand-written codeomes. In the Subroutine Forager above, `EAT_MOVE` is only ever entered via
+hand-written codeomes. In the Subroutine Crawler above, `EAT_MOVE` is only ever entered via
 `call_t`, so `ret` always has a frame to pop.
 
 **The orphaned-frame case from Section 2.1 revisited.** If a `call_t` fails to find its anchor,
@@ -385,7 +387,7 @@ call stack depth carefully.
 
 ## 9  Try it
 
-Open the Lenies editor and create a new genome named **subroutine-forager-v1**. Enter the 44-cell
+Open the Lenies editor and create a new genome named **subroutine-crawler-v1**. Enter the 44-cell
 codeome from Section 6.2 exactly as listed. Spawn one lenie with medium energy (400–600).
 
 **What to observe:**
@@ -393,7 +395,7 @@ codeome from Section 6.2 exactly as listed. Spawn one lenie with medium energy (
 - In a world with scattered food patches the lenie moves in straight lines until it hits an empty
   cell, turns right, then immediately steps in the new direction (the second `call_t` at position
   26 fires after every `turn_right`).
-- The chapter-4 Forager turned and stayed put until the next sense; this version turns and steps,
+- Reflex turned and stayed put until the next sense; this version turns and steps,
   so it exits empty patches about one tick faster per turn.
 - Energy consumption per loop is the same when food is found: `sense_front (0.5) + jz_t (0.4) +
   call_t (0.4) + eat (2.0) + move (2.0) + ret (0.2) + jmp_t (0.4) = 5.9`. When no food is found
@@ -412,8 +414,11 @@ codeome from Section 6.2 exactly as listed. Spawn one lenie with medium energy (
 
 ## 10  What's next
 
-The Subroutine Forager is a complete organism built from loops, conditional branches, and procedure
-calls. The next leap is self-replication: teaching a lenie to copy its own codeome into a child.
-That requires `allocate`, `write_child`, and `divide` — the most expensive opcodes in the VM.
+The Subroutine Crawler is a complete organism built from loops, conditional branches, and procedure
+calls. The shipped seed **Architect** (rung 3) is the same idea taken to its conclusion: its forage
+and replication logic are each their own subroutine, and its `STEER` routine is called *from inside*
+`FORAGE` — a nested call, two frames deep on the call stack. The next leap it needs is
+self-replication: teaching a lenie to copy its own codeome into a child. That requires `allocate`,
+`write_child`, and `divide` — the most expensive opcodes in the VM.
 
 → Next: Chapter 7 builds the first replicator. ([07-replication.md](07-replication.md))

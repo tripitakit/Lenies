@@ -17,7 +17,7 @@ evolution as a participatory ecosystem. Watch the Arena, log in to plant your
 own Lenie, craft codeomes in your private Sandbox, save them to your
 collection, see whether they survive.
 
-> 📘 **Want to write your own codeomes?** Start with the [Lenies Programming Manual](docs/manual/README.md) — a chapter-by-chapter guide that takes you from your first six-opcode walker to a tuned self-replicator.
+> 📘 **Want to write your own codeomes?** Start with the [Lenies Programming Manual](docs/manual/README.md) — a chapter-by-chapter guide that takes you from your first move-and-eat loop to a tuned self-replicator.
 
 ---
 
@@ -74,8 +74,9 @@ via the dev mailbox at `/dev/mailbox`, then visit `/sandbox`.
 
 The Arena starts empty until someone (you, another user) seeds something into
 it. Your Sandbox starts empty too — open the editor at `/sandbox/editor/new`
-or spawn one of the five built-in seeds (Minimal Replicator, Carnivore,
-Defender, Hunter, Forager) from the dashboard's Spawn dropdown to get going.
+or spawn one of the four built-in seeds (Reflex, Ancestor, Architect, Symbiont
+— a simple-to-complex capability ladder) from the dashboard's Spawn dropdown to
+get going.
 
 ---
 
@@ -266,11 +267,10 @@ seven hand-crafted codeomes of growing complexity — see the [Programming Manua
 ## Further reading
 
 - 📘 [Programming Manual](docs/manual/README.md) — from zero to writing your
-  own sustainable replicator. Twelve chapters, ~4,200 lines of English text
-  and worked examples. Includes a chapter-by-chapter dissection of the
-  **Minimal Replicator** and notes on each of the five built-in seeds
-  (Minimal Replicator, Carnivore, Defender, Hunter, Forager) available in
-  your Sandbox.
+  own sustainable replicator. Twelve chapters of English text and worked
+  examples. Includes a chapter-by-chapter dissection of **Ancestor** and a
+  build-up through the four-rung seed ladder (Reflex → Ancestor → Architect →
+  Symbiont) available in your Sandbox.
 - Built-in seed sources in [`lib/lenies/codeomes/`](lib/lenies/codeomes/) —
   readable Elixir modules; useful as concrete examples once you've read the
   manual's first few chapters.
@@ -287,4 +287,4 @@ propagate by riding the cultural meme of the trilogy's protagonist,
 **Lenie Clarke**, and ends up nicknamed after her. The bytecode organisms in
 this project are a much smaller, much friendlier homage: stack-machine
 creatures eating and replicating inside a 128×128 toroidal grid instead of a
-planetary network, but driven by the same minimal-replicator logic.
+planetary network, but driven by the same self-replicating logic.

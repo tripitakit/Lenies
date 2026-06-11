@@ -1,6 +1,6 @@
 # Chapter 7 — Replication
 
-You have built a Forager that moves, senses, and eats. Now you will teach a Lenie to reproduce.
+You have built creatures that move, sense, and eat — Reflex and the Stepper. Now you will teach a Lenie to reproduce.
 Replication is the centrepiece of the Lenies simulator: it is the mechanism through which
 codeomes are inherited, mutated, and selected. This chapter covers the three opcodes that
 make it possible — `allocate`, `write_child`, and `divide` — and walks you through two
@@ -597,7 +597,7 @@ The random turn sidesteps this:
 - The separator `:push0` at pos 59 prevents the template extractor from merging the
   `jmp_t` template with the TURN_LEFT anchor.
 
-This is the same random-turn pattern from Chapter 5. If you built the Forager, this is
+This is the same random-turn pattern from Chapter 5. If you built the Wanderer, this is
 already familiar.
 
 **Build K=64 (pos 69–83):** `push1` puts 1 on the stack (pos 69). Then six rounds of
@@ -681,7 +681,7 @@ What to expect:
 If you see the population plateau at 1–2 rather than growing, the most likely cause is that
 the front cell is always occupied when `allocate` is called. Try adding a `jz_t` after
 `allocate` to skip the copy loop on failure, matching the pattern in the full
-`MinimalReplicator` implementation (chapter 9).
+`Ancestor` implementation (chapter 9).
 
 ---
 

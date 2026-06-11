@@ -1,6 +1,6 @@
 # Chapter 4 — Loops and Templates
 
-In chapter 3 you built a Walker that marches north forever. The only thing it does not do is *think* — it cannot react to what it finds. This chapter teaches the mechanism that makes reaction possible: **template addressing**. By the end you will understand how jumps work at the byte level and how to reason about anchor patterns and search direction, and you will have built a Forager that eats resources when the cell ahead is occupied and turns right when it is not.
+In chapter 3 you built a Crawler that marches north forever. The only thing it does not do is *think* — it cannot react to what it finds. This chapter teaches the mechanism that makes reaction possible: **template addressing**. By the end you will understand how jumps work at the byte level and how to reason about anchor patterns and search direction, and you will have built **Reflex** — rung 1 of the seed ladder — a creature that senses the cell ahead and reacts three ways: eat when food is there, cruise over empty cells, and turn away from a neighbour.
 
 ---
 
@@ -99,7 +99,7 @@ Two details are worth keeping in mind when reasoning about which anchor a jump w
 
 1. The forward search starts at `ip + 1`, not at `ip`. This means the jump's own template region is not excluded from the search. If the template `[:nop_0, :nop_0]` appears in the jump's own trailing nops, a match *could* theoretically be found there — but only if the complement of the template happens to match those same nops, which requires `[:nop_0, :nop_0]` to be its own complement. Since the complement flips bits, no non-empty template can be its own complement. You therefore never need to worry about a jump accidentally "matching itself".
 
-2. The backward search starts at `ip - 1`, meaning it can find anchors that appear *before* the jump in the codeome. This creates backward branches (loops). All loops in Lenies, including the Forager's main loop, rely on a jump searching backward to find an anchor it passed over on the way through.
+2. The backward search starts at `ip - 1`, meaning it can find anchors that appear *before* the jump in the codeome. This creates backward branches (loops). All loops in Lenies, including Reflex's main loop, rely on a jump searching backward to find an anchor it passed over on the way through.
 
 ---
 
@@ -191,161 +191,219 @@ cost = 0.2 + 0.05 x template_length
 
 A 4-bit template costs 0.40 per jump execution. An 8-bit template costs 0.60. Keep templates short when energy budget matters.
 
-To put this in context: the Forager executes two jump instructions per loop iteration (one `jz_t` plus one `jmp_t`), each with a 4-bit template. That is 0.80 energy per loop just for branches, on top of `sense_front` (0.5), `turn_right` (0.5), `eat` (2.0), and `move` (2.0). A Forager that alternates between eating and turning spends roughly 0.80 + 0.5 + 0.5 = 1.80 energy per turn-cycle and 0.80 + 0.5 + 2.0 + 2.0 = 5.30 per eat-cycle. With an initial 10 000 energy budget and `eat_amount = 20` per cell, it needs to eat at least once every few hundred loop iterations to stay alive. On a well-populated grid this is easy; on a sparse grid it will starve.
+To put this in context: Reflex executes one or two conditional jumps plus a loop-back `jmp_t` per iteration, each with a 4-bit template (0.40 each). On the food path it spends roughly `sense_front` (0.5) + `dup` (0.1) + `jz_t` (0.4) + `push1`+`add` (0.3) + `jz_t` (0.4) + `eat` (2.0) + `move` (2.0) + `jmp_t` (0.4) ≈ 6.1 energy; the cruise and turn paths are cheaper. With an initial 10 000 energy budget and `eat_amount = 20` per cell, it needs to eat often enough to offset the move cost. On a well-populated grid this is easy; on a sparse grid it will starve — and because Reflex never replicates, that is the end of that lineage.
 
 ---
 
-## 6 — The Forager
+## 6 — Reflex
 
-The Forager is a creature that senses the cell directly ahead, eats and moves forward if there is a resource there, and turns right if the cell is empty. It loops forever.
+`Reflex` is rung 1 of the seed ladder and the smallest creature that genuinely
+*reacts*. It senses the cell directly ahead and branches three ways:
 
-The codeome has two branches and two loop-back jumps. We use 4-bit anchors to keep jump costs low.
+- **food ahead** (`sense_front > 0`) → `eat`, then `move`;
+- **empty** (`== 0`) → `move` (cruise);
+- **a neighbour ahead** (`== -1`) → `turn_right` (steer away).
+
+It loops forever and never replicates — a mortal reflex agent. The trick that
+makes a three-way branch fit in a stack machine is **sign discrimination**: the
+sensed value is `-1`, `0`, or positive, and two `jz_t` tests (with a `+1` in
+between) sort the three cases apart.
+
+The codeome is 49 opcodes with three anchors. We use 4-bit anchors to keep jump
+costs low, chosen so the three anchors are mutually distinct (no duplicate-anchor
+trap):
+
+| Label | Anchor      | Jump template |
+|-------|-------------|---------------|
+| LOOP  | `[1,1,1,1]` | `[0,0,0,0]`   |
+| EMPTY | `[0,1,1,0]` | `[1,0,0,1]`   |
+| AVOID | `[1,1,0,0]` | `[0,0,1,1]`   |
 
 ```elixir
 [
-  # == 0..3   LOOP_HEAD anchor [0,0,0,0] =================================
-  :nop_0, :nop_0, :nop_0, :nop_0,
-  # == 4      sense the front cell; push result onto stack ===============
-  :sense_front,
-  # == 5..9   jz_t to TURN [0,1,0,1] (template [1,0,1,0]) ================
-  #          jz_t consumes the sense result regardless of branch taken
-  :jz_t, :nop_1, :nop_0, :nop_1, :nop_0,
-  # == 10     eat the cell ===============================================
-  :eat,
-  # == 11     move forward ===============================================
-  :move,
-  # == 12..16 jmp_t back to LOOP_HEAD (template [1,1,1,1]) ===============
-  :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
-  # == 17     separator - terminates extractor before TURN anchor ========
+  # == 0..3   LOOP anchor [1,1,1,1] =====================================
+  :nop_1, :nop_1, :nop_1, :nop_1,
+  # == 4..5   sense the cell ahead, duplicate the value ==================
+  :sense_front, :dup,
+  # == 6..10  jz_t EMPTY (template [1,0,0,1]) - taken when value == 0 ====
+  :jz_t, :nop_1, :nop_0, :nop_0, :nop_1,
+  # == 11..12 value + 1: lenie(-1)->0, food(>0)->>=2 ====================
+  :push1, :add,
+  # == 13..17 jz_t AVOID (template [0,0,1,1]) - taken when value was -1 ==
+  :jz_t, :nop_0, :nop_0, :nop_1, :nop_1,
+  # == 18..19 food path: eat, then advance ==============================
+  :eat, :move,
+  # == 20..24 jmp_t LOOP (template [0,0,0,0]) ===========================
+  :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
+  # == 25     separator =================================================
   :push0,
-  # == 18..21 TURN anchor [0,1,0,1] ======================================
-  :nop_0, :nop_1, :nop_0, :nop_1,
-  # == 22     turn right when there's nothing to eat =====================
+  # == 26..29 EMPTY anchor [0,1,1,0] ====================================
+  :nop_0, :nop_1, :nop_1, :nop_0,
+  # == 30..31 cruise: drop the leftover 0, then advance =================
+  :drop, :move,
+  # == 32..36 jmp_t LOOP ================================================
+  :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
+  # == 37     separator =================================================
+  :push0,
+  # == 38..41 AVOID anchor [1,1,0,0] ====================================
+  :nop_1, :nop_1, :nop_0, :nop_0,
+  # == 42     turn away from the neighbour ==============================
   :turn_right,
-  # == 23..27 jmp_t back to LOOP_HEAD (template [1,1,1,1]) ===============
-  :jmp_t, :nop_1, :nop_1, :nop_1, :nop_1,
-  # == 28..29 padding to reach the 10 non-nop minimum ====================
-  :push0, :drop
+  # == 43..47 jmp_t LOOP ================================================
+  :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
+  # == 48     separator (breaks the wrap into LOOP at pos 0) ============
+  :push0
 ]
 ```
 
-This is 30 opcodes total. Non-nop count: `sense_front`, `jz_t`, `eat`, `move`, `jmp_t`, `push0`, `turn_right`, `jmp_t`, `push0`, `drop` — exactly 10, meeting the validation gate precisely.
-
 ### Section-by-section walkthrough
 
-**Positions 0–3: LOOP_HEAD anchor `[0,0,0,0]`**
+**Positions 0–3: LOOP anchor `[1,1,1,1]`.** The landing pad for all three
+loop-back jumps. Each carries the template `[0,0,0,0]`, whose complement is
+`[1,1,1,1]`. When a jump matches, the ip lands at position 4.
 
-Four consecutive `:nop_0`. This is the landing pad for both loop-back jumps. Any `jmp_t` or `jz_t` carrying the template `[1,1,1,1]` will complement that to `[0,0,0,0]` and find this run. When the search matches, the ip lands at position 4 (immediately after the last `:nop_0`).
+**Positions 4–5: `sense_front`, `dup`.** `sense_front` pushes a value describing
+the cell ahead: `-1` for a Lenie, `0` for empty, a positive integer for food.
+`dup` keeps a second copy, because the first `jz_t` will consume one.
 
-**Position 4: `sense_front`**
+**Positions 6–10: `jz_t EMPTY`.** Tests (and pops) the top copy. If it is `0`
+(empty cell), the jump fires to the EMPTY anchor at 26, leaving the *other*
+copy (`0`) still on the stack. Otherwise the value was `-1` or positive, and the
+jump falls through with that copy still present.
 
-Queries the simulation world: what is the resource value of the cell immediately ahead? The result is pushed onto the data stack. A value of 0 means the cell is empty; a positive integer means there is a resource present.
+**Positions 11–12: `push1`, `add`.** Adds 1 to the surviving value. A neighbour
+(`-1`) becomes `0`; food (`>0`) becomes `≥2`. This is the sign-discrimination
+trick: it turns "is this the neighbour case?" into a plain zero test.
 
-**Positions 5–9: `jz_t :nop_1 :nop_0 :nop_1 :nop_0`**
+**Positions 13–17: `jz_t AVOID`.** Tests (and pops) the result. If it is `0`
+(the value was `-1`, a neighbour), the jump fires to the AVOID anchor at 38.
+Otherwise it was food, and the jump falls through to the food path with an empty
+stack.
 
-The conditional branch. The template is `[:nop_1, :nop_0, :nop_1, :nop_0]` — four bits. The complement searched for is `[:nop_0, :nop_1, :nop_0, :nop_1]`, which matches the TURN anchor at positions 18–21. (Note we deliberately use the `[0,1,0,1]` pattern for TURN rather than `[1,1,1,1]`: the loop-back jumps at positions 12 and 23 carry `[1,1,1,1]` templates, and four consecutive `:nop_1` opcodes follow each of them. If the TURN anchor were also `[1,1,1,1]`, the `jz_t` search for `[:nop_1, :nop_1, :nop_1, :nop_1]` would match the loop-back's own trailing nops at positions 13–16 *before* reaching the intended TURN anchor — the duplicate-anchor trap from section 3. Using a distinct pattern avoids the collision.)
+**Positions 18–19: `eat`, `move`.** The food path. Consume the resource and
+step forward.
 
-- If `sense_front` returned 0 (empty cell): condition is true, jump fires, ip → 22 (`turn_right`). The 0 is popped.
-- If `sense_front` returned positive (resource present): condition is false, jump does not fire, but the value is still popped. Ip falls through to position 10 (`eat`).
+**Positions 20–24: `jmp_t LOOP`.** Loop back to LOOP for the next iteration.
 
-Either way, the stack is clean after this instruction.
+**Position 25: `push0` separator.** Stops the template extractor from reading
+the `jmp_t`'s `[0,0,0,0]` template straight into the EMPTY anchor's nops.
 
-**Positions 10–11: `eat`, `move`**
+**Positions 26–29: EMPTY anchor `[0,1,1,0]`.** Landing pad for `jz_t EMPTY`.
 
-Reached only when the front cell has a resource. `:eat` consumes up to `eat_amount = 20` units of resource from the front cell and credits the creature's energy. `:move` advances the creature one step in its current direction. Both cost 2.0 energy each — expensive, but they return resources.
+**Positions 30–31: `drop`, `move`.** The cruise path arrives here with the
+leftover dup'd `0` still on the stack — `drop` clears it (keeping the stack
+balanced), then `move` advances over the empty cell.
 
-**Positions 12–16: `jmp_t :nop_1 :nop_1 :nop_1 :nop_1`**
+**Positions 32–36: `jmp_t LOOP`.** Loop back.
 
-Unconditional loop-back. Template = `[:nop_1, :nop_1, :nop_1, :nop_1]`, complement = `[:nop_0, :nop_0, :nop_0, :nop_0]`. The search finds the LOOP_HEAD anchor at positions 0–3. Ip → 4 (`sense_front`). The EAT path loops back here after every successful meal.
+**Position 37: `push0` separator.** Same role before the AVOID anchor.
 
-**Position 17: `push0` (separator)**
+**Positions 38–41: AVOID anchor `[1,1,0,0]`.** Landing pad for `jz_t AVOID`.
 
-Without this separator, the extractor at position 12 would read straight through positions 13–16 (`:nop_1` × 4) and on into the TURN anchor at 18–21 (`:nop_0, :nop_1, :nop_0, :nop_1`), producing an 8-bit template `[1,1,1,1,0,1,0,1]`. That complement `[0,0,0,0,1,0,1,0]` does not exist in the codeome, so the loop-back jump would fall through instead of returning to LOOP_HEAD. The `:push0` separator terminates extraction at four bits, leaving the clean `[1,1,1,1]` loop-back template. It also pushes 0 onto the stack, which `:drop` at position 29 removes — net stack effect is zero.
+**Position 42: `turn_right`.** Steer away from the neighbour; the next iteration
+faces a different cell.
 
-**Positions 18–21: TURN anchor `[0,1,0,1]`**
+**Positions 43–47: `jmp_t LOOP`.** Loop back.
 
-The pattern `:nop_0, :nop_1, :nop_0, :nop_1`. This is the landing pad for the `jz_t` at position 5. When the search for complement `[0,1,0,1]` succeeds, ip lands at position 22 (`turn_right`).
+**Position 48: `push0` separator.** Guards the ring wrap: without it, the final
+`jmp_t`'s `[0,0,0,0]` template would merge with the LOOP anchor's `[1,1,1,1]`
+across the wrap into an eight-nop run.
 
-**Position 22: `turn_right`**
+Every path is stack-balanced: only the cruise path arrives with a value left
+over, and it `drop`s it immediately.
 
-Rotates the creature 90 degrees clockwise. Costs 0.5 energy. After turning, the creature will sense a different cell on the next loop iteration.
+### Execution traces
 
-**Positions 23–27: `jmp_t :nop_1 :nop_1 :nop_1 :nop_1`**
-
-Identical loop-back to the one at positions 12–16. Template = `[1,1,1,1]`, complement = `[0,0,0,0]`, target = LOOP_HEAD at position 4. The TURN path also needs to loop back, so it gets its own copy of the jump.
-
-**Positions 28–29: `push0`, `drop`**
-
-These two opcodes are never executed (the loop-back jumps at 12 and 23 always redirect before reaching them). They exist solely to satisfy the validator's `min_viable_codeome_opcodes = 10` requirement, which counts non-nop opcodes. Without them the codeome would have only 8 non-nops and would be rejected at spawn time.
-
-### Execution trace
-
-**Cycle with an empty front cell** (`sense_front` returns 0):
-
-```
-ip=4   sense_front  -> pushes 0          stack: [0]
-ip=5   jz_t [1,0,1,0]
-       tests top: 0 == 0 -> true, will jump
-       pops 0 unconditionally            stack: []
-       searches for [0,1,0,1] -> found at pos 18
-       ip = (18 + 4) mod size = 22
-ip=22  turn_right   -> rotates creature
-ip=23  jmp_t [1,1,1,1]
-       searches for [0,0,0,0] -> found at pos 0
-       ip = (0 + 4) mod size = 4
-ip=4   sense_front  -> next cell ahead   (loop repeats)
-```
-
-**Cycle with a resource in the front cell** (`sense_front` returns 15):
+**Food ahead** (`sense_front` returns 15):
 
 ```
-ip=4   sense_front  -> pushes 15         stack: [15]
-ip=5   jz_t [1,0,1,0]
-       tests top: 15 == 0 -> false, no jump
-       pops 15 unconditionally           stack: []
-       falls through to ip = (5+1+4) mod size = 10
-ip=10  eat          -> consumes resource, gains energy
-ip=11  move         -> advances one cell
-ip=12  jmp_t [1,1,1,1]
-       searches for [0,0,0,0] -> found at pos 0
-       ip = (0 + 4) mod size = 4
-ip=4   sense_front  -> next cell ahead   (loop repeats)
+ip=4   sense_front -> pushes 15            stack: [15]
+ip=5   dup                                 stack: [15, 15]
+ip=6   jz_t EMPTY: tests 15 != 0, no jump; pops one  stack: [15]
+ip=11  push1; add -> 15 + 1 = 16           stack: [16]
+ip=13  jz_t AVOID: tests 16 != 0, no jump; pops      stack: []
+ip=18  eat; move
+ip=20  jmp_t LOOP -> ip = 4                (loop repeats)
+```
+
+**Empty cell** (`sense_front` returns 0):
+
+```
+ip=4   sense_front -> pushes 0             stack: [0]
+ip=5   dup                                 stack: [0, 0]
+ip=6   jz_t EMPTY: tests 0 == 0, JUMP; pops one      stack: [0]
+ip=30  drop                                stack: []
+ip=31  move
+ip=32  jmp_t LOOP -> ip = 4                (loop repeats)
+```
+
+**Neighbour ahead** (`sense_front` returns -1):
+
+```
+ip=4   sense_front -> pushes -1            stack: [-1]
+ip=5   dup                                 stack: [-1, -1]
+ip=6   jz_t EMPTY: tests -1 != 0, no jump; pops one  stack: [-1]
+ip=11  push1; add -> -1 + 1 = 0            stack: [0]
+ip=13  jz_t AVOID: tests 0 == 0, JUMP; pops          stack: []
+ip=42  turn_right
+ip=43  jmp_t LOOP -> ip = 4                (loop repeats)
 ```
 
 ---
 
 ## 7 — Try it in the editor
 
-1. Click **+ New Seed** in the Seeds panel.
-2. Drag the 30 opcodes into the editor in the order shown in section 6.
-3. Click **Validate**. The status bar should report `✓ valid (30 ops, 10 non-nop)`. If it shows a different non-nop count, recount your non-nop opcodes — a misplaced separator or an extra nop can shift the tally.
-4. Click **Save** and name the seed `forager-v1`.
+1. Click **+ New Seed** in the Seeds panel (or open the built-in `Reflex` seed
+   to load it ready-made).
+2. Drag the 49 opcodes into the editor in the order shown in section 6.
+3. Click **Validate**. The status bar should report `✓ valid (49 ops, 17
+   non-nop)`. If the non-nop count differs, recount — a misplaced separator or
+   an extra nop shifts the tally.
+4. Click **Save** and name the seed `reflex-v1`.
 5. Spawn one instance with **10 000** initial energy.
-6. Open the energy graph in the inspector panel. On a well-resourced grid the Forager's energy should hold relatively stable or decline slowly. On a sparse or freshly-grazed grid you will see sharp drops during extended turn-only cycles.
 
-Watch the creature on the grid. Compare it with the Walker from chapter 3:
+Watch the creature on the grid. Compare it with the Crawler from chapter 3:
 
-- The **Walker** moves north indefinitely regardless of what it finds. It plows through empty cells and walls alike, executing `:move` even when there is nothing to eat.
-- The **Forager** reacts. When the front cell has a resource it eats and steps forward. When the front cell is empty it turns right, eventually spiralling toward wherever resources cluster. You will see it pause at boundaries and pivot rather than blindly marching.
+- The **Crawler** moves north indefinitely regardless of what it finds. It
+  ploughs through empty cells and neighbours alike, executing `:move` even when
+  there is nothing to eat.
+- **Reflex** reacts. On food it eats and steps forward; on an empty cell it
+  cruises; on a neighbour it turns away. You will see it beeline onto resource
+  and veer off others rather than blindly marching.
 
-The Forager still has weaknesses: it turns right exclusively (it never backtracks or explores left), it cannot count consecutive failures to detect when it is truly stuck, and it cannot remember which patches it has already depleted. As a result it can spin in place turning right repeatedly if surrounded by empty cells on all sides — a full 360-degree turn returning it to its original heading, only to sense the same empty cell and turn again.
-
-Chapter 5 introduces local memory registers that will let you build creatures that count consecutive failures, compare against a threshold, and break out of spin cycles.
+Reflex still has limits: it has no memory, so it cannot count consecutive
+failures, remember depleted patches, or escape a corner it keeps turning into.
+And it never replicates — it is mortal, a baseline against which the replicating
+rungs are measured. Chapter 5 introduces local memory registers that let you
+build creatures that count, compare against a threshold, and break out of spin
+cycles.
 
 ### Common mistakes checklist
 
-Before spawning a Forager variant, run through these:
+Before spawning a Reflex variant, run through these:
 
-- **Anchor pattern collision**: are your LOOP_HEAD and TURN anchors distinct? `[0,0,0,0]` and `[1,1,1,1]` are distinct; `[0,0,0,0]` and `[0,0,0,0]` are not (a jump targeting the first may land at the second).
-- **Missing separator**: do you have a non-nop between any two adjacent nop regions that should be separate anchors? One `:push0` is enough.
-- **Stack imbalance after `jz_t`/`jnz_t`**: the tested value is gone. If the next instruction after a failed conditional jump expects the tested value still on the stack, it will get the value beneath it instead.
-- **Template too long**: if the extractor silently reads past the intended template boundary, the complement will not match any anchor and the jump will always fall through. Use the separator pattern to cap extraction early.
-- **Non-nop count below 10**: if validation rejects the codeome, count non-nops carefully. Add `:push0`/`:drop` pairs in dead code regions to reach the threshold.
+- **Anchor pattern collision**: are your LOOP, EMPTY, and AVOID anchors
+  distinct? A jump targeting one must not find another first.
+- **Missing separator**: do you have a non-nop between any two adjacent nop
+  regions that should be separate anchors? One `:push0` is enough — including
+  across the ring wrap.
+- **Stack imbalance after `jz_t`/`jnz_t`**: the tested value is always popped.
+  Reflex relies on this — and on the leftover `dup` copy reaching the cruise
+  path, where `drop` clears it.
+- **Template too long**: if the extractor reads past the intended boundary, the
+  complement matches no anchor and the jump always falls through. Cap extraction
+  with a separator.
+- **Non-nop count below 10**: if validation rejects the codeome, count non-nops
+  carefully.
 
 ---
 
 ## 8 — What's next
 
-→ Next: Chapter 5 introduces local memory and counter loops. ([05-memory-and-arithmetic.md](05-memory-and-arithmetic.md))
+→ Next: Chapter 5 introduces local memory and counter loops.
+([05-memory-and-arithmetic.md](05-memory-and-arithmetic.md))
 
-The Forager is a good baseline creature. Save your seed now — in later chapters you will extend it step by step into a creature that counts, compares, replicates, and competes.
+Reflex is a good baseline creature. The chapters that follow add the
+capabilities the higher rungs of the ladder need — memory and arithmetic
+(chapter 5), subroutines (chapter 6), and replication (chapter 7) — building
+toward Ancestor, Architect, and Symbiont.

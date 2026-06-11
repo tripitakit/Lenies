@@ -1,4 +1,4 @@
-# Chapter 3 — Your First Codeome: The Walker
+# Chapter 3 — Your First Codeome: The Crawler
 
 You've read how the VM is built (chapter 1) and scanned the opcode table (chapter 2).
 Time to make something move. This chapter walks you through writing the smallest codeome
@@ -10,7 +10,7 @@ underfoot, and loops forever. By the end you'll have a living dot crossing the c
 ## 1. The Goal
 
 We want the simplest possible Lenie that is not just dead code. "Simple" here means: one
-direction, one action, one loop, nothing else. The Walker walks north on every tick, eats
+direction, one action, one loop, nothing else. The Crawler walks north on every tick, eats
 any resource it finds on its current cell, and then jumps back to the top of its own code
 to repeat. It has no decisions, no memory, no reproduction — just motion and eating. That
 is enough to keep energy positive on a resource-rich world, and it is enough to see the VM
@@ -18,7 +18,7 @@ come alive in front of you.
 
 ---
 
-## 2. The Conceptual Walker
+## 2. The Conceptual Crawler
 
 Here is the core loop in Elixir list syntax (the same format the editor and the VM use
 internally):
@@ -130,7 +130,7 @@ After birth the jump lands at position 1, so `:nop_0` (position 0) runs only onc
 steady-state loop is positions 1–5: `sense_front; drop; eat; move; jmp_t` =
 0.5 + 0.1 + 2.0 + 2.0 + 0.25 = **4.85 energy per loop** (the very first pass adds the
 one-time 0.1 for `:nop_0`, for 4.95). With `eat_amount` = 20, a single successful eat more
-than pays for the entire loop. On a world with reasonable resource density the Walker is
+than pays for the entire loop. On a world with reasonable resource density the Crawler is
 comfortably energy-positive.
 
 ---
@@ -144,7 +144,7 @@ Three things must be true:
 2. **Enough non-nop opcodes:** at least 10 opcodes that are not `:nop_0` or `:nop_1`.
 3. **All opcodes in the whitelist:** every atom must be in the 38-entry opcode set.
 
-The conceptual Walker above has **8 opcodes total** and **6 non-nops**
+The conceptual Crawler above has **8 opcodes total** and **6 non-nops**
 (`:sense_front`, `:drop`, `:eat`, `:move`, `:jmp_t`, `:push0`). It passes rule 1 and
 rule 3, but it fails rule 2. If you try to save it the editor shows:
 
@@ -213,10 +213,10 @@ Fire up the app at `http://localhost:4000` and follow these steps exactly:
 4. Watch the validation banner at the top of the listing. Once all 16 opcodes are in place
    it should read **`✓ valid (16 ops, 14 non-nop)`**. If it still shows a warning, recount
    the padding pairs — you need exactly four `:push0; :drop` pairs after the separator.
-5. Click **Save**. In the name field type `walker-v1`. Pick any colour you like. Set the
+5. Click **Save**. In the name field type `crawler-v1`. Pick any colour you like. Set the
    starting energy to `10000` (the default is fine). Confirm.
 6. Close the modal.
-7. In the controls panel the Seed dropdown now shows **`★ walker-v1`**. Select it if it is
+7. In the controls panel the Seed dropdown now shows **`★ crawler-v1`**. Select it if it is
    not already selected.
 8. Set the count field to `1` and click **Spawn**.
 9. Watch the canvas. A single coloured dot appears and begins walking north steadily.
@@ -266,7 +266,7 @@ codeome if nothing is selected. Snippets are saved on the server (in `priv/user_
 
 ## 9. What's Next
 
-The Walker works, but we waved our hands at the most interesting part: how does `jmp_t`
+The Crawler works, but we waved our hands at the most interesting part: how does `jmp_t`
 actually find `:nop_0` from `:nop_1`, and what happens when there are two possible matches,
 or none at all?
 

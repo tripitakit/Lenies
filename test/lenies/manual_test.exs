@@ -28,7 +28,7 @@ defmodule Lenies.ManualTest do
       06-procedures.md
       07-replication.md
       08-energy-economy.md
-      09-minimal-replicator.md
+      09-ancestor.md
       10-conjugation-and-plasmids.md
       11-cookbook.md
       A-stack-machines.md

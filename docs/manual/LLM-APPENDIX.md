@@ -167,15 +167,15 @@ Constant costs first, then parameterized.
 
 ### Quick replication budget
 
-Copy loop body (per source opcode copied) ≈ 6.8 energy units in the canonical
-MR replicator: `push1, load, read_self, push1, load, swap, write_child, drop`
-plus the per-iter counter ops. For a 123-opcode codeome:
+Copy loop body (per source opcode copied) ≈ 5.0 energy units in the canonical
+`Ancestor` replicator: `push0, load, dup, read_self, write_child, drop` plus
+the per-iter zero-test and single-slot decrement. For a 100-opcode codeome:
 
-- Allocate(123): `5.0 + 0.05 × 123 = 11.15`
-- Copy loop: `123 × 6.8 ≈ 836`
+- Allocate(100): `5.0 + 0.05 × 100 = 10.0`
+- Copy loop: `100 × 5.0 ≈ 500`
 - Divide: `10.0`
 - Setup + final wrap: a handful more
-- **Total per division: ~885 energy** (matches MR's annotation)
+- **Total per division: ~524 energy** (matches `Ancestor`'s annotation)
 
 ---
 
@@ -209,625 +209,163 @@ Cost: `0.2 + 0.05 × 2 = 0.30` for the `:jmp_t`.
 template's nop run, the template extractor reads PAST your intended template
 boundary and absorbs both runs (up to `template_max_len = 8`). Always insert
 a non-nop opcode (`:push0; :drop` is the canonical idiom, or any safe non-nop)
-between them. The MR replicator does this twice (pos 67 and 122); the
-Defender, Forager, Hunter, and plasmids all need the same separator wherever
-two nop runs would adjoin — INCLUDING across the codeome-ring wrap.
+between them. `Ancestor` does this twice (pos 49 and 99); every replicating
+codeome and every plasmid needs the same separator wherever two nop runs would
+adjoin — INCLUDING across the codeome-ring wrap.
 
 ---
 
-## 5. Hand-written reference codeomes
+## 5. Reference codeomes — the seed ladder
 
-The seven codeomes below are the canonical hand-tuned examples shipped with
-Lenies. Quote them directly when starting a new codeome — they already
-encode the conventions (separators, anchor patterns, K-construction tricks,
-slot-overwrite phasing) that an AI agent would otherwise have to rediscover.
+The four codeomes below are the shipped default seeds, designed as a capability
+ladder (simple → complex). Each is organized around a *different* computational
+principle and a different opcode group — they are not variations of one model.
+Quote them when starting a new codeome: they encode the conventions (separators,
+distinct-anchor selection, K-construction, single-slot reuse, the call stack,
+the HGT pathway) an AI agent would otherwise rediscover.
 
-### 5.1 Walker (`lib/lenies/codeomes/walker.ex`)
+| Rung | Module | Ops | Signature opcodes | Replicates? |
+|------|--------|-----|-------------------|-------------|
+| 1 | `reflex.ex` | 49 | `sense_front` as branch predicate | No (mortal) |
+| 2 | `ancestor.ex` | 100 | `get_size/allocate/read_self/write_child/divide` | Yes |
+| 3 | `architect.ex` | 173 | `call_t`/`ret` (the call stack) | Yes |
+| 4 | `symbiont.ex` | 118 | `sense_age` + `make_plasmid` + `conjugate` | Yes |
 
-The simplest non-trivial codeome: 7 opcodes, no replication, no slots, no
-arithmetic. The Walker is a degenerate herbivore that sits on a single cell
-trying to eat then moves forward, looping forever via a 1-nop template.
+### 5.1 Reflex (`lib/lenies/codeomes/reflex.ex`)
 
-The template is `[:nop_0]` and the complement `[:nop_1]` sits at position 0;
-on each jump the IP lands at `0 + 1 = 1` (the `:sense_front`), so the entire
-loop body cycles. It does NOT replicate — use it only as a smoke test that
-the editor accepts your input and the Lenie ticks. It will starve in tens of
-ticks because nothing balances energy gain against the move/eat cost in a
-sparse world.
+The simplest seed: a pure sensor→motor reflex. 49 opcodes, no slots, no call
+stack, no replication. It reads the cell ahead (`sense_front` pushes `-1` for a
+Lenie, `0` for empty, `>0` for food) and three-way-branches: food → `eat;move`,
+empty → `move`, Lenie → `turn_right`. Mortal — never divides.
 
-```elixir
-[
-  # 0: complement marker (where :jmp_t will land)
-  :nop_1,
-  # 1: sense front cell
-  :sense_front,
-  # 2: discard sense result
-  :drop,
-  # 3: eat current cell
-  :eat,
-  # 4: try to move forward
-  :move,
-  # 5: jump
-  :jmp_t,
-  # 6: template (complement = :nop_1 at position 0)
-  :nop_0
-]
-```
+Key idiom: a three-valued sense used directly as a branch predicate, with sign
+discrimination via `dup` + `jz_t` + a `+1` trick.
 
-### 5.2 Forager (`lib/lenies/codeomes/forager.ex`)
+Anchors (4-bit; complement = bit-flip):
 
-A wandering herbivore. Built as `MinimalReplicator.replication_preamble() ++
-forage_body` — i.e. the 52-opcode MR replication preamble (pos 0..51)
-followed by the forage code below. Total length: 139 opcodes.
-
-Strategy: each forage iter does `:eat`, `:move`, then computes
-`pushN mod 3` to randomly turn left, turn right, or not turn at all. The
-direction performs a random walk on `{N, E, S, W}`, so the position drifts
-as a 2D random walk and fills space rather than tracing straight lines.
-K=128 forage iters per replication. Sustainable at default `eat_amount=20`.
-
-```elixir
-# Forage body (appended to MinimalReplicator.replication_preamble() above)
-[
-  # == pos 52..65: build K=128 (push1 + 7x(dup,add)) =====================
-  :push1,
-  :dup, :add, :dup, :add, :dup, :add, :dup, :add,
-  :dup, :add, :dup, :add, :dup, :add,
-
-  # == pos 66..67: K+1 = 129 (decrement-first loop overshoots by 1) ======
-  :push1,
-  :add,
-
-  # == pos 68..69: store K+1 in slot[0] ==================================
-  :push0,
-  :store,
-
-  # == pos 70..73: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ==============
-  :nop_0,
-  :nop_1,
-  :nop_0,
-  :nop_1,
-
-  # == pos 74..79: decrement slot[0] =====================================
-  :push0,
-  :load,
-  :push1,
-  :sub,
-  :push0,
-  :store,
-
-  # == pos 80..81: load slot[0] for exit check ===========================
-  :push0,
-  :load,
-
-  # == pos 82..86: jz_t LOOP_HEAD (template [n0,n0,n0,n0]) - exit forage =
-  :jz_t,
-  :nop_0,
-  :nop_0,
-  :nop_0,
-  :nop_0,
-
-  # == pos 87..88: forage body - eat, move ===============================
-  :eat,
-  :move,
-
-  # == pos 89..95: pushN; build 3; mod (pushN mod 3) =====================
-  :pushN,
-  :push1,
-  :push1,
-  :push1,
-  :add,
-  :add,
-  :mod,
-
-  # == pos 96: dup the result ============================================
-  :dup,
-
-  # == pos 97..101: jz_t NO_TURN_BR (template [n1,n1,n1,n0]) =============
-  :jz_t,
-  :nop_1,
-  :nop_1,
-  :nop_1,
-  :nop_0,
-
-  # == pos 102..103: val - 1 (val was 1 or 2) ============================
-  :push1,
-  :sub,
-
-  # == pos 104..108: jz_t TURN_LEFT_BR (template [n1,n0,n0,n0]) ==========
-  :jz_t,
-  :nop_1,
-  :nop_0,
-  :nop_0,
-  :nop_0,
-
-  # == pos 109: turn_right (val was 2) ===================================
-  :turn_right,
-
-  # == pos 110..114: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) =====
-  :jmp_t,
-  :nop_1,
-  :nop_0,
-  :nop_1,
-  :nop_0,
-
-  # == pos 115: separator (prevents 8-consecutive-nop misread) ===========
-  :push0,
-
-  # == pos 116..119: NO_TURN_BR anchor [n0, n0, n0, n1] ==================
-  :nop_0,
-  :nop_0,
-  :nop_0,
-  :nop_1,
-
-  # == pos 120: drop remaining val (= 0) =================================
-  :drop,
-
-  # == pos 121..125: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) =====
-  :jmp_t,
-  :nop_1,
-  :nop_0,
-  :nop_1,
-  :nop_0,
-
-  # == pos 126: separator ================================================
-  :push0,
-
-  # == pos 127..130: TURN_LEFT_BR anchor [n0, n1, n1, n1] ================
-  :nop_0,
-  :nop_1,
-  :nop_1,
-  :nop_1,
-
-  # == pos 131: turn_left ================================================
-  :turn_left,
-
-  # == pos 132..136: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) =====
-  :jmp_t,
-  :nop_1,
-  :nop_0,
-  :nop_1,
-  :nop_0,
-
-  # == pos 137: separator (final wrap protection) ========================
-  :push0
-]
-```
-
-### 5.3 TemplateJumper (`lib/lenies/codeomes/template_jumper.ex`)
-
-A diagnostic codeome that verifies template addressing actually works. Sets
-`slot[0] = 1` on jump-success and `slot[0] = 2` on fall-through. Use it as a
-testbed when an AI agent is unsure whether a template will land correctly.
+| Label | Anchor          | Template        |
+|-------|-----------------|-----------------|
+| LOOP  | `[n1,n1,n1,n1]` | `[n0,n0,n0,n0]` |
+| EMPTY | `[n0,n1,n1,n0]` | `[n1,n0,n0,n1]` |
+| AVOID | `[n1,n1,n0,n0]` | `[n0,n0,n1,n1]` |
 
 ```elixir
 [
-  # pre
-  :push0,             # 0
-  :push0,             # 1
-  :store,             # 2  slot[0] = 0
-  :jmp_t,             # 3  jump opcode
-  :nop_0,             # 4  template[0]
-  :nop_1,             # 5  template[1] -> template = [:nop_0, :nop_1]
-
-  # fail path (executes only if no match is found)
-  :push1,             # 6
-  :dup,               # 7
-  :add,               # 8
-  :push0,             # 9
-  :store,             # 10 slot[0] = 2 (proves jump fell through)
-  :nop_0,             # 11 filler
-  :nop_0,             # 12 filler
-
-  # success path (jump target)
-  :nop_1,             # 13 complement[0]
-  :nop_0,             # 14 complement[1] -> match starts at 13; IP lands at 15
-  :push1,             # 15
-  :push0,             # 16
-  :store,             # 17 slot[0] = 1 (proves jump succeeded)
-
-  # spin tail
-  :nop_0,             # 18
-  :nop_0,             # 19
-  :nop_0              # 20
-]
-```
-
-### 5.4 Hunter (`lib/lenies/codeomes/hunter.ex`)
-
-A predator with a diagonal staircase advance and lock-on attack. Built as
-`MinimalReplicator.replication_preamble() ++ forage_body`. Total length:
-164 opcodes.
-
-Strategy: on each forage iter `:sense_front`. If the cell ahead contains a
-Lenie (sensed value `-1`), jump to LENIE_HANDLER and `:attack` once — no
-move, no turn. Next iter faces the same cell; if prey is still there, attack
-again. This "lock-on" amplifies kill probability without explicit pursuit
-logic. Otherwise `:eat` + `:move`, then alternate `:turn_right`/`:turn_left`
-via `slot[3]` parity, producing a deterministic diagonal staircase pattern
-distinct from MR's straight-line runs and Forager's random walk.
-
-K=96 forage iters per replication (built as 32+64 instead of doubling chain
-to K=128). Sustainable at default `eat_amount=20`.
-
-```elixir
-# Forage body (appended to MinimalReplicator.replication_preamble())
-[
-  # == pos 52..66: build K=96 = 32 + 64 ==================================
-  # Phase 1 (11 ops): push1 + 5x(dup, add) -> stack=[32]
-  # Phase 2 (4 ops):  dup->[32,32]; dup->[32,32,32]; add->[32,64]; add->[96]
-  :push1,
-  :dup, :add, :dup, :add, :dup, :add, :dup, :add, :dup, :add,
-  :dup, :dup, :add, :add,
-
-  # == pos 67..68: K+1 = 97 ==============================================
-  :push1,
-  :add,
-
-  # == pos 69..70: store K+1 in slot[0] ==================================
-  :push0,
-  :store,
-
-  # == pos 71..77: init slot[3] := 0 =====================================
-  # push0 [0]; push1+push1+push1 [0,1,1,1]; add [0,1,2]; add [0,3]; store
-  :push0,
-  :push1, :push1, :push1,
-  :add, :add,
-  :store,
-
-  # == pos 78..81: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ==============
-  :nop_0, :nop_1, :nop_0, :nop_1,
-
-  # == pos 82..87: decrement slot[0] =====================================
-  :push0, :load,
-  :push1, :sub,
-  :push0, :store,
-
-  # == pos 88..89: load slot[0] for exit check ===========================
-  :push0, :load,
-
-  # == pos 90..94: jz_t LOOP_HEAD (template [n0,n0,n0,n0]) - exit ========
-  :jz_t,
-  :nop_0, :nop_0, :nop_0, :nop_0,
-
-  # == pos 95..97: sense_front; push1; add - value+1 =====================
-  :sense_front,
-  :push1,
-  :add,
-
-  # == pos 98..102: jz_t LENIE_HANDLER (template [n1,n1,n1,n0]) ==========
-  # Pops value+1. If was -1 (now 0) -> jump to LENIE_HANDLER.
-  :jz_t,
-  :nop_1, :nop_1, :nop_1, :nop_0,
-
-  # == pos 103..104: not prey - eat, move ================================
-  :eat,
-  :move,
-
-  # == pos 105..110: build slot idx 3 and load slot[3] ===================
-  :push1, :push1, :push1,
-  :add, :add,
-  :load,
-
-  # == pos 111..112: counter + 1 =========================================
-  :push1,
-  :add,
-
-  # == pos 113: dup (value needed for parity check AND for storing) ======
-  :dup,
-
-  # == pos 114..116: build 2 on stack ====================================
-  :push1, :push1,
-  :add,
-
-  # == pos 117: mod - (counter+1) mod 2 ==================================
-  :mod,
-
-  # == pos 118..122: jz_t TURN_LEFT_BR (template [n1,n0,n0,n0]) ==========
-  :jz_t,
-  :nop_1, :nop_0, :nop_0, :nop_0,
-
-  # == pos 123: turn_right (mod was 1) ===================================
-  :turn_right,
-
-  # == pos 124..129: store counter+1 -> slot[3] ==========================
-  :push1, :push1, :push1,
-  :add, :add,
-  :store,
-
-  # == pos 130..134: jmp_t FORAGE_LOOP_HEAD ==============================
-  :jmp_t,
-  :nop_1, :nop_0, :nop_1, :nop_0,
-
-  # == pos 135: separator ================================================
-  :push0,
-
-  # == pos 136..139: LENIE_HANDLER anchor [n0, n0, n0, n1] ===============
-  :nop_0, :nop_0, :nop_0, :nop_1,
-
-  # == pos 140: attack (no move, no turn - lock on) ======================
-  :attack,
-
-  # == pos 141..145: jmp_t FORAGE_LOOP_HEAD ==============================
-  :jmp_t,
-  :nop_1, :nop_0, :nop_1, :nop_0,
-
-  # == pos 146: separator ================================================
-  :push0,
-
-  # == pos 147..150: TURN_LEFT_BR anchor [n0, n1, n1, n1] ================
-  :nop_0, :nop_1, :nop_1, :nop_1,
-
-  # == pos 151: turn_left ================================================
-  :turn_left,
-
-  # == pos 152..157: store counter+1 -> slot[3] ==========================
-  :push1, :push1, :push1,
-  :add, :add,
-  :store,
-
-  # == pos 158..162: jmp_t FORAGE_LOOP_HEAD ==============================
-  :jmp_t,
-  :nop_1, :nop_0, :nop_1, :nop_0,
-
-  # == pos 163: separator (final wrap protection) ========================
-  :push0
-]
-```
-
-### 5.5 Carnivore (`lib/lenies/codeomes/carnivore.ex`)
-
-A predatory variant of MR built by patching the base codeome: inject
-`:attack` immediately before the first `:eat`. A "Sprint" plasmid (12
-opcodes) adds an extra `:move, :eat` per forage iter — but it is
-**extra-chromosomal**: kept separate (the module's `plasmid/0`), **NOT**
-baked into the codeome. It rides as the seed's `:plasmid` buffer and is
-concatenated into the *execution* stream (chromosome ++ plasmid) at
-runtime; the chromosome itself (Size / hash / replication) is plasmid-free.
-
-The Carnivore module's `codeome/0` returns the patched **chromosome only**;
-`plasmid/0` returns the Sprint buffer separately. When writing an
-AI-generated Carnivore variant, the codeome is the patched MR base, and the
-Sprint plasmid is a **separate** buffer (the seed's `:plasmid`) — do NOT
-append it to the codeome (that would inflate Size and duplicate the plasmid
-in the exec stream):
-
-```elixir
-# The Sprint plasmid — an extra-chromosomal buffer (the seed's :plasmid),
-# NOT part of the codeome. The runtime concatenates it after the chromosome.
-[
-  # == pos 0..3: INTERCEPT_ANCHOR = FORAGE_LOOP_HEAD pattern [n0,n1,n0,n1] ==
-  :nop_0,
-  :nop_1,
-  :nop_0,
-  :nop_1,
-
-  # == pos 4..5: extra step + extra eat (sprint) ============================
-  :move,
-  :eat,
-
-  # == pos 6..10: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ===========
-  :jmp_t,
-  :nop_1,
-  :nop_0,
-  :nop_1,
-  :nop_0,
-
-  # == pos 11: trailing separator (CRITICAL) ================================
-  # Without this non-nop, the final jmp_t template merges with the host's
-  # LOOP_HEAD nops across the codeome-ring wrap (8 nops read instead of
-  # 4), so the bounce-back lands in replication setup instead of
-  # FORAGE_LOOP_HEAD and the host starves in place.
-  :push0
-]
-```
-
-The intercept works because the plasmid's INTERCEPT_ANCHOR matches the
-host's FORAGE_LOOP_HEAD template — when the host jumps to FORAGE_LOOP_HEAD,
-the search finds the plasmid anchor first (the plasmid is concatenated after
-the chromosome in the runtime *execution* ring), and executes the plasmid
-body before bouncing back.
-
-### 5.6 Defender (`lib/lenies/codeomes/defender.ex`)
-
-A defensive herbivore that builds tight clusters. Replicates often (K=32),
-defends every forage iteration, and uses a deterministic post-divide
-`:turn_left` (inherited from the preamble; no random branch). Total length:
-93 opcodes.
-
-Strategy: short forage runs (~32 cells before each replication) combined
-with the deterministic 90° turn after every divide → descendants spiral
-outward in a rotating pattern, forming tight clusters. Margin is tighter
-than Hunter/Forager (~+50 steady state) because of the short K — reducing
-K further would push toward starvation.
-
-```elixir
-# Forage body (appended to MinimalReplicator.replication_preamble())
-[
-  # == pos 52..62: build K=32 on stack (push1 + 5x(dup,add) = 32) =======
-  :push1,
-  :dup, :add, :dup, :add, :dup, :add, :dup, :add, :dup, :add,
-
-  # == pos 63..64: K+1 = 33 (decrement-first loop overshoots by 1) ======
-  :push1,
-  :add,
-
-  # == pos 65..66: store K+1 in slot[0] (forage counter) ================
-  :push0,
-  :store,
-
-  # == pos 67..70: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] =============
-  :nop_0, :nop_1, :nop_0, :nop_1,
-
-  # == pos 71..76: decrement slot[0] (slot[0] -= 1) =====================
-  :push0, :load,
-  :push1, :sub,
-  :push0, :store,
-
-  # == pos 77..78: load slot[0] for exit check ==========================
-  :push0, :load,
-
-  # == pos 79..83: jz_t LOOP_HEAD (template [n0,n0,n0,n0]) - exit =======
-  :jz_t,
-  :nop_0, :nop_0, :nop_0, :nop_0,
-
-  # == pos 84..86: forage body - defend, eat, move ======================
-  :defend,
-  :eat,
-  :move,
-
-  # == pos 87..91: jmp_t FORAGE_LOOP_HEAD (template [n1,n0,n1,n0]) ======
-  :jmp_t,
-  :nop_1, :nop_0, :nop_1, :nop_0,
-
-  # == pos 92: separator - prevents template extractor from reading =====
-  # 4 nops of the final template + 4 nops of LOOP_HEAD across wrap.
-  :push0
-]
-```
-
-### 5.7 MinimalReplicator (`lib/lenies/codeomes/minimal_replicator.ex`)
-
-The canonical hand-tuned replicator. Replication preamble at positions 0..51
-is reused verbatim by Forager, Hunter, and Defender (and any AI-generated
-codeome that wants a working replication harness — just append your forage
-body starting at position 52). Total base codeome length: 123 opcodes (with
-`:conjugate, :drop` in the forage body); 121 without.
-
-Sustainable at default `eat_amount=20` with K=128 forage iters per
-replication. Steady state ≈ +805 energy per generation cycle.
-
-```elixir
-[
-  # == pos 0..3: LOOP_HEAD anchor [n1, n1, n1, n1] =======================
+  # 0..3 LOOP anchor
   :nop_1, :nop_1, :nop_1, :nop_1,
-
-  # == pos 4..6: get own size N, store in slot[0] ========================
-  :get_size,
-  :push0,
-  :store,
-
-  # == pos 7..9: allocate child slot of size N in front cell =============
-  :push0,
-  :load,
-  :allocate,
-
-  # == pos 10..14: jz_t -> if allocate failed, jump to ABORT_TARGET ======
-  :jz_t,
-  :nop_0, :nop_0, :nop_1, :nop_1,
-
-  # == pos 15..17: init copy counter slot[1] = 0 =========================
-  :push0,
-  :push1,
-  :store,
-
-  # == pos 18..21: COPY_LOOP_HEAD anchor [n1, n0, n0, n1] ================
-  :nop_1, :nop_0, :nop_0, :nop_1,
-
-  # == pos 22..24: read opcode at counter ================================
-  :push1,
-  :load,
-  :read_self,
-
-  # == pos 25..29: write opcode to child at counter ======================
-  :push1,
-  :load,
-  :swap,
-  :write_child,
-  :drop,
-
-  # == pos 30..35: increment counter slot[1] += 1 ========================
-  :push1, :load,
+  # 4..5 sense ahead, duplicate
+  :sense_front, :dup,
+  # 6..10 jz_t EMPTY (v==0 -> cruise)
+  :jz_t, :nop_1, :nop_0, :nop_0, :nop_1,
+  # 11..12 v+1 (lenie -1 -> 0; food -> >=2)
   :push1, :add,
-  :push1, :store,
-
-  # == pos 36..40: loop condition (N - (counter+1) != 0?) ================
-  :push0, :load,
-  :push1, :load,
-  :sub,
-
-  # == pos 41..45: jnz_t -> back to COPY_LOOP_HEAD if not done ===========
-  :jnz_t,
+  # 13..17 jz_t AVOID (lenie ahead)
+  :jz_t, :nop_0, :nop_0, :nop_1, :nop_1,
+  # 18..19 food: eat, advance
+  :eat, :move,
+  # 20..24 jmp_t LOOP
+  :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
+  # 25 separator
+  :push0,
+  # 26..29 EMPTY anchor
   :nop_0, :nop_1, :nop_1, :nop_0,
-
-  # == pos 46: divide ====================================================
-  :divide,
-
-  # == pos 47..50: ABORT_TARGET anchor [n1, n1, n0, n0] ==================
-  # Landing pad for both jz_t (allocate failed) and fall-through after divide.
+  # 30..31 cruise: drop leftover 0, advance
+  :drop, :move,
+  # 32..36 jmp_t LOOP
+  :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
+  # 37 separator
+  :push0,
+  # 38..41 AVOID anchor
   :nop_1, :nop_1, :nop_0, :nop_0,
-
-  # == pos 51..55: r := pushN; stack <- (r mod 2) ========================
-  :pushN,
-  :push1, :push1, :add,
-  :mod,
-
-  # == pos 56..60: jz_t -> if 0, jump to TURN_LEFT_ANCHOR ================
-  :jz_t,
-  :nop_1, :nop_0, :nop_1, :nop_1,
-
-  # == pos 61: turn_right (executed when r mod 2 == 1) ===================
+  # 42 turn away
   :turn_right,
-
-  # == pos 62..66: jmp_t -> skip turn_left branch ========================
-  :jmp_t,
-  :nop_1, :nop_1, :nop_0, :nop_1,
-
-  # == pos 67: separator (dead code, never executed) =====================
-  :push0,
-
-  # == pos 68..71: TURN_LEFT_ANCHOR [n0, n1, n0, n0] =====================
-  :nop_0, :nop_1, :nop_0, :nop_0,
-
-  # == pos 72: turn_left (executed when r mod 2 == 0) ====================
-  :turn_left,
-
-  # == pos 73..76: SKIP_TURN_ANCHOR [n0, n0, n1, n0] =====================
-  :nop_0, :nop_0, :nop_1, :nop_0,
-
-  # == pos 77..91: build K=128 on stack ==================================
-  :push1,
-  :dup, :add, :dup, :add, :dup, :add, :dup, :add,
-  :dup, :add, :dup, :add, :dup, :add,
-
-  # == pos 92..93: store K in slot[0] ====================================
-  :push0,
-  :store,
-
-  # == pos 94..97: FORAGE_LOOP_HEAD anchor [n0, n1, n0, n1] ==============
-  :nop_0, :nop_1, :nop_0, :nop_1,
-
-  # == pos 98..101: forage body - sense, drop result, eat, move ==========
-  :sense_front,
-  :drop,
-  :eat,
-  :move,
-
-  # == pos 102..103: try to infect a neighbor; drop the result ===========
-  :conjugate,
-  :drop,
-
-  # == pos 104..109: counter := counter - 1 (slot[0]) ====================
-  :push0, :load,
-  :push1, :sub,
-  :push0, :store,
-
-  # == pos 110..111: load counter for check ==============================
-  :push0,
-  :load,
-
-  # == pos 112..116: jnz_t -> back to FORAGE_LOOP_HEAD if counter != 0 ===
-  :jnz_t,
-  :nop_1, :nop_0, :nop_1, :nop_0,
-
-  # == pos 117..121: jmp_t -> back to LOOP_HEAD to retry replication =====
-  :jmp_t,
-  :nop_0, :nop_0, :nop_0, :nop_0,
-
-  # == pos 122: separator (dead code, never executed) ====================
+  # 43..47 jmp_t LOOP
+  :jmp_t, :nop_0, :nop_0, :nop_0, :nop_0,
+  # 48 separator (wraps into LOOP at 0)
   :push0
 ]
 ```
+
+### 5.2 Ancestor (`lib/lenies/codeomes/ancestor.ex`)
+
+The canonical self-replicator. 100 opcodes. Measures self, allocates a child,
+copies the chromosome opcode-by-opcode, divides, then forages K=64 to refuel.
+Its signature trick is a **single slot used as both the copy counter and the
+copy address**: it counts down from `N-1` to `0`, copying high address first.
+Deterministic post-divide `turn_right` (no random branch).
+
+Anchors (4-bit, from five distinct complement-pairs → all ten nop windows
+distinct):
+
+| Label     | Anchor          | Template        |
+|-----------|-----------------|-----------------|
+| HEAD      | `[n1,n1,n1,n1]` | `[n0,n0,n0,n0]` |
+| COPY      | `[n1,n0,n0,n1]` | `[n0,n1,n1,n0]` |
+| REPRODUCE | `[n1,n1,n0,n0]` | `[n0,n0,n1,n1]` |
+| ABORT     | `[n1,n0,n1,n0]` | `[n0,n1,n0,n1]` |
+| FORAGE    | `[n1,n0,n0,n0]` | `[n0,n1,n1,n1]` |
+
+Structure (positions): `HEAD` 0..3 → save N (4..6) → allocate (7..9) →
+`jz_t ABORT` (10..14) → N-1 into slot0 (15..20) → `COPY` 21..24 → copy body
+(25..30: `push0,load,dup,read_self,write_child,drop`) → zero-test
+`jz_t REPRODUCE` (31..37) → decrement (38..43) → `jmp_t COPY` (44..48) →
+separator (49) → `REPRODUCE` 50..53 → `divide,turn_right` (54..55) → `ABORT`
+56..59 → build K=64 (60..72) → store (73..74) → `FORAGE` 75..78 →
+`jz_t HEAD` exit (79..85) → `eat,move` (86..87) → decrement (88..93) →
+`jmp_t FORAGE` (94..98) → separator (99). Allocate-failure guard at `jz_t`
+pos 10. Separators at pos 49 and 99.
+
+### 5.3 Architect (`lib/lenies/codeomes/architect.ex`)
+
+The same replicative capability as Ancestor, reorganized as a **structured
+program of callable subroutines** via `call_t`/`ret` — the only seed whose call
+stack is ever non-empty. 173 opcodes. Because ten labels are needed, it uses
+**5-bit templates** (ten anchors `1xxxx` plus ten templates `0..9` as `0xxxx`
+= twenty mutually-distinct nop windows, so every jump resolves uniquely).
+
+Shape:
+
+```
+MAIN:  call_t FORAGE ; call_t REPLICATE ; jmp_t MAIN
+FORAGE: build K ; store ; FLOOP: jz_t FEND ; call_t STEER ; eat ; move ;
+        decrement ; jmp_t FLOOP ; FEND: ret      # nested call -> STEER
+STEER:  sense_front ; +1 ; jz_t STURN ; ret ; STURN: turn_right ; ret
+REPLICATE: allocate ; jz_t RDONE ; copy loop (RCOPY/RDIV) ; divide ;
+           turn_right ; RDONE: ret
+```
+
+Call depth reaches 2 (`MAIN → FORAGE → STEER`). Ten anchors: `MAIN`(11111),
+`FORAGE`(11110), `FLOOP`(11101), `FEND`(11100), `STEER`(11011), `STURN`(11010),
+`REPLICATE`(11001), `RCOPY`(11000), `RDIV`(10111), `RDONE`(10110); each
+template is the bit-flip. Lesson to quote: `call_t` pushes the return IP and
+jumps to the complement; `ret` pops it. A subroutine reached only via `call_t`
+always has a frame to pop, so multiple `ret` exits are safe.
+
+### 5.4 Symbiont (`lib/lenies/codeomes/symbiont.ex`)
+
+The adaptive / horizontal-gene-transfer organism. 118 opcodes. It introspects
+its own age as a regulatory clock, **mints** a plasmid from its own code with
+`make_plasmid`, and **conjugates** it into neighbours conditioned on what it
+senses — the only seed that uses `sense_age`, `make_plasmid`, or in-code
+`conjugate`.
+
+Life cycle:
+
+```
+ENTRY (runs once): push0 ; build 4 ; make_plasmid ; drop   # mint codeome[0..3]
+MAIN: sense_age ; build 8 ; mod ; jz_t REPRO                # age % 8 == 0 -> reproduce
+SPREAD: sense_front ; +1 ; jz_t INFECT ; eat ; move ; jmp_t MAIN
+INFECT: conjugate ; drop ; move ; jmp_t MAIN
+REPRO:  allocate ; jz_t MAIN ; copy loop (RCOPY/RDIV) ; divide ; turn_right ; jmp_t MAIN
+```
+
+The minted cassette is `codeome[0..3]` = `[push0,push1,dup,add]` — it contains
+**no nops**, so it can never hijack an anchor in a recipient; it is a benign,
+inherited passenger that demonstrates the transfer pathway (mint → conjugate →
+segregate to offspring) without altering recipient behaviour. Anchors (4-bit):
+`MAIN`(1111), `REPRO`(1001), `INFECT`(1100), `RCOPY`(1010), `RDIV`(1000).
+To build a plasmid that *expresses* in a recipient, see chapter 10 — it must
+begin with an anchor matching a per-iteration jump the host performs.
 
 ---
 
@@ -850,8 +388,9 @@ replication. Steady state ≈ +805 energy per generation cycle.
    `child_addr` is second.
    - WRONG: `push opcode_int, push child_addr, write_child`
    - RIGHT: `push child_addr, push opcode_int, write_child`
-   The MR replicator uses `swap` between two `:load` calls (pos 25..28) to
-   put `opcode_int` on top after pushing it earlier — copy that idiom.
+   `Ancestor` avoids `swap` entirely: `push0, load, dup, read_self` (pos
+   25..28) leaves `[addr, opcode_int]` already in the order `:write_child`
+   wants — copy that idiom.
 
 4. **Operand order for `:make_plasmid`.** `length` is TOP, `start_addr`
    is second. Stack effect `( start_addr length -- ok? )`.
@@ -863,9 +402,9 @@ replication. Steady state ≈ +805 energy per generation cycle.
    includes across the **ring wrap** — if the last opcode of your codeome
    is part of a template's nop run and the first opcode is an anchor's nop
    run, you have an 8-nop misread. Always end the codeome with a non-nop
-   (`:push0` is canonical) when a template's nops are at the tail. See MR
-   positions 67 and 122; Defender position 92; Hunter positions 135, 146,
-   163; Forager positions 115, 126, 137.
+   (`:push0` is canonical) when a template's nops are at the tail. See
+   `Ancestor` positions 49 and 99; `Reflex` positions 25, 37, 48; `Symbiont`
+   positions 41, 54, 70, 105, 117.
 
 6. **Confusing `:turn_left` direction.** `:turn_left` is COUNTER-clockwise
    (n→w→s→e→n). `:turn_right` is CLOCKWISE (n→e→s→w→n). The cycle is the
@@ -915,9 +454,9 @@ replication. Steady state ≈ +805 energy per generation cycle.
 12. **Calling `:divide` before `:write_child` has written any opcodes.**
     `:divide` will silently fail if the child slot is empty (or if no
     `:allocate` happened first). The canonical sequence is always
-    `:allocate → write_child loop → :divide`. The MR replicator
-    enforces this via the COPY_LOOP_HEAD anchor at positions 18..21 and
-    drops to `:divide` at position 46 only after the copy loop has
+    `:allocate → write_child loop → :divide`. `Ancestor`
+    enforces this via the COPY anchor at positions 21..24 and
+    reaches `:divide` at position 54 only after the copy loop has
     written N opcodes.
 
 13. **Cap awareness in sandbox.** The Sandbox world enforces per-world
@@ -926,7 +465,7 @@ replication. Steady state ≈ +805 energy per generation cycle.
     When the cap is hit, `:divide` returns silently — replication just
     stops. The Arena world overrides both to `:infinity`. AI agents
     should design replicators that remain stable when replication is
-    suddenly throttled (the Walker is a good "always stable" template
+    suddenly throttled (`Reflex` is a good "always stable" template
     since it doesn't replicate at all).
 
 ---
@@ -943,15 +482,16 @@ Before outputting a codeome, mentally run through this list:
 
 2. **Codeome length is in `[5, 1024]`.** Count the opcodes in your list
    (including all nops and separators). Below 5 or above 1024: rejected
-   at creation. The reference codeomes are 7 (Walker), 21 (TemplateJumper),
-   93 (Defender), 123 (MR), 139 (Forager), 164 (Hunter).
+   at creation. The reference codeomes are 49 (Reflex), 100 (Ancestor),
+   173 (Architect), 118 (Symbiont).
 
 3. **At least 10 non-nop opcodes** (`min_viable_codeome_opcodes`).
    `:nop_0` and `:nop_1` don't count toward this; everything else does.
 
 4. **Every template has a matching complement somewhere** in the codeome
-   (else the jump falls through). The MR replicator's anchor table is a
-   good reference set: pick distinct 4-bit anchors for each control-flow
+   (else the jump falls through). `Ancestor`'s anchor table is a good
+   reference set — five anchors drawn from five distinct complement-pairs, so
+   all ten nop windows are unique: pick distinct anchors for each control-flow
    target, and the matching templates are just the bit-flips.
 
 5. **Every anchor has a separator before its closing complement.** Insert
@@ -967,8 +507,8 @@ Before outputting a codeome, mentally run through this list:
 
 7. **Slot indices are valid.** `:store` and `:load` accept any integer,
    but only `0..3` are distinct. Re-using a slot across phases is fine
-   (MR does this: slot[0] holds N during replication, then K during
-   forage); just make sure the value is fresh when you load it.
+   (`Ancestor` does this: slot[0] holds the copy index during replication,
+   then the forage budget K); just make sure the value is fresh when you load it.
 
 8. **Energy budget is sustainable.** For a replicator: per-iter eat gain
    must exceed per-iter cost, and `K × (gain - cost)` must exceed
@@ -1014,7 +554,7 @@ unique name, then click "Spawn". The Lenie will appear in the current world.
 If the codeome is invalid, the editor reports the rejection reason in the
 flash bar at the top.
 
-For deeper analysis, the seven reference codeomes in §5 all have
+For deeper analysis, the four reference codeomes in §5 all have
 `def codeome/0` functions exposed in their respective modules — call them
-from `iex -S mix` (e.g. `Lenies.Codeomes.MinimalReplicator.codeome()`) to
+from `iex -S mix` (e.g. `Lenies.Codeomes.Ancestor.codeome()`) to
 see the parsed `%Codeome{}` struct and verify your understanding.

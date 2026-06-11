@@ -1,10 +1,10 @@
 # Chapter 5 — Memory and Arithmetic
 
-In chapter 4 you built a Forager that reacts to what the cell ahead contains. The Forager's decision is purely local: sense, branch, eat-or-turn, repeat. But most interesting codeomes need something more — a counter that tracks how many steps have elapsed, an index into a sequence, or a constant that controls behaviour across many iterations. The stack is perfect for short-lived computation, but a value pushed onto the stack during one pass through the loop is gone by the next time the `jmp_t` fires. You need persistent storage.
+In chapter 4 you built Reflex, which reacts to what the cell ahead contains. Reflex's decision is purely local: sense, branch, act, repeat. But most interesting codeomes need something more — a counter that tracks how many steps have elapsed, an index into a sequence, or a constant that controls behaviour across many iterations. The stack is perfect for short-lived computation, but a value pushed onto the stack during one pass through the loop is gone by the next time the `jmp_t` fires. You need persistent storage.
 
 Lenies gives each codeome four **memory slots**, numbered 0 through 3. They are initialised to 0 when the codeome starts and survive for the entire lifetime of the creature, across every jump, every iteration, every branch. Think of them as hardware registers: small in number, fast to access, and always available.
 
-This chapter covers the slot instructions, the arithmetic you need to manipulate slot values, how to build numeric constants from the limited push palette, and how `:pushN` injects randomness. Then you build two new codeomes: a Counter-walker that turns right every 8 steps, and a Turning Forager that picks its turning direction at random each cycle.
+This chapter covers the slot instructions, the arithmetic you need to manipulate slot values, how to build numeric constants from the limited push palette, and how `:pushN` injects randomness. Then you build two new codeomes: a Stepper that turns right every 8 steps, and a Wanderer that picks its turning direction at random each cycle.
 
 ---
 
@@ -147,9 +147,9 @@ The init phase (building N and storing it) is a one-time cost, paid only when th
 
 ---
 
-## 5 — Counter-walker
+## 5 — Stepper
 
-A Walker that takes exactly 8 steps, then turns right, then repeats. The counter lives in slot 0.
+A creature that takes exactly 8 steps, then turns right, then repeats. The counter lives in slot 0.
 
 ### Design
 
@@ -287,9 +287,9 @@ In the coin-flip the divisor is the constant 2, so it is never 0. But if you eve
 
 ---
 
-## 7 — Turning Forager
+## 7 — Wanderer
 
-The Turning Forager is the Forager from chapter 4 with its unconditional `:turn_right` replaced by a random left/right decision. The structure extends the Forager's two-state machine (LOOP, TURN) into a four-state machine:
+The Wanderer is a sense-branch creature in the spirit of Reflex from chapter 4: it senses the cell ahead, eats and moves when there is food, and turns when the cell is empty — but here the turn direction is a random left/right decision instead of a fixed one. The structure extends a two-state machine (LOOP, TURN) into a four-state machine:
 
 ```
 LOOP_HEAD:
@@ -405,7 +405,7 @@ If `:pushN` had returned an even number, coin = 0, and the `jz_t` at ip 27 would
 
 ---
 
-## 8 — Stack trace for one counter-walker cycle
+## 8 — Stack trace for one stepper cycle
 
 The table below shows the state at the **end of each iteration** of the step loop (after the `jnz_t` fires back to ip 17). Energy figures are approximate and assume the creature starts each iteration with enough energy to complete it.
 
@@ -450,10 +450,10 @@ ip    Instruction   Stack before   Stack after   slot[0]
 
 Add both codeomes to your project's codeome registry. Suggested names:
 
-**counter-walker-v1**
+**stepper-v1**
 
 ```elixir
-def counter_walker_v1 do
+def stepper_v1 do
   [
     :nop_0, :nop_0, :nop_0, :nop_0,
     :push1, :dup, :add, :dup, :add, :dup, :add,
@@ -471,10 +471,10 @@ def counter_walker_v1 do
 end
 ```
 
-**turning-forager-v1**
+**wanderer-v1**
 
 ```elixir
-def turning_forager_v1 do
+def wanderer_v1 do
   [
     :nop_0, :nop_0, :nop_0, :nop_0,
     :sense_front,
@@ -504,8 +504,8 @@ Spawn 5 of each in a 64×64 world with `food_density: 0.3` and run for 2 000 ste
 
 **What to look for:**
 
-- Counter-walkers leave straight trails of length ~8, then turn — forming a zigzag or loose spiral.
-- Turning foragers trace irregular random-walk paths. Because the turn direction is independent each cycle, they do not systematically return to depleted areas and may outlast the deterministic Forager in sparse food fields.
+- Steppers leave straight trails of length ~8, then turn — forming a zigzag or loose spiral.
+- Wanderers trace irregular random-walk paths. Because the turn direction is independent each cycle, they do not systematically return to depleted areas and may outlast a creature that always turns the same way in sparse food fields.
 
 ---
 

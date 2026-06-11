@@ -160,26 +160,26 @@ The manual is structured as a pyramid of progressively capable codeomes. Each
 chapter introduces one new idea and builds a concrete working organism that
 demonstrates it:
 
-- **Chapter 3** — Your first codeome: a Walker that moves and eats in a
+- **Chapter 3** — Your first codeome: a Crawler that moves and eats in a
   simple loop.
-- **Chapter 4** — Loops and template addressing: a Forager that senses its
-  surroundings and turns when blocked.
-- **Chapter 5** — Memory slots and arithmetic: a Counter-walker that counts
-  steps before turning, and a Turning forager that picks a random direction.
+- **Chapter 4** — Loops and template addressing: **Reflex** (rung 1 of the
+  seed ladder), which senses the cell ahead and reacts three ways.
+- **Chapter 5** — Memory slots and arithmetic: a Stepper that counts steps
+  before turning, and a Wanderer that picks a random direction.
 - **Chapter 6** — Subroutines: factoring repeated code into callable
-  procedures with `call_t` and `ret`.
+  procedures with `call_t` and `ret` — the backbone of **Architect** (rung 3).
 - **Chapter 7** — Replication: the three-opcode protocol (`allocate`,
   `write_child`, `divide`) that lets a Lenie copy itself. You will build a
   Mini-replicator and then a Sustainable replicator that can actually survive
   long enough to have grandchildren.
 - **Chapter 8** — Energy economy: the maths behind break-even replication,
   and how to dimension your forage cycles.
-- **Chapter 9** — Annotated dissection of the canonical `MinimalReplicator`
-  (123 opcodes, hand-tuned for sustainable populations) and of `Carnivore`,
-  which adds predation to the same body plan.
+- **Chapter 9** — Annotated dissection of **Ancestor** (rung 2), the canonical
+  100-opcode replicator, plus the `attack`/`defend` opcodes for building a
+  predator of your own.
 - **Chapter 10** — Conjugation and plasmids: horizontal transfer of code
-  between living Lenies, the one form of inheritance that does not require
-  replication.
+  between living Lenies (the engine of **Symbiont**, rung 4), the one form of
+  inheritance that does not require replication.
 - **Chapter 11** — A cookbook of recurring idioms you can copy and adapt.
 
 If you are in a hurry, chapters 3 through 7 are the essential path. The rest

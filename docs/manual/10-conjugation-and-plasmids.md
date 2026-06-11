@@ -1,7 +1,7 @@
 # Chapter 10 — Conjugation and Plasmids
 
-Source of truth: `lib/lenies/codeomes/minimal_replicator.ex`,
-`lib/lenies/codeomes/carnivore.ex`, `lib/lenies/lenie.ex`,
+Source of truth: `lib/lenies/codeomes/symbiont.ex`,
+`lib/lenies/codeomes/ancestor.ex`, `lib/lenies/lenie.ex`,
 `lib/lenies/codeome/costs.ex`.
 
 Every codeome you have written so far inherits *vertically*: a parent copies
@@ -15,10 +15,12 @@ descendant; it does not even have to be the same species. A useful trait can
 sweep through a whole population by contact in a few hundred ticks, the way an
 antibiotic-resistance plasmid spreads through a bacterial colony.
 
-By the end of the chapter you will understand the two opcodes that drive it
-(`make_plasmid`, `conjugate`), the addressing trick that makes a transferred
-plasmid actually *run* in its new host, and you will have a proven recipe for
-writing your own conjugable plasmid in a custom codeome.
+This is exactly what rung 4 of the seed ladder — **Symbiont** — is built to do:
+it mints a plasmid from its own code at runtime and conjugates it into the
+neighbours it meets. By the end of the chapter you will understand the two
+opcodes that drive it (`make_plasmid`, `conjugate`), the addressing trick that
+makes a transferred plasmid actually *run* in its new host, and you will have a
+proven recipe for writing your own conjugable plasmid.
 
 ---
 
@@ -52,9 +54,10 @@ What conjugation is **not**:
   with extra code grafted on.
 - The donor keeps its plasmid. Transfer is a copy, not a move.
 
-The two seeds shipped with the simulator already carry plasmids — the Minimal
-Replicator carries **Twitch**, the Carnivore carries **Sprint** — and both
-spread them by calling `conjugate` on every forage step. We dissect both below.
+Of the four shipped ladder seeds, only **Symbiont** uses plasmids — and unlike
+older designs that were handed a plasmid at spawn, Symbiont **mints its own at
+runtime** with `make_plasmid` and spreads it with `conjugate`. We dissect it in
+§4. The other three rungs (Reflex, Ancestor, Architect) carry none.
 
 ---
 
@@ -75,9 +78,8 @@ On success pushes `1`.
 **Cost:** `2.0 + 0.05 × length` on success, `2.0` on a validation failure.
 
 `make_plasmid` is a pure VM opcode: it completes in-process, with no world
-round-trip. It is how a custom codeome — which has no way to pre-load a buffer
-through the editor — gives itself something to conjugate. You point it at a
-region of your own code and say "this is the part I want to spread".
+round-trip. It is how a codeome gives itself something to conjugate. You point
+it at a region of your own code and say "this is the part I want to spread".
 
 ### `conjugate` `( -- 1|0 )`
 
@@ -108,8 +110,7 @@ Two robustness properties worth knowing:
 - **Deadlock-safe.** If two Lenies face each other and both call `conjugate` in
   the same instant, each is trying to write into the other at once. The transfer
   uses a short (50 ms) timeout and treats a busy recipient as an ordinary
-  failure, so both survive. (Earlier the default 5-second timeout let such pairs
-  kill each other; that is fixed.)
+  failure, so both survive.
 
 ---
 
@@ -122,65 +123,66 @@ recipient's codeome. Appending code does not make it run. The recipient's
 instruction pointer is busy looping through the original program; it never walks
 off the end into the new opcodes. A naively-written plasmid sits at the tail of
 the codeome as **dead code**, doing nothing, while still costing energy to carry
-and copy. The recipient's behaviour is unchanged. This is exactly the bug the
-first version of these plasmids had.
+and copy. The recipient's behaviour is unchanged.
 
-To make a plasmid execute, it must **hijack a jump the host already performs.**
-Recall from Chapter 4 that a jump opcode does not store an address — it scans
-the codeome for a run of nops matching the *complement* of its template, and
-jumps just past the first match. The search runs **forward first**, then wraps.
+This is, in fact, *by design* for Symbiont's own plasmid — a deliberately inert
+passenger, see §4. But if you want a plasmid that **changes** its host's
+behaviour, it must **hijack a jump the host already performs.** Recall from
+Chapter 4 that a jump opcode does not store an address — it scans the codeome
+for a run of nops matching the *complement* of its template, and jumps just past
+the first match. The search runs **forward first**, then wraps.
 
-The Minimal Replicator's forage loop ends each iteration with:
+Take `Ancestor` (Chapter 9) as the host. Its forage loop ends each iteration
+with:
 
 ```
-jnz_t FORAGE_LOOP_HEAD     # template [1,0,1,0]; searches for the run [0,1,0,1]
+jmp_t FORAGE     # template [0,1,1,1]; searches for the run [1,0,0,0]
 ```
 
-That `jnz_t` fires on **every** forage step (it loops back as long as the forage
-counter is non-zero). It looks for the anchor `[0,1,0,1]` — the FORAGE_LOOP_HEAD
-label, which in the original codeome sits early, around position 94.
+That `jmp_t` fires on **every** forage step. It looks for the anchor `[1,0,0,0]`
+— the `FORAGE` label, which in the original codeome sits at position 75.
 
-Now suppose the appended plasmid *begins* with its own `[0,1,0,1]` run. The
-host's `jnz_t` is at, say, position 112; its forward search starts just after it
-and reaches the appended plasmid (around position 123) **before** it could wrap
-all the way around to the original anchor at 94. The forward search finds the
+Now suppose the appended plasmid *begins* with its own `[1,0,0,0]` run. The
+host's `jmp_t FORAGE` is at position 94; its forward search starts just after it
+and reaches the appended plasmid (around position 100) **before** it could wrap
+all the way around to the original anchor at 75. The forward search finds the
 plasmid's anchor first. Every forage step now diverts into the plasmid.
 
-The plasmid runs its behaviour and ends with:
+The plasmid runs its behaviour and ends with its own:
 
 ```
-jmp_t FORAGE_LOOP_HEAD     # template [1,0,1,0]; bounces back
+jmp_t FORAGE     # template [0,1,1,1]; bounces back
 ```
 
-whose forward search wraps around to the *original* FORAGE_LOOP_HEAD at 94, so
-the real forage body (sense, eat, move) runs next — then its `jnz_t` diverts
-into the plasmid again. The result is a tight cycle:
+whose forward search — starting from the plasmid's tail and wrapping through the
+chromosome — reaches the *original* `FORAGE` at 75 before it could loop back to
+the plasmid's own copy, so the real forage body (eat, move) runs next, then the
+host's `jmp_t FORAGE` diverts into the plasmid again. The result is a tight
+cycle:
 
 ```
    +============================================+
-   |  real forage body: sense_front, eat, move  |
+   |  real forage body: eat, move               |
    |  decrement counter                         |
-   |  jnz_t FORAGE_LOOP_HEAD  ============+     |
-   +======================================|=====+
-                                          |  (counter != 0)
-                                          v
-                        +==================================+
-                        |  PLASMID (appended at tail)      |
-                        |  [0,1,0,1] anchor                |
-                        |  ...behaviour...                 |
-                        |  jmp_t FORAGE_LOOP_HEAD  ========+
-                        +==================================+
-                              (bounces to the real anchor at 94)
+   |  jmp_t FORAGE  =====================+       |
+   +====================================|=======+
+                                        v
+                      +==================================+
+                      |  PLASMID (appended at tail)      |
+                      |  [1,0,0,0] anchor                |
+                      |  ...behaviour...                 |
+                      |  jmp_t FORAGE  =================+ |
+                      +================================|=+
+                            (bounces to the real anchor at 75)
 ```
 
 The behaviour fires once per forage step — frequent, and therefore *visible*.
 
-> **Why not LOOP_HEAD?** The very first version anchored plasmids to LOOP_HEAD
-> `[1,1,1,1]`, the label the host jumps to only when it finishes a whole forage
-> cycle to retry replication. That happens once every ~128 steps, so the
-> behaviour fired about twice in five thousand steps — invisible. Anchoring to
-> the per-iteration FORAGE_LOOP_HEAD is the whole fix. Pick the jump that fires
-> at the frequency you want your trait to express.
+> **Pick the jump that fires at the rate you want.** Anchor to a per-iteration
+> jump (like `FORAGE`) and your trait expresses every step. Anchor instead to a
+> jump the host takes only once per generation (like `HEAD`, reached only when a
+> whole forage run finishes) and the trait fires a couple of times in thousands
+> of steps — effectively invisible.
 
 Two discipline rules make or break a plasmid:
 
@@ -188,144 +190,100 @@ Two discipline rules make or break a plasmid:
 between steps; if your plasmid leaves junk behind, it corrupts the host's
 arithmetic. Push and pop in balance.
 
-**2. A trailing separator (this one is easy to forget and fatal).** The plasmid
-is appended at the very end of the host's codeome ring, so its final `jmp_t`
-template is immediately followed — across the wrap back to position 0 — by the
-host's LOOP_HEAD anchor, which is *also* nops (`[1,1,1,1]`). The template
-extractor reads a run of nops up to 8 long; with no break between your final
-template and LOOP_HEAD it reads 8 nops instead of 4, computes the wrong
-complement, and the bounce-back jump lands in the host's replication setup
-instead of FORAGE_LOOP_HEAD. The host then loops through replication forever,
-never forages, and starves in place — it looks frozen. **Always end a plasmid
-with a single non-nop opcode** (a `:push0` is conventional, exactly as the
-Minimal Replicator does at the end of its own codeome). That one byte breaks
-the nop run across the wrap and is never executed (the preceding `jmp_t` jumps
-past it).
+**2. A trailing separator (easy to forget and fatal).** The plasmid is appended
+at the very end of the host's codeome ring, so its final `jmp_t` template is
+immediately followed — across the wrap back to position 0 — by the host's `HEAD`
+anchor, which is *also* nops (`[1,1,1,1]`). The template extractor reads a run
+of nops up to 8 long; with no break between your final template and `HEAD` it
+reads 8 nops instead of 4, computes the wrong complement, and the bounce-back
+jump lands in the host's replication setup instead of `FORAGE`. The host then
+loops through replication forever, never forages, and starves in place — it
+looks frozen. **Always end a plasmid with a single non-nop opcode** (a `:push0`
+is conventional, exactly as Ancestor does at the end of its own codeome). That
+one byte breaks the nop run across the wrap and is never executed (the preceding
+`jmp_t` jumps past it).
 
 ---
 
-## 4. Plasmid #1 dissected: Twitch (on the Minimal Replicator)
+## 4. Symbiont dissected: minting and spreading a passenger
 
-Twitch makes the host turn a random 90° left or right on every forage step,
-producing the jittery, space-filling walk you see from a seeded Minimal
-Replicator. It is 32 opcodes:
+`Symbiont` (rung 4) is the shipped organism built around horizontal transfer.
+It does three things no other seed does: it reads its own age as a clock, it
+**mints** a plasmid from its own code, and it **conjugates** that plasmid into
+neighbours conditioned on what it senses.
+
+**Minting (runs once, at spawn).** The first eight opcodes are:
 
 ```
-# == pos 0..3: INTERCEPT anchor = FORAGE_LOOP_HEAD pattern [0,1,0,1] ============
-:nop_0, :nop_1, :nop_0, :nop_1,
-
-# == pos 4..8: push a random bit - pushN mod 2 ==================================
-:pushN, :push1, :push1, :add, :mod,
-
-# == pos 9..13: jz_t TURN_LEFT_BR (template [1,0,0,0] -> anchor [0,1,1,1]) ======
-:jz_t, :nop_1, :nop_0, :nop_0, :nop_0,
-
-# == pos 14: turn_right (taken when the random bit was 1) =======================
-:turn_right,
-
-# == pos 15..19: jmp_t FORAGE_LOOP_HEAD (template [1,0,1,0]) ====================
-:jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
-
-# == pos 20: separator (keeps the template above from merging into the anchor) ==
+# == pos 0: start_addr = 0 ===========================================
 :push0,
-
-# == pos 21..24: TURN_LEFT_BR anchor [0,1,1,1] ==================================
-:nop_0, :nop_1, :nop_1, :nop_1,
-
-# == pos 25: turn_left (taken when the random bit was 0) ========================
-:turn_left,
-
-# == pos 26..30: jmp_t FORAGE_LOOP_HEAD (template [1,0,1,0]) ====================
-:jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
-
-# == pos 31: trailing separator (mandatory - breaks the nop run across
-#            the ring wrap into LOOP_HEAD; never executed) ==
-:push0
+# == pos 1..5: build length 4 (push1; dup; add; dup; add) ============
+:push1, :dup, :add, :dup, :add,
+# == pos 6: mint codeome[0..3] into the buffer (pushes 1/0) ==========
+:make_plasmid,
+# == pos 7: discard the result ======================================
+:drop,
 ```
 
-Reading it as a flow:
+`make_plasmid` here carves `codeome[0..3]` — which happens to be
+`[push0, push1, dup, add]` — into the buffer. That four-opcode cassette is the
+**passenger**: it contains **no `:nop` opcodes**, so it can never match any
+jump's template and can never hijack an anchor in a recipient. It rides along as
+an inert, inherited gene. Symbiont deliberately spreads a benign passenger: the
+point is to demonstrate the *transfer pathway*, not to alter recipients.
 
-1. The host's per-step `jnz_t` lands here (pos 0..3 is the hijack anchor).
-2. `pushN; push1; push1; add; mod` computes `pushN mod 2` — a fair coin, `0`
-   or `1`, on the stack. (`push1; push1; add` is the cheapest way to put the
-   literal `2` on the stack; Chapter 5 covers building constants.)
-3. `jz_t TURN_LEFT_BR` consumes the bit. If it was `0`, jump to the
-   `turn_left` branch (anchor `[0,1,1,1]` at pos 21). Otherwise fall through.
-4. Fall-through: `turn_right`, then `jmp_t FORAGE_LOOP_HEAD` bounces back to the
-   real forage body.
-5. Left branch: `turn_left`, then the same bounce.
+**Spreading (every spread-phase step).** Symbiont alternates phases on an age
+clock (`sense_age mod 8`). In its spread phase it senses the cell ahead and, if
+a Lenie is there, conjugates:
 
-Net stack effect: zero (the random bit is created and consumed within the
-plasmid). Exactly one turn per forage step, direction chosen fairly. Because the
-direction is random, the host never settles into a closed loop — it wanders and
-keeps finding fresh resource. That last point matters; see §6.
+```
+# sense the cell ahead; +1 turns the "lenie" code -1 into 0
+:sense_front, :push1, :add,
+:jz_t,  ...INFECT...        # neighbour ahead -> jump to the infect block
+:eat, :move, ...            # otherwise just forage
+# INFECT:
+:conjugate, :drop, :move, ...
+```
 
-A trace of a seeded Minimal Replicator confirms it: over 5000 interpreter steps
-the plasmid fired ~160 turns while eat and move continued normally.
+So conjugation is **environment-conditioned**: it fires only when a neighbour is
+actually in front, rather than blindly every step. A successful transfer raises
+the recipient's plasmid count (visible in the species panel — see
+`project_species_plasmid_count`) and, because offspring inherit carried plasmids
+by segregation at `divide`, the cassette then also flows **vertically** down
+each lineage it has entered. Vertical + horizontal spread from one organism.
+
+The passenger does nothing to the recipient's behaviour. To build a plasmid that
+*does*, you use the anchor-hijack technique of §3 — covered next.
 
 ---
 
-## 5. Plasmid #2 dissected: Sprint (on the Carnivore)
+## 5. Writing your own expressing plasmid
 
-Sprint makes the host take a second step and a second bite each forage
-iteration, so it covers ground roughly twice as fast. It needs no internal
-branch, so it is only 12 opcodes:
+You now have everything you need. Here is the recipe, then a worked example
+verified end to end against an `Ancestor` host.
 
-```
-# == pos 0..3: INTERCEPT anchor = FORAGE_LOOP_HEAD pattern [0,1,0,1] ==
-:nop_0, :nop_1, :nop_0, :nop_1,
-
-# == pos 4..5: an extra step and an extra bite ========================
-:move, :eat,
-
-# == pos 6..10: jmp_t FORAGE_LOOP_HEAD (template [1,0,1,0]) ===========
-:jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
-
-# == pos 11: trailing separator (mandatory) ===========================
-:push0
-```
-
-The host's `jnz_t` diverts here, the plasmid does `move; eat`, then bounces back
-to the real forage body which does its own `sense; eat; move`. Two cells of
-travel and two bites per iteration. Because every cell it crosses is eaten, the
-extra step is self-funding as long as the field is not bare — contrast Twitch,
-where the turns cost energy but win nothing directly (their payoff is staying
-out of grazed-over patches).
-
-Sprint is the template to copy when your trait is a straight-line *addition* to
-the forage body: do X extra, then bounce. Twitch is the template when your trait
-needs a *decision*: compute, branch to one of two anchored blocks, bounce from
-each.
-
----
-
-## 6. Writing your own conjugable plasmid
-
-You now have everything you need. Here is the recipe, then a worked example that
-has been verified end to end.
-
-**The golden rule.** Your payload must:
+**The golden rule.** A payload that should *express* in its host must:
 
 1. **begin** with an anchor matching a jump the host performs at the frequency
-   you want — for any Minimal-Replicator-derived host that is FORAGE_LOOP_HEAD,
-   `[0,1,0,1]`, hit every forage step;
+   you want — for an `Ancestor`-style host that is `FORAGE`, `[1,0,0,0]`, hit
+   every forage step;
 2. **do its work** in between, leaving the stack as it found it;
-3. **end** with `jmp_t FORAGE_LOOP_HEAD` (template `[1,0,1,0]`) to return control
-   to the real forage body;
+3. **end** with `jmp_t FORAGE` (template `[0,1,1,1]`) to return control to the
+   real forage body;
 4. **then add one trailing non-nop separator** (`:push0`) as the very last
    opcode — see rule 2 in §3. Without it the final template merges with the
-   host's LOOP_HEAD across the ring wrap and the bounce-back lands in
+   host's `HEAD` anchor across the ring wrap and the bounce-back lands in
    replication setup, freezing the host. This byte is never executed; it just
    breaks the nop run.
 
-**Making it conjugable.** A custom codeome cannot pre-load a plasmid buffer
-through the editor, so you give yourself one at runtime:
+**Making it conjugable.** Give yourself a plasmid at runtime exactly as Symbiont
+does:
 
 1. Place the payload as a contiguous region inside your own codeome.
 2. Run `make_plasmid` with that region's `start_addr` and `length` to copy it
    into your buffer.
-3. Run `conjugate` (typically inside your forage loop) to spread it to
-   neighbours.
+3. Run `conjugate` (typically inside your forage loop, or guarded by a
+   `sense_front` like Symbiont) to spread it to neighbours.
 
 ### Worked example: the "Veer" plasmid
 
@@ -333,37 +291,28 @@ The simplest payload that visibly changes movement is a single turn. Eleven
 opcodes (ten of behaviour plus the mandatory trailing separator):
 
 ```
-# == pos 0..3: FORAGE_LOOP_HEAD anchor [0,1,0,1] ============
-:nop_0, :nop_1, :nop_0, :nop_1,
+# == pos 0..3: FORAGE anchor [1,0,0,0] ======================
+:nop_1, :nop_0, :nop_0, :nop_0,
 
 # == pos 4: the trait - one left turn =======================
 :turn_left,
 
-# == pos 5..9: jmp_t FORAGE_LOOP_HEAD (template [1,0,1,0]) ==
-:jmp_t, :nop_1, :nop_0, :nop_1, :nop_0,
+# == pos 5..9: jmp_t FORAGE (template [0,1,1,1]) ============
+:jmp_t, :nop_0, :nop_1, :nop_1, :nop_1,
 
 # == pos 10: trailing separator (mandatory - rule 4) ========
 :push0
 ```
 
-Suppose this sits at positions 40..50 of your codeome. Somewhere your code runs:
+Suppose this sits at positions 40..50 of your codeome. Somewhere your code
+builds the constants `40` and `11` on the stack (Chapter 5), then runs
+`make_plasmid; drop` to carve `codeome[40..50]` into the buffer, and later
+`conjugate; drop` inside the forage loop to infect the Lenie ahead.
 
-```
-:push1, ...            # build the literal 40 into start_addr on the stack
-...                    # (see Chapter 5 for building constants)
-:push1, ...            # build the literal 11 into length on the stack
-:make_plasmid,         # carve codeome[40..50] into the buffer; pushes 1
-:drop,                 # discard the success flag
-...
-:conjugate,            # in your forage loop: infect the Lenie ahead
-:drop                  # discard the success flag
-```
-
-Carving and expression are both verified: `make_plasmid 40 11` copies exactly
-those eleven opcodes, and once conjugated into a Minimal Replicator the
-`turn_left` fires on every forage step (≈87 turns matched by 87 eats and 87
-moves over 2000 steps in a trace — the bounce-back returns cleanly to the
-forage body, so the host keeps eating and moving).
+Once conjugated into an `Ancestor`, the appended `[1,0,0,0]` anchor is found by
+the host's per-step `jmp_t FORAGE` before the real anchor at 75, so `turn_left`
+fires on every forage step and the bounce returns cleanly to the forage body —
+the host keeps eating and moving, now veering.
 
 ### The viability lesson
 
@@ -372,44 +321,43 @@ re-grazing four exhausted cells until it starves. The mechanism is correct; the
 *trait* is maladaptive.
 
 This is the difference between "does my plasmid express?" (an addressing
-question — answered by the anchor) and "does my plasmid help its host?" (a design
-question — answered by selection). Twitch solves the viability problem by making
-the turn *random*: a host that turns a fair coin each step performs a
-random walk, never closing into a starving loop, and keeps reaching fresh
-resource. If you want a turning plasmid that survives, randomize it the way
-Twitch does (§4) rather than turning the same way every time.
+question — answered by the anchor) and "does my plasmid help its host?" (a
+design question — answered by selection). Make the turn *random* — `pushN;
+push1; push1; add; mod` for a fair coin, then branch to a `turn_left` or
+`turn_right` block (Chapter 5) — and the host performs a random walk, never
+closing into a starving loop, and keeps reaching fresh resource. A surviving
+turning-plasmid randomizes; a fixed turn does not.
 
 And remember the host-compatibility caveat: an anchor-driven plasmid expresses
 **only** in a host that performs the jump your anchor hijacks. Conjugate Veer
-into a creature with no FORAGE_LOOP_HEAD `[0,1,0,1]` run and its anchor never
-fires — carried and inherited, but effectively dead code unless plain
-fall-through happens to reach it.
+into a creature with no `FORAGE` `[1,0,0,0]` run and its anchor never fires —
+carried and inherited, but effectively dead code (exactly like Symbiont's
+deliberately-inert passenger).
 
 ---
 
-## 7. Costs, sustainability, and pitfalls
+## 6. Costs, sustainability, and pitfalls
 
 - **Carry cost.** Plasmids are *extra-chromosomal*: they are kept separate from
   the chromosome and never fused into it, so they do **not** lengthen the host's
   codeome and there is no `divide` surcharge for carrying them. Their cost is
   paid as **execution**: a plasmid's opcodes run as part of the host's execution
   stream (chromosome followed by every carried plasmid), so an *expressed*
-  plasmid spends energy every step it runs. An unexpressed one is nearly free.
-  Budget for the ones that fire (Chapter 8).
-- **Per-step cost.** Twitch adds ~1.8 energy to each forage step (the random
-  bit, the branch, the turn, the bounce); Sprint adds ~4.4 (an extra move and
-  eat) but the extra bite pays it back. A plasmid that costs energy without
-  returning any — like Veer's bare turn — is a net drain unless the *behaviour*
-  earns its keep indirectly (fresh grazing).
+  plasmid spends energy every step it runs. An unexpressed one (like Symbiont's
+  passenger) is nearly free. Budget for the ones that fire (Chapter 8).
+- **Per-step cost.** A random-turn plasmid adds ~1.8 energy to each forage step
+  (the random bit, the branch, the turn, the bounce). A plasmid that costs
+  energy without returning any — like Veer's bare turn — is a net drain unless
+  the *behaviour* earns its keep indirectly (fresh grazing).
 - **The 1024-opcode cap.** Conjugation refuses a plasmid if it would push the
   recipient's *execution stream* (chromosome + carried plasmids) past the codeome
   length bound. The once-per-encounter rule keeps the same plasmid from stacking,
   and across generations **segregational loss** at `divide` (each plasmid is kept
   by the child only with probability `1 − plasmid_loss_probability`) bounds how
-  many a lineage hoards — distinct plasmids no longer pile up without limit.
+  many a lineage hoards.
 - **Symmetric conjugation.** Two carriers facing each other both calling
-  `conjugate` is now safe (§2) — neither dies — but neither transfer completes
-  that tick. In dense fields this is just a small amount of wasted effort.
+  `conjugate` is safe (§2) — neither dies — but neither transfer completes that
+  tick.
 - **Watch it happen.** When a conjugation succeeds the dashboard flashes both
   cells and updates the conjugation indicator next to the *World* header — a
   live events/sec rate with a short sparkline of recent activity and the name of
@@ -418,44 +366,45 @@ fall-through happens to reach it.
 
 ---
 
-## 8. Try it
+## 7. Try it
 
 1. Open the codeome editor (**+ New Seed** on the dashboard, or the editor
    page).
-2. Build a Minimal-Replicator-style forage loop, or start from the Minimal
-   Replicator and edit it. Insert a `conjugate` followed by a `drop` into the
-   forage body (after `move`), so the creature tries to infect whatever is
-   ahead each step.
-3. Append a Veer payload — anchor `nop_0 nop_1 nop_0 nop_1`, then `turn_left`,
-   then `jmp_t` with template `nop_1 nop_0 nop_1 nop_0`, then `:push0`
+2. Build an `Ancestor`-style forage loop, or start from `Ancestor` and edit it.
+   Insert a `conjugate` followed by a `drop` into the forage body (after
+   `move`), so the creature tries to infect whatever is ahead each step.
+3. Append a Veer payload — anchor `nop_1 nop_0 nop_0 nop_0`, then `turn_left`,
+   then `jmp_t` with template `nop_0 nop_1 nop_1 nop_1`, then `:push0`
    (separator) — to the end of the codeome. Note its start position and length
    (11).
 4. Before the forage loop, push that start position and `11`, then add
    `make_plasmid` and `drop` to load the payload into the buffer.
-5. Save the seed, give it a colour, and spawn one copy next to a plain Minimal
-   Replicator (spawn the built-in seed first, pause, then spawn yours adjacent —
+5. Save the seed, give it a colour, and spawn one copy next to a plain
+   `Ancestor` (spawn the built-in seed first, pause, then spawn yours adjacent —
    or spawn several of each and let them mingle).
 6. Resume and watch the conjugation log. When your seed conjugates the plain
-   replicator, the recipient picks up the eleven-opcode plasmid (its chromosome
+   `Ancestor`, the recipient picks up the eleven-opcode plasmid (its chromosome
    is untouched — the plasmid rides alongside it in the execution stream) and
-   begins veering — you will see a previously straight-walking Lenie start curving.
-7. Now swap `turn_left` for the Twitch random-turn block (§4) and observe the
-   difference in how long the converted hosts survive.
+   begins veering — you will see a previously straight-walking Lenie start
+   curving.
+7. Now swap `turn_left` for a random-turn block (§5) and observe the difference
+   in how long the converted hosts survive.
 
 ---
 
-## 9. Where this fits
+## 8. Where this fits
 
 Conjugation sits on top of two earlier chapters: template addressing
 ([Chapter 4](04-loops-and-templates.md)) is the entire basis of the anchor
-hijack, and the replication skeleton ([Chapter 7](07-replication.md),
-dissected in [Chapter 9](09-minimal-replicator.md)) is the host structure whose
-FORAGE_LOOP_HEAD you are hijacking. If a plasmid does not express, re-read
+hijack, and the replication skeleton ([Chapter 7](07-replication.md), dissected
+as `Ancestor` in [Chapter 9](09-ancestor.md)) is the host structure whose
+`FORAGE` anchor you are hijacking. If a plasmid does not express, re-read
 Chapter 4's account of forward search and confirm your anchor matches the host's
 jump template; if it expresses but the host dies, re-read Chapter 8 and make the
 trait pay for itself.
 
-You can now move a trait sideways across a population, not just down a lineage.
-Combine it freely with everything else: a random-branch plasmid (Pattern 2 from
-the Cookbook) that spreads a counter-driven behaviour (Pattern 4) is a perfectly
-natural thing to build. Infect responsibly.
+You can now move a trait sideways across a population, not just down a lineage —
+which is precisely what `Symbiont` does with its self-minted passenger. Combine
+the mechanism freely with everything else: a random-branch plasmid (Pattern 2
+from the Cookbook) that spreads a counter-driven behaviour (Pattern 4) is a
+perfectly natural thing to build. Infect responsibly.

@@ -693,8 +693,8 @@ to the World scheduler, which matters when your codeome must cooperate
 with other cells running concurrently.  If you immediately follow
 `:sense_front` with `:eat` or `:move` unconditionally, the sensed value
 is irrelevant — dropping it prevents it from corrupting later
-arithmetic or conditional tests.  The chapter-3 Walker uses this idiom
-in its idle spin loop.  The common mistake is forgetting the `:drop`,
+arithmetic or conditional tests.  The chapter-3 Crawler uses this idiom
+in its main loop.  The common mistake is forgetting the `:drop`,
 leading to a stack that slowly fills with cell-type integers; a
 subsequent `:mod` or `:sub` then operates on the wrong values entirely.
 
@@ -871,7 +871,7 @@ outer anchor and the allocate block is implicit here because
 ```
 
 **Directed walk:** simply `:move` repeatedly inside a loop with no
-turn.  The Walker from chapter 3 is the canonical directed walker;
+turn.  The Crawler from chapter 3 is the canonical example of a directed walk;
 chapters 4–5 add foraging and turning.  The random walk above costs
 ~5–10 energy per step (depending on `r mod 4`); a directed walk costs
 only the 2.0 of `:move`.  Random walks explore more area but starve
@@ -915,8 +915,8 @@ in the codeome, so the jump falls through rather than branching — a
 silent correctness bug.  Any non-nop opcode breaks the greedy read;
 `:push0` is preferred because it costs only 0.10 and produces a 0 that
 is harmless in dead-code positions.  If the extra stack value matters,
-append `:drop`.  The MinimalReplicator (chapter 9) contains two
-separators — at positions 67 and 122 — for exactly this reason.
+append `:drop`.  Ancestor (chapter 9) contains two
+separators — at positions 49 and 99 — for exactly this reason.
 
 ---
 
@@ -945,15 +945,15 @@ separators — at positions 67 and 122 — for exactly this reason.
 You now have the full toolkit.  You know the VM anatomy, the opcode
 costs, the template-based control flow, the slot memory model, and the
 energy economy.  You have built every canonical codeome in the pyramid
-— the Walker, the Grazer, the Predator, and the sustainable Replicator
-— and you have dissected the MinimalReplicator at the byte level.  The
+— the Crawler, Reflex, the Stepper, the Wanderer, and a sustainable replicator
+— and you have dissected Ancestor at the byte level.  The
 recipes in this chapter are the mortar that holds those structures
 together.  Mix them freely.  A random branch (section 2.1) inside a
 counter loop (section 3.1) inside a replication skeleton (section 6.4)
 is a perfectly natural composition.
 
-When something does not work, the MinimalReplicator
-(`docs/manual/09-minimal-replicator.md`) is your best reference for a
+When something does not work, Ancestor
+(`docs/manual/09-ancestor.md`) is your best reference for a
 known-good example of every idiom used together under real energy
 pressure.  For the underlying mechanics see chapter 4 (templates),
 chapter 5 (memory), chapter 7 (replication), and chapter 8 (energy
