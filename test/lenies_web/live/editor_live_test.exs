@@ -964,7 +964,7 @@ defmodule LeniesWeb.EditorLiveTest do
       assert html =~ ~r/phx-click="open_save_form"/
     end
 
-    test "save with a new name in :edit mode creates a new Collection entry (fork)",
+    test "save with a new name in :edit mode creates a new Collection entry and stays in editor",
          %{conn: conn, user: user} do
       {:ok, view, _html} = live(conn, ~p"/sandbox/editor/edit/NONEXISTENT")
       render_hook(view, "submit_opcode_text", %{"opcodes" => @valid_buf_text})
@@ -981,9 +981,12 @@ defmodule LeniesWeb.EditorLiveTest do
       assert [c] = Lenies.Collection.list_codeomes(user)
       assert c.name == "evolved-v1"
       assert c.color_hex == "#abcdef"
+      # stays in the editor — no navigation to /sandbox
+      assert render(view) =~ "Genome —"
+      assert render(view) =~ "Saved “evolved-v1”"
     end
 
-    test "save with an existing name shows inline name-taken error",
+    test "save with an existing name opens confirm dialog (no inline error)",
          %{conn: conn, user: user} do
       {:ok, _} =
         Lenies.Collection.create_codeome(user, %{
@@ -1006,9 +1009,114 @@ defmodule LeniesWeb.EditorLiveTest do
         })
         |> render_submit()
 
-      assert result =~ ~r/already (taken|exists)|name.*taken/i
+      # Opens the confirm dialog instead of showing an inline error
+      assert result =~ ~r/Overwrite\s+\S*taken\S*\?/
       # No new entry created — still only the seed row.
       assert length(Lenies.Collection.list_codeomes(user)) == 1
+    end
+  end
+
+  describe "save with overwrite confirm" do
+    # 10 non-nop ops to satisfy min_viable_codeome_opcodes = 10
+    @overwrite_buf_text "eat move eat move eat move eat move push0 push1"
+
+    setup %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
+      render_submit(view, "submit_opcode_text", %{"opcodes" => @overwrite_buf_text})
+      %{view: view}
+    end
+
+    test "fresh name saves immediately, flashes, clears dirty, stays in editor", %{view: view} do
+      render_click(view, "open_save_form", %{})
+
+      render_submit(view, "submit_save_seed", %{
+        "seed_name" => "fresh-name",
+        "color_hex" => "#aabbcc",
+        "energy_default" => "10000"
+      })
+
+      # no navigation happened — still showing editor
+      assert render(view) =~ "Genome —"
+      assert render(view) =~ "Saved “fresh-name”"
+      refute render(view) =~ "●dirty"
+    end
+
+    test "existing name opens the confirm dialog; cancel returns to the form",
+         %{view: view, user: user} do
+      {:ok, _} =
+        Lenies.Collection.create_codeome(user, %{
+          name: "taken",
+          color_hex: "#aabbcc",
+          energy_default: 10_000.0,
+          opcodes: ["eat", "move", "eat", "move", "eat", "move", "eat", "move", "push0", "push1"]
+        })
+
+      render_click(view, "open_save_form", %{})
+
+      render_submit(view, "submit_save_seed", %{
+        "seed_name" => "taken",
+        "color_hex" => "#aabbcc",
+        "energy_default" => "10000"
+      })
+
+      assert render(view) =~ "Overwrite “taken”?"
+
+      render_click(view, "cancel_overwrite", %{})
+      refute render(view) =~ "Overwrite"
+      # form still open for editing the name
+      assert has_element?(view, "#save-seed-form")
+    end
+
+    test "confirm overwrites the record in place", %{view: view, user: user} do
+      {:ok, c} =
+        Lenies.Collection.create_codeome(user, %{
+          name: "evolve-me",
+          color_hex: "#aabbcc",
+          energy_default: 10_000.0,
+          opcodes: [
+            "push0",
+            "add",
+            "push0",
+            "add",
+            "push0",
+            "add",
+            "push0",
+            "add",
+            "push0",
+            "add"
+          ]
+        })
+
+      render_click(view, "open_save_form", %{})
+
+      render_submit(view, "submit_save_seed", %{
+        "seed_name" => "evolve-me",
+        "color_hex" => "#112233",
+        "energy_default" => "9000"
+      })
+
+      render_click(view, "confirm_overwrite", %{})
+
+      assert render(view) =~ "Saved “evolve-me”"
+      updated = Lenies.Collection.get_codeome(user, c.id)
+      assert updated.color_hex == "#112233"
+      assert hd(updated.opcodes) == "eat"
+      assert length(Lenies.Collection.list_codeomes(user)) == 1
+    end
+
+    test "loading a saved codeome pre-fills the save form name", %{conn: conn, user: user} do
+      {:ok, c} =
+        Lenies.Collection.create_codeome(user, %{
+          name: "prefilled",
+          color_hex: "#aabbcc",
+          energy_default: 10_000.0,
+          opcodes: ["eat", "move", "eat", "move", "eat", "move", "eat", "move", "push0", "push1"]
+        })
+
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/seed/custom:#{c.id}")
+      render_click(view, "open_save_form", %{})
+
+      assert has_element?(view, "#save-seed-form input[name='seed_name'][value='prefilled']")
     end
   end
 

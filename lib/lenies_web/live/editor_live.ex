@@ -55,6 +55,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:show_spawn_form, false)
       |> assign(:show_save_form, false)
       |> assign(:save_form_error, nil)
+      |> assign(:save_confirm, nil)
       |> assign(:save_prefill, save_prefill)
       |> assign(:current_chapter, @default_chapter)
       |> assign(:manual_collapsed?, false)
@@ -294,11 +295,17 @@ defmodule LeniesWeb.EditorLive do
   end
 
   def handle_event("open_save_form", _params, socket) do
-    {:noreply, assign(socket, show_save_form: true, show_spawn_form: false, save_form_error: nil)}
+    {:noreply,
+     assign(socket,
+       show_save_form: true,
+       show_spawn_form: false,
+       save_form_error: nil,
+       save_confirm: nil
+     )}
   end
 
   def handle_event("cancel_save_form", _params, socket) do
-    {:noreply, assign(socket, show_save_form: false, save_form_error: nil)}
+    {:noreply, assign(socket, show_save_form: false, save_form_error: nil, save_confirm: nil)}
   end
 
   def handle_event(
@@ -308,49 +315,49 @@ defmodule LeniesWeb.EditorLive do
       ) do
     case socket.assigns.validation do
       {:ok, _} ->
-        attrs = %{
-          name: name,
-          color_hex: color,
-          energy_default: parse_clamped(energy_str, 1, 1_000_000, 10_000) * 1.0,
-          opcodes: Enum.map(socket.assigns.genome.chromosome, &Atom.to_string/1),
-          plasmids:
-            socket.assigns.genome.plasmids
-            |> Enum.reject(&(&1 == []))
-            |> Enum.map(fn ops -> %{opcodes: Enum.map(ops, &Atom.to_string/1)} end)
-        }
+        attrs = save_attrs(socket, name, color, energy_str)
 
-        case Lenies.Collection.create_codeome(socket.assigns.current_scope.user, attrs) do
-          {:ok, _codeome} ->
-            Phoenix.LiveView.send_update(LeniesWeb.ControlsPanelComponent,
-              id: "controls",
-              refresh_custom_seeds: true
-            )
+        # Always-warn overwrite: any existing (owner, name) — including the
+        # codeome this buffer was loaded from — must be confirmed explicitly.
+        case Lenies.Collection.get_codeome_by_name(socket.assigns.current_scope.user, name) do
+          nil ->
+            {:noreply, do_create_seed(socket, attrs)}
 
-            {:noreply, push_navigate(socket, to: ~p"/sandbox")}
-
-          {:error, :name_taken} ->
-            # Fork-only flow: refuse to silently overwrite a prior save.
-            # Keep the form open with an inline error so the user can pick
-            # a fresh name without re-typing their colour/energy.
-            {:noreply,
-             assign(
-               socket,
-               :save_form_error,
-               "A codeome named “#{name}” is already taken — pick another name."
-             )}
-
-          {:error, %Ecto.Changeset{}} ->
-            {:noreply,
-             assign(
-               socket,
-               :save_form_error,
-               "Invalid codeome — check the name, colour, and opcodes."
-             )}
+          %Lenies.Collection.Codeome{} ->
+            {:noreply, assign(socket, save_confirm: attrs, save_form_error: nil)}
         end
 
       {:error, _} ->
         {:noreply, socket}
     end
+  end
+
+  def handle_event("confirm_overwrite", _params, socket) do
+    case socket.assigns.save_confirm do
+      nil ->
+        {:noreply, socket}
+
+      attrs ->
+        case Lenies.Collection.overwrite_codeome(socket.assigns.current_scope.user, attrs) do
+          {:ok, codeome} ->
+            {:noreply, after_save(socket, codeome)}
+
+          # Create-race (two tabs): the row appeared between dialog and
+          # confirm under a changed content — fall back to the dialog again.
+          {:error, :name_taken} ->
+            {:noreply, assign(socket, :save_confirm, attrs)}
+
+          {:error, %Ecto.Changeset{}} ->
+            {:noreply,
+             socket
+             |> assign(:save_confirm, nil)
+             |> assign(:save_form_error, "Invalid codeome — check the name, colour, and opcodes.")}
+        end
+    end
+  end
+
+  def handle_event("cancel_overwrite", _params, socket) do
+    {:noreply, assign(socket, :save_confirm, nil)}
   end
 
   def handle_event("cancel_edit", _params, socket) do
@@ -907,6 +914,7 @@ defmodule LeniesWeb.EditorLive do
               minlength="1"
               maxlength="40"
               placeholder="my replicator v1"
+              value={@save_prefill && @save_prefill.name}
               class="text-xs"
             />
           </label>
@@ -915,7 +923,10 @@ defmodule LeniesWeb.EditorLive do
             <input
               type="color"
               name="color_hex"
-              value={suggested_color(@genome.chromosome, @world_handle)}
+              value={
+                (@save_prefill && @save_prefill.color_hex) ||
+                  suggested_color(@genome.chromosome, @world_handle)
+              }
               class="w-12 h-6"
             />
           </label>
@@ -924,7 +935,7 @@ defmodule LeniesWeb.EditorLive do
             <input
               type="number"
               name="energy_default"
-              value="10000"
+              value={(@save_prefill && @save_prefill.energy_default) || 10_000}
               min="1"
               max="1000000"
               class="w-24 text-xs"
@@ -944,6 +955,32 @@ defmodule LeniesWeb.EditorLive do
             <span class="text-red-400 text-[11px] ml-2" role="alert">{@save_form_error}</span>
           <% end %>
         </form>
+
+        <%= if @save_confirm do %>
+          <div
+            class="flex gap-2 items-center justify-end text-[11px] p-2 border-b border-amber-500/40 bg-amber-950/30"
+            role="alertdialog"
+            aria-labelledby="overwrite-confirm-label"
+          >
+            <span id="overwrite-confirm-label" class="text-amber-200">
+              Overwrite “{@save_confirm.name}”? The saved codeome will be replaced.
+            </span>
+            <button
+              type="button"
+              phx-click="confirm_overwrite"
+              class="px-2 py-0.5 border border-amber-500/60 text-amber-200 hover:bg-amber-900/40"
+            >
+              Overwrite
+            </button>
+            <button
+              type="button"
+              phx-click="cancel_overwrite"
+              class="px-2 py-0.5 border border-slate-500"
+            >
+              Cancel
+            </button>
+          </div>
+        <% end %>
       <% end %>
 
       <div
@@ -1523,6 +1560,52 @@ defmodule LeniesWeb.EditorLive do
   end
 
   defp parse_clamped(_, _, _, default), do: default
+
+  defp save_attrs(socket, name, color, energy_str) do
+    %{
+      name: name,
+      color_hex: color,
+      energy_default: parse_clamped(energy_str, 1, 1_000_000, 10_000) * 1.0,
+      opcodes: Enum.map(socket.assigns.genome.chromosome, &Atom.to_string/1),
+      plasmids:
+        socket.assigns.genome.plasmids
+        |> Enum.reject(&(&1 == []))
+        |> Enum.map(fn ops -> %{opcodes: Enum.map(ops, &Atom.to_string/1)} end)
+    }
+  end
+
+  defp do_create_seed(socket, attrs) do
+    case Lenies.Collection.create_codeome(socket.assigns.current_scope.user, attrs) do
+      {:ok, codeome} ->
+        after_save(socket, codeome)
+
+      # Race: someone (another tab) took the name after our existence check.
+      # Re-route through the confirm dialog instead of erroring.
+      {:error, :name_taken} ->
+        assign(socket, :save_confirm, attrs)
+
+      {:error, %Ecto.Changeset{}} ->
+        assign(socket, :save_form_error, "Invalid codeome — check the name, colour, and opcodes.")
+    end
+  end
+
+  # Successful save (create or overwrite): the saved record becomes the
+  # buffer's origin — dirty clears, the form closes, and we STAY in the
+  # editor (the edit -> debug -> save loop keeps going; only Spawn leaves).
+  defp after_save(socket, codeome) do
+    socket
+    |> assign(:original_genome, socket.assigns.genome)
+    |> assign(:dirty, false)
+    |> assign(:show_save_form, false)
+    |> assign(:save_form_error, nil)
+    |> assign(:save_confirm, nil)
+    |> assign(:save_prefill, %{
+      name: codeome.name,
+      color_hex: codeome.color_hex,
+      energy_default: trunc(codeome.energy_default)
+    })
+    |> put_flash(:info, "Saved “#{codeome.name}” ✓")
+  end
 
   defp suggested_color(buffer, world_handle) do
     hash =
