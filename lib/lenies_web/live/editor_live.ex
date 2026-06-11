@@ -70,6 +70,12 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:inline_edit_error, nil)
       |> assign(:right_tab, :genome)
       |> assign(:plasmid_remove_confirming, nil)
+      |> assign(:session, nil)
+      |> assign(:run_speed, 10)
+      |> assign(:run_gen, 0)
+      |> assign(:stepper_notice, nil)
+      |> assign(:grid_payload_json, nil)
+      |> assign(:loops, [])
       |> put_caret(GenomeCaret.end_of(genome))
 
     {:ok, socket}
@@ -799,10 +805,155 @@ defmodule LeniesWeb.EditorLive do
     end
   end
 
+  ## ── Debug transport ────────────────────────────────────────────────
+
+  def handle_event("stepper_step", _params, socket) do
+    with {:ok, socket} <- ensure_session(socket) do
+      {:ok, new_session} = Lenies.Stepper.step(socket.assigns.session)
+      {:noreply, assign_session(socket, new_session)}
+    else
+      :invalid -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("stepper_step_back", _params, socket) do
+    case socket.assigns.session do
+      nil ->
+        {:noreply, socket}
+
+      session ->
+        {:ok, new_session} = Lenies.Stepper.step_back(session)
+        {:noreply, assign_session(socket, new_session)}
+    end
+  end
+
+  def handle_event("stepper_run", _params, socket) do
+    with {:ok, socket} <- ensure_session(socket) do
+      gen = socket.assigns.run_gen + 1
+      new_session = %{socket.assigns.session | status: :running}
+      send(self(), {:stepper_tick, gen})
+      {:noreply, socket |> assign(:run_gen, gen) |> assign_session(new_session)}
+    else
+      :invalid -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("stepper_pause", _params, socket) do
+    case socket.assigns.session do
+      nil ->
+        {:noreply, socket}
+
+      session ->
+        {:noreply,
+         socket
+         |> assign(:run_gen, socket.assigns.run_gen + 1)
+         |> assign_session(%{session | status: :paused})}
+    end
+  end
+
+  def handle_event("stepper_stop", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:run_gen, socket.assigns.run_gen + 1)
+     |> assign(:session, nil)
+     |> assign(:stepper_notice, nil)
+     |> assign(:grid_payload_json, nil)
+     |> assign(:loops, [])}
+  end
+
+  def handle_event("stepper_reset", _params, socket) do
+    case socket.assigns.session do
+      nil ->
+        {:noreply, socket}
+
+      session ->
+        {:noreply,
+         socket
+         |> assign(:run_gen, socket.assigns.run_gen + 1)
+         |> assign_session(Lenies.Stepper.reset(session))}
+    end
+  end
+
+  def handle_event("stepper_toggle_bp", %{"ip" => ip_str}, socket) do
+    case socket.assigns.session do
+      nil ->
+        {:noreply, socket}
+
+      session ->
+        {:noreply,
+         assign_session(socket, Lenies.Stepper.toggle_breakpoint(session, to_int(ip_str)))}
+    end
+  end
+
+  def handle_event("stepper_set_speed", %{"value" => value}, socket) do
+    {:noreply, assign(socket, :run_speed, max(to_int(value), 1))}
+  end
+
+  def handle_event("stepper_select_seed", %{"value" => value}, socket) do
+    case socket.assigns.session do
+      nil ->
+        {:noreply, socket}
+
+      session ->
+        seed_id =
+          case value do
+            "" -> nil
+            "builtin:" <> id_str -> {:builtin, safe_seed_atom(id_str)}
+            "collection:" <> id -> {:collection, to_int(id)}
+            _ -> nil
+          end
+
+        {:noreply, assign_session(socket, Lenies.Stepper.set_place_seed_mode(session, seed_id))}
+    end
+  end
+
+  # The mini-world canvas hook lives in a phx-update="ignore" subtree and
+  # pushes straight to this LiveView (it always did — the modal used to
+  # forward via send_update; now we just handle it).
+  def handle_event("stepper:canvas_click", %{"x" => x, "y" => y}, socket) do
+    with %Lenies.Stepper{} = session <- socket.assigns.session,
+         %{seed_id: seed_ref} <- session.place_seed_mode,
+         seed_map when not is_nil(seed_map) <-
+           resolve_seed(seed_ref, socket.assigns.current_scope.user),
+         {:ok, new_session} <- Lenies.Stepper.place_seed(session, seed_map, {x, y}) do
+      {:noreply, assign_session(socket, Lenies.Stepper.set_place_seed_mode(new_session, nil))}
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
   @impl true
   def handle_info(:sandboxes_manager_up, socket) do
     :ok = Lenies.Sandboxes.attach(socket.assigns.current_scope.user.id)
     {:noreply, socket}
+  end
+
+  def handle_info({:stepper_tick, gen}, socket) do
+    session = socket.assigns.session
+
+    # Stale-generation guard: run/pause/stop/reset/hot-restart bump
+    # @run_gen, so a tick from a superseded loop is dropped WITHOUT
+    # rescheduling — exactly one live loop at a time (same invariant the
+    # modal enforced; see the old StepperLive update/2 for the history).
+    if session != nil and gen == socket.assigns.run_gen and session.status == :running do
+      {:ok, new_session} = Lenies.Stepper.step(session)
+
+      cond do
+        new_session.status == :halted ->
+          {:noreply, assign_session(socket, new_session)}
+
+        MapSet.member?(new_session.breakpoints, new_session.interp.ip) ->
+          {:noreply, assign_session(socket, %{new_session | status: :breakpoint_hit})}
+
+        true ->
+          running = %{new_session | status: :running}
+          delay = Lenies.Stepper.delay_ms_for(socket.assigns.run_speed)
+          Process.send_after(self(), {:stepper_tick, gen}, delay)
+          {:noreply, assign_session(socket, running)}
+      end
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
@@ -847,6 +998,82 @@ defmodule LeniesWeb.EditorLive do
         <%= if @dirty do %>
           <span class="text-amber-300 text-[10px]">●dirty</span>
         <% end %>
+
+        <% valid? = match?({:ok, _}, @validation) %>
+        <div
+          class="editor-transport flex items-center gap-1"
+          role="group"
+          aria-label="Debug transport"
+        >
+          <button
+            type="button"
+            phx-click="stepper_reset"
+            disabled={is_nil(@session)}
+            class="stepper-btn"
+            title="Reset (step 0)"
+          >
+            ⏮
+          </button>
+          <button
+            type="button"
+            phx-click="stepper_step_back"
+            disabled={is_nil(@session)}
+            class="stepper-btn"
+            title="Step back"
+          >
+            ⬅
+          </button>
+          <button
+            type="button"
+            phx-click="stepper_step"
+            disabled={!valid?}
+            class="stepper-btn stepper-btn-primary"
+            title="Step"
+          >
+            ▶
+          </button>
+          <%= if @session && @session.status == :running do %>
+            <button type="button" phx-click="stepper_pause" class="stepper-btn" title="Pause">
+              ⏸ Pause
+            </button>
+          <% else %>
+            <button
+              type="button"
+              phx-click="stepper_run"
+              disabled={!valid?}
+              class="stepper-btn"
+              title="Run"
+            >
+              ▶▶ Run
+            </button>
+          <% end %>
+          <button
+            type="button"
+            phx-click="stepper_stop"
+            disabled={is_nil(@session)}
+            class="stepper-btn"
+            title="Stop (close session)"
+          >
+            ⏹
+          </button>
+          <form phx-change="stepper_set_speed" class="stepper-speed-form">
+            <label class="stepper-speed-label" for="stepper-run-speed">{@run_speed}/s</label>
+            <input
+              id="stepper-run-speed"
+              type="range"
+              name="value"
+              min="1"
+              max={Lenies.Stepper.world_ops_per_sec()}
+              value={@run_speed}
+              class="stepper-speed-slider"
+            />
+          </form>
+          <%= if @session do %>
+            <span class="stepper-step-counter">
+              Step #{@session.step_count} · {status_label(@session.status)}
+            </span>
+          <% end %>
+        </div>
 
         <button
           type="button"
@@ -1430,7 +1657,140 @@ defmodule LeniesWeb.EditorLive do
               </p>
             </div>
           <% else %>
-            <p class="codeome-snippets-empty">No active debug session.</p>
+            <%= if @session do %>
+              <div class="editor-debug-panel">
+                <section class="stepper-panel">
+                  <h3 class="stepper-panel-title">State</h3>
+                  <dl class="stepper-state-list">
+                    <dt>energy</dt>
+                    <dd>{Float.round(@session.interp.energy, 1)}</dd>
+                    <dt>ip</dt>
+                    <dd>{@session.interp.ip}/{Lenies.Codeome.size(@session.exec_codeome)}</dd>
+                    <dt>age</dt>
+                    <dd>{@session.interp.age}</dd>
+                    <dt>pos</dt>
+                    <dd>{inspect(@session.interp.pos)}</dd>
+                    <dt>dir</dt>
+                    <dd>{@session.interp.dir}</dd>
+                    <dt>size</dt>
+                    <dd>{Lenies.Codeome.size(@session.exec_codeome)}</dd>
+                  </dl>
+                </section>
+
+                <section class="stepper-panel">
+                  <h3 class="stepper-panel-title">Slots</h3>
+                  <div class="stepper-slots">
+                    <%= for i <- 0..3 do %>
+                      <div class="stepper-slot">
+                        <div class="stepper-slot-value">{@session.interp.slots[i]}</div>
+                        <div class="stepper-slot-label">s{i}</div>
+                      </div>
+                    <% end %>
+                  </div>
+                </section>
+
+                <section class="stepper-panel">
+                  <h3 class="stepper-panel-title">Stack (top↑)</h3>
+                  <% stack_capacity = 16
+                  depth = length(@session.interp.stack)
+                  # Pad to fixed length with nils. The CSS uses
+                  # flex-direction: column-reverse, so the LAST item in HTML
+                  # ends up visually at the top — that's where the top of the
+                  # stack belongs.
+                  padded =
+                    List.duplicate(nil, max(0, stack_capacity - depth)) ++
+                      Enum.reverse(Enum.take(@session.interp.stack, stack_capacity)) %>
+                  <ol class="stepper-stack stepper-stack-fixed">
+                    <%= for {v, idx} <- Enum.with_index(padded) do %>
+                      <li class={[
+                        "stepper-chip",
+                        is_nil(v) && "stepper-chip-empty",
+                        not is_nil(v) && idx == stack_capacity - 1 && "stepper-chip-top"
+                      ]}>
+                        {if not is_nil(v), do: v}
+                      </li>
+                    <% end %>
+                  </ol>
+                  <div class="stepper-depth">
+                    depth: {depth}{if depth > stack_capacity, do: " (showing top #{stack_capacity})"}
+                  </div>
+                </section>
+
+                <section class="stepper-panel">
+                  <h3 class="stepper-panel-title">Call stack</h3>
+                  <ol class="stepper-callstack">
+                    <%= for ret_ip <- @session.interp.call_stack do %>
+                      <li>→ ret to ip {ret_ip}</li>
+                    <% end %>
+                    <%= if @session.interp.call_stack == [] do %>
+                      <li class="stepper-empty">empty</li>
+                    <% end %>
+                  </ol>
+                </section>
+
+                <section class="stepper-panel">
+                  <h3 class="stepper-panel-title">
+                    Mini-world 64×64
+                    <%= if @session.place_seed_mode do %>
+                      <span class="stepper-place-hint">— click to place</span>
+                    <% end %>
+                  </h3>
+                  <form phx-change="stepper_select_seed" class="stepper-seed-picker">
+                    <label class="stepper-seed-label">Place:</label>
+                    <select name="value" class="stepper-seed-select">
+                      <option value="">(none)</option>
+                      <optgroup label="Built-in">
+                        <%= for seed <- Lenies.Seeds.all() do %>
+                          <option
+                            value={"builtin:" <> Atom.to_string(seed.id)}
+                            selected={
+                              @session.place_seed_mode &&
+                                @session.place_seed_mode.seed_id == {:builtin, seed.id}
+                            }
+                          >
+                            {seed.name}
+                          </option>
+                        <% end %>
+                      </optgroup>
+                      <optgroup label="My collection">
+                        <%= for c <- Lenies.Collection.list_codeomes(@current_scope.user) do %>
+                          <option
+                            value={"collection:" <> Integer.to_string(c.id)}
+                            selected={
+                              @session.place_seed_mode &&
+                                @session.place_seed_mode.seed_id == {:collection, c.id}
+                            }
+                          >
+                            {c.name}
+                          </option>
+                        <% end %>
+                      </optgroup>
+                    </select>
+                  </form>
+                  <div
+                    id="stepper-canvas"
+                    phx-hook="StepperCanvas"
+                    phx-update="ignore"
+                    class={[
+                      "stepper-world-canvas",
+                      @session.place_seed_mode && "stepper-world-canvas-arm"
+                    ]}
+                    data-payload={@grid_payload_json}
+                  >
+                  </div>
+                  <div class="stepper-depth">
+                    Genome: {codeome_size_label(@session)} ops
+                    <%= if @session.halt_reason do %>
+                      · halt: {@session.halt_reason}
+                    <% end %>
+                  </div>
+                </section>
+              </div>
+            <% else %>
+              <p class="codeome-snippets-empty">
+                No active debug session — press ▶ in the header to start one.
+              </p>
+            <% end %>
           <% end %>
         </section>
       </div>
@@ -1514,6 +1874,107 @@ defmodule LeniesWeb.EditorLive do
     attack_damage = Application.get_env(:lenies, :attack_damage, 10)
     GenomeBuffer.economics(genome, eat_amount, attack_damage)
   end
+
+  # ── Embedded stepper session helpers ──────────────────────────────────
+
+  # Lazily create a session from the current genome. :invalid when the
+  # genome doesn't validate (transport is disabled in the UI too — this is
+  # the server-side guard).
+  defp ensure_session(socket) do
+    cond do
+      socket.assigns.session != nil ->
+        {:ok, socket}
+
+      match?({:ok, _}, socket.assigns.validation) ->
+        session =
+          Lenies.Stepper.start_session(
+            LeniesWeb.CodeomeBuffer.to_codeome(socket.assigns.genome.chromosome),
+            plasmids: plasmid_structs(socket.assigns.genome)
+          )
+
+        {:ok, socket |> assign(:right_tab, :debug) |> assign_session(session)}
+
+      true ->
+        :invalid
+    end
+  end
+
+  # Session assign + derived view data (ported from StepperLive.assign_session/2,
+  # minus the plasmid-region starts: Task 9 owns the listing overlay). Loops are
+  # recomputed from the executing genome so the (Task 9) gutter stays in sync.
+  defp assign_session(socket, session) do
+    socket
+    |> assign(:session, session)
+    |> assign(
+      :loops,
+      LeniesWeb.JumpTargets.loops(Lenies.Codeome.to_list(session.exec_codeome))
+    )
+    |> assign(
+      :grid_payload_json,
+      Jason.encode!(Lenies.Stepper.World.encode_grid_payload(session.world))
+    )
+  end
+
+  # Non-empty plasmid buffers as %Lenies.Plasmid{} structs — what the
+  # session carries (empty buffers contribute no exec rows, so they're
+  # rejected to keep the flat exec list aligned with GenomeBuffer).
+  defp plasmid_structs(%GenomeBuffer{} = g) do
+    g.plasmids |> Enum.reject(&(&1 == [])) |> Enum.map(&Lenies.Plasmid.new/1)
+  end
+
+  # Ported verbatim from StepperLive (no component coupling).
+  defp resolve_seed({:builtin, id}, _user) do
+    case Enum.find(Lenies.Seeds.all(), &(&1.id == id)) do
+      nil ->
+        nil
+
+      seed ->
+        plasmids =
+          case Map.get(seed, :plasmid) do
+            nil -> []
+            [] -> []
+            ops when is_list(ops) -> [Lenies.Plasmid.new(ops)]
+          end
+
+        %{codeome: seed.codeome, plasmids: plasmids}
+    end
+  end
+
+  defp resolve_seed({:collection, _id}, nil), do: nil
+
+  defp resolve_seed({:collection, id}, user) do
+    case Lenies.Collection.get_codeome(user, id) do
+      nil ->
+        nil
+
+      %Lenies.Collection.Codeome{} = c ->
+        opcodes = Lenies.Collection.to_opcode_atoms(c)
+
+        %{
+          codeome: Lenies.Codeome.from_list(opcodes),
+          plasmids: Lenies.Collection.to_plasmid_structs(c)
+        }
+    end
+  end
+
+  # "8" when plasmid-free, "8 (6 chromo + 2 plasmid)" when carrying plasmids.
+  defp codeome_size_label(session) do
+    exec = Lenies.Codeome.size(session.exec_codeome)
+    chromo = Lenies.Codeome.size(session.codeome)
+
+    if exec == chromo do
+      Integer.to_string(exec)
+    else
+      "#{exec} (#{chromo} chromo + #{exec - chromo} plasmid)"
+    end
+  end
+
+  defp status_label(:ready), do: "ready"
+  defp status_label(:running), do: "running"
+  defp status_label(:paused), do: "paused"
+  defp status_label(:halted), do: "halted"
+  defp status_label(:breakpoint_hit), do: "breakpoint"
+  defp status_label(:safety_cap_reached), do: "safety cap"
 
   # Inserts `opcodes` at the caret (replace-on-insert when a selection is
   # active). The caret's section decides where the run lands.

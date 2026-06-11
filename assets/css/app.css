@@ -693,6 +693,7 @@
 }
 .codeome-genome-panel { display: flex; flex-direction: column; gap: 6px; padding: 6px; }
 .codeome-genome-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.editor-debug-panel { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; }
 
 .lenies-dashboard .codeome-block-selected {
   outline: 1px solid #67e8f9;
