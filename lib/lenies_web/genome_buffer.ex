@@ -68,17 +68,19 @@ defmodule LeniesWeb.GenomeBuffer do
   @doc """
   Flat exec-codeome list: chromosome ++ plasmids in order. Empty plasmid
   sections contribute zero rows, so flat indices line up 1:1 with the
-  runtime exec codeome (which is built from non-empty plasmids only).
+  runtime exec codeome.
   """
   @spec to_exec_list(t()) :: [atom()]
   def to_exec_list(%__MODULE__{} = g), do: g.chromosome ++ Enum.concat(g.plasmids)
 
-  @doc "Flat exec index of `{section, idx}`; nil for an unknown section."
+  @doc "Flat exec index of `{section, idx}`; nil for an unknown section or an out-of-range `idx`."
   @spec flat_index(t(), section(), non_neg_integer()) :: non_neg_integer() | nil
   def flat_index(%__MODULE__{} = g, section, idx) when idx >= 0 do
-    case section_offset(g, section) do
-      nil -> nil
-      offset -> offset + idx
+    case {section_offset(g, section), get_section(g, section)} do
+      {nil, _} -> nil
+      {_, nil} -> nil
+      {offset, buf} when idx < length(buf) -> offset + idx
+      _ -> nil
     end
   end
 
@@ -152,7 +154,7 @@ defmodule LeniesWeb.GenomeBuffer do
   in `new`; breakpoints whose section vanished or whose index fell off the
   end are dropped.
   """
-  @spec remap_breakpoints(t(), t(), MapSet.t()) :: MapSet.t()
+  @spec remap_breakpoints(t(), t(), MapSet.t(non_neg_integer())) :: MapSet.t(non_neg_integer())
   def remap_breakpoints(%__MODULE__{} = old, %__MODULE__{} = new, %MapSet{} = bps) do
     bps
     |> Enum.flat_map(fn flat ->

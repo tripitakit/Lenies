@@ -52,10 +52,17 @@ defmodule LeniesWeb.GenomeBufferTest do
 
     test "flat_index/3 maps {section, idx} into exec space" do
       assert GenomeBuffer.flat_index(@genome, :chromosome, 0) == 0
-      assert GenomeBuffer.flat_index(@genome, :chromosome, 2) == 2
+      assert GenomeBuffer.flat_index(@genome, :chromosome, 1) == 1
       assert GenomeBuffer.flat_index(@genome, {:plasmid, 0}, 0) == 2
       assert GenomeBuffer.flat_index(@genome, {:plasmid, 2}, 1) == 4
       assert GenomeBuffer.flat_index(@genome, {:plasmid, 9}, 0) == nil
+    end
+
+    test "flat_index/3 returns nil for an out-of-range in-section index" do
+      # chromosome has 2 ops; index 99 is out of bounds
+      assert GenomeBuffer.flat_index(@genome, :chromosome, 99) == nil
+      # plasmid 2 has 2 ops; index 5 is out of bounds
+      assert GenomeBuffer.flat_index(@genome, {:plasmid, 2}, 5) == nil
     end
 
     test "section_at/2 inverts flat_index for op rows" do
@@ -65,6 +72,62 @@ defmodule LeniesWeb.GenomeBufferTest do
       assert GenomeBuffer.section_at(@genome, 3) == {{:plasmid, 2}, 0}
       assert GenomeBuffer.section_at(@genome, 4) == {{:plasmid, 2}, 1}
       assert GenomeBuffer.section_at(@genome, 5) == nil
+    end
+  end
+
+  describe "validate/1" do
+    test "valid genome reports chromosome len/non_nops" do
+      # test config: min_viable_codeome_opcodes=10, codeome_length_bounds={5,1024}
+      g = GenomeBuffer.new(List.duplicate(:eat, 10), [[:move]])
+      assert {:ok, %{len: 10, non_nops: 10}} = GenomeBuffer.validate(g)
+    end
+
+    test "chromosome errors pass through from CodeomeBuffer.validate/1" do
+      g = GenomeBuffer.new([], [])
+      assert {:error, errs} = GenomeBuffer.validate(g)
+      assert Enum.any?(errs, &match?({:too_short, _}, &1))
+    end
+
+    test "over-cap plasmid yields :plasmid_too_long" do
+      cap = Lenies.Plasmid.max_length()
+      g = GenomeBuffer.new(List.duplicate(:eat, 10), [List.duplicate(:move, cap + 1)])
+      assert {:error, errs} = GenomeBuffer.validate(g)
+      assert {:plasmid_too_long, info} = Enum.find(errs, &match?({:plasmid_too_long, _}, &1))
+      assert info[:plasmid] == 0
+      assert info[:max] == cap
+      assert info[:got] == cap + 1
+    end
+  end
+
+  describe "economics/3" do
+    test "iterates the whole exec genome but sizes :allocate by the chromosome" do
+      g = GenomeBuffer.new([:allocate, :eat], [[:eat]])
+      eco = GenomeBuffer.economics(g, 20, 10)
+      # both eats counted (one lives in the plasmid)...
+      assert eco.n_eat == 2
+      # ...but allocate priced as if copying only the 2-op chromosome
+      assert eco.alloc_size == 2
+    end
+  end
+
+  describe "remap_breakpoints/3" do
+    test "keeps {section, idx} addresses that still exist, in new flat space" do
+      old = GenomeBuffer.new([:push0, :add], [[:move, :eat]])
+      # bp on chromosome idx 1 (flat 1) and plasmid0 idx 1 (flat 3)
+      bps = MapSet.new([1, 3])
+      # insert one opcode at chromosome head -> plasmid region shifts right
+      new = GenomeBuffer.new([:nop_0, :push0, :add], [[:move, :eat]])
+
+      assert GenomeBuffer.remap_breakpoints(old, new, bps) == MapSet.new([1, 4])
+    end
+
+    test "drops breakpoints whose address fell off or whose section vanished" do
+      old = GenomeBuffer.new([:push0, :add], [[:move, :eat]])
+      bps = MapSet.new([1, 2, 3])
+      new = GenomeBuffer.new([:push0], [])
+
+      # chromosome idx 1 gone (len 1), plasmid section gone entirely
+      assert GenomeBuffer.remap_breakpoints(old, new, bps) == MapSet.new([])
     end
   end
 end
