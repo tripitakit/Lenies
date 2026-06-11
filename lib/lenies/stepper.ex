@@ -238,15 +238,28 @@ defmodule Lenies.Stepper do
     %{session | breakpoints: new_bps}
   end
 
-  @spec reset(t()) :: t()
-  def reset(%__MODULE__{} = session) do
+  @doc """
+  Fresh session from `new_codeome` (+ `:plasmids`), preserving the
+  mini-world scenario: placed seed Lenies are re-placed at their
+  coordinates and the resource seed is kept, so iterating on a codeome
+  does not force the user to rebuild the scene. Breakpoints are NOT
+  carried over implicitly — pass pre-remapped ones via `:breakpoints`
+  (an edit changes the index space, so the caller owns the mapping).
+  Always comes up `:ready` at step 0: a hot-restart must never resume
+  RUN by surprise.
+  """
+  @spec restart(t(), Codeome.t(), keyword) :: t()
+  def restart(%__MODULE__{} = session, %Codeome{} = new_codeome, opts \\ []) do
+    plasmids = Keyword.get(opts, :plasmids, [])
+    breakpoints = Keyword.get(opts, :breakpoints, MapSet.new())
+
     seeds =
       session.world.lenies
       |> Enum.filter(fn {_id, l} -> l.kind == :seed end)
 
     fresh =
-      start_session(session.codeome,
-        plasmids: session.initial_plasmids,
+      start_session(new_codeome,
+        plasmids: plasmids,
         resource_seed: session.resource_seed
       )
 
@@ -258,7 +271,15 @@ defmodule Lenies.Stepper do
         end
       end)
 
-    %{fresh | world: new_world, breakpoints: session.breakpoints}
+    %{fresh | world: new_world, breakpoints: breakpoints}
+  end
+
+  @spec reset(t()) :: t()
+  def reset(%__MODULE__{} = session) do
+    restart(session, session.codeome,
+      plasmids: session.initial_plasmids,
+      breakpoints: session.breakpoints
+    )
   end
 
   @spec place_seed(t(), map, {non_neg_integer, non_neg_integer}) ::
