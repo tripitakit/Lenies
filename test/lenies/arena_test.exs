@@ -13,7 +13,7 @@ defmodule Lenies.ArenaTest do
          %{world_id: world_id, handle: handle} do
       # Spawn a replicator tagged with seeder_user_id=7. Drive a few ticks
       # so it replicates at least once.
-      codeome = Lenies.Seeds.get(:minimal_replicator).codeome
+      codeome = Lenies.Codeomes.MinimalReplicator.codeome()
 
       {:ok, {parent_id, _pos}} =
         Lenies.Worlds.spawn_lenie(world_id, codeome, energy: 10_000.0, seeder_user_id: 7)

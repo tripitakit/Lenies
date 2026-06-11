@@ -107,7 +107,7 @@ defmodule Lenies.LenieTest do
 
     test "Lenie stores seeder_user_id from opts and writes it to its ETS snapshot",
          %{world_id: world_id, handle: handle} do
-      codeome = Lenies.Seeds.get(:minimal_replicator).codeome
+      codeome = Lenies.Codeomes.MinimalReplicator.codeome()
 
       {:ok, {id, _pos}} =
         Lenies.Worlds.spawn_lenie(world_id, codeome, energy: 500.0, seeder_user_id: 42)
@@ -121,7 +121,7 @@ defmodule Lenies.LenieTest do
 
     test "Lenie defaults seeder_user_id to nil when opt is absent",
          %{world_id: world_id, handle: handle} do
-      codeome = Lenies.Seeds.get(:minimal_replicator).codeome
+      codeome = Lenies.Codeomes.MinimalReplicator.codeome()
       {:ok, {id, _pos}} = Lenies.Worlds.spawn_lenie(world_id, codeome, energy: 500.0)
       Process.sleep(50)
 

@@ -16,20 +16,15 @@ defmodule Lenies.SeedsTest do
     end
   end
 
-  test "all/0 includes all five specialised seeds" do
+  test "all/0 is the four-rung capability ladder, in order" do
     ids = Seeds.all() |> Enum.map(& &1.id)
-    assert :minimal_replicator in ids
-    assert :carnivore in ids
-    assert :defender in ids
-    assert :hunter in ids
-    assert :forager in ids
-    assert length(ids) == 5
+    assert ids == [:reflex, :ancestor, :architect, :symbiont]
   end
 
   test "get/1 returns a seed by id" do
-    minimal = Seeds.get(:minimal_replicator)
-    assert minimal.id == :minimal_replicator
-    assert %Codeome{} = minimal.codeome
+    reflex = Seeds.get(:reflex)
+    assert reflex.id == :reflex
+    assert %Codeome{} = reflex.codeome
   end
 
   test "get/1 returns nil for unknown id" do

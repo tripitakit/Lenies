@@ -437,9 +437,9 @@ defmodule Lenies.SandboxesTest do
       :ok = Lenies.Sandboxes.attach(user_id)
       {:ok, handle1} = Lenies.Worlds.handle(world_id)
 
-      # Spawn 3 lenies of the minimal_replicator seed.
-      %{codeome: codeome, default_options: opts} = Lenies.Seeds.get(:minimal_replicator)
-      energy = Map.get(opts, :energy, 500.0)
+      # Spawn 3 lenies of a replicating seed.
+      codeome = Lenies.Codeomes.MinimalReplicator.codeome()
+      energy = 10_000.0
       for _ <- 1..3, do: Lenies.Worlds.spawn_lenie(world_id, codeome, energy: energy)
       Process.sleep(50)
 

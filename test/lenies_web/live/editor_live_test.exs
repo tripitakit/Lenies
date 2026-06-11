@@ -1181,10 +1181,13 @@ defmodule LeniesWeb.EditorLiveTest do
       assert :sys.get_state(view.pid).socket.assigns.genome.plasmids == [[:nop_1]]
     end
 
-    test "opening a built-in seed preloads its plasmid", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/seed/minimal_replicator")
+    test "opening a built-in ladder seed carries no pre-injected plasmid", %{conn: conn} do
+      # The default seeds no longer pre-inject a plasmid into the spawn buffer
+      # (Symbiont mints its own at runtime), so a built-in seed route opens with
+      # an empty plasmid panel.
+      {:ok, view, _html} = live(conn, ~p"/sandbox/editor/seed/ancestor")
       plasmids = :sys.get_state(view.pid).socket.assigns.genome.plasmids
-      assert plasmids == [Lenies.Codeomes.MinimalReplicator.plasmid()]
+      assert plasmids == []
     end
 
     test "opening /new has no plasmids", %{conn: conn} do

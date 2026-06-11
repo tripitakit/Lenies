@@ -292,7 +292,7 @@ defmodule Lenies.WorldTest do
       on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
 
       {:ok, handle} = Lenies.Worlds.handle(world_id)
-      codeome = Lenies.Seeds.get(:minimal_replicator).codeome
+      codeome = Lenies.Codeomes.MinimalReplicator.codeome()
 
       assert {:ok, {_id1, _pos1}} =
                GenServer.call(handle.pid, {:spawn_lenie, codeome, [energy: 100.0]})
@@ -317,7 +317,7 @@ defmodule Lenies.WorldTest do
       on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
 
       {:ok, handle} = Lenies.Worlds.handle(world_id)
-      codeome = Lenies.Seeds.get(:minimal_replicator).codeome
+      codeome = Lenies.Codeomes.MinimalReplicator.codeome()
 
       for _ <- 1..15 do
         assert {:ok, {_id, _pos}} =
@@ -332,7 +332,7 @@ defmodule Lenies.WorldTest do
       import ExUnit.CaptureLog
 
       {:ok, handle} = Lenies.Worlds.handle(world_id)
-      good = Lenies.Seeds.get(:minimal_replicator).codeome
+      good = Lenies.Codeomes.MinimalReplicator.codeome()
 
       # One healthy Lenie first — it must survive the failed spawn below.
       assert {:ok, {_id, _pos}} =
@@ -379,15 +379,16 @@ defmodule Lenies.WorldTest do
       on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
 
       {:ok, handle} = Lenies.Worlds.handle(world_id)
-      seed = Lenies.Seeds.get(:minimal_replicator)
-      pristine_hash = Lenies.Codeome.hash(seed.codeome)
+      seed_codeome = Lenies.Codeomes.MinimalReplicator.codeome()
+      seed_plasmid = Lenies.Codeomes.MinimalReplicator.plasmid()
+      pristine_hash = Lenies.Codeome.hash(seed_codeome)
 
       # Spawn the seed carrying its plasmid, exactly like the Sandbox seed form.
       assert {:ok, {_id, _pos}} =
                GenServer.call(
                  handle.pid,
-                 {:spawn_lenie, seed.codeome,
-                  [energy: 20_000.0, plasmids: [Lenies.Plasmid.new(seed.plasmid)]]}
+                 {:spawn_lenie, seed_codeome,
+                  [energy: 20_000.0, plasmids: [Lenies.Plasmid.new(seed_plasmid)]]}
                )
 
       # Run until it has replicated at least a few times.
@@ -423,7 +424,7 @@ defmodule Lenies.WorldTest do
       on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
 
       {:ok, handle} = Lenies.Worlds.handle(world_id)
-      codeome = Lenies.Seeds.get(:minimal_replicator).codeome
+      codeome = Lenies.Codeomes.MinimalReplicator.codeome()
 
       assert {:ok, {parent_id, pos}} =
                GenServer.call(handle.pid, {:spawn_lenie, codeome, [energy: 100.0]})
@@ -451,7 +452,7 @@ defmodule Lenies.WorldTest do
       on_exit(fn -> Lenies.Worlds.stop_world(world_id) end)
 
       {:ok, handle} = Lenies.Worlds.handle(world_id)
-      codeome = Lenies.Seeds.get(:minimal_replicator).codeome
+      codeome = Lenies.Codeomes.MinimalReplicator.codeome()
 
       assert {:ok, {parent_id, pos}} =
                GenServer.call(handle.pid, {:spawn_lenie, codeome, [energy: 100.0]})
