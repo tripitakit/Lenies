@@ -1162,6 +1162,14 @@
 .codeome-inline-error { color: #fbbf24; font-size: 11px; }
 .codeome-template-nop { outline: 1px dashed rgba(103, 232, 249, 0.5); outline-offset: -1px; }
 
+/* === Debug overlay on the unified listing (Task 9) === */
+.codeome-listing-sections { position: relative; padding-left: 36px; }
+.codeome-loop-gutter { position: absolute; left: 0; top: 0; width: 36px; height: 100%; overflow: visible; }
+.codeome-block-ip { outline: 1px solid rgb(251 191 36 / 0.9); background: rgb(251 191 36 / 0.12); }
+.codeome-block-bp .codeome-block-idx, .codeome-block-bp .codeome-bp-toggle { color: rgb(248 113 113); }
+.codeome-bp-toggle { cursor: pointer; }
+.codeome-blocks-runtime { opacity: 0.75; }
+
 /* === Splash landing page === */
 .lenies-splash {
   position: relative;

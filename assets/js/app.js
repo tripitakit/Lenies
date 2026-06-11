@@ -42,10 +42,11 @@ import SliderValue from "./hooks/slider_value"
 import SnippetDrag from "./hooks/snippet_drag"
 import StepperCanvas from "./hooks/stepper_canvas"
 import StepperFollowIP from "./hooks/stepper_follow_ip"
+import LoopArcs from "./hooks/loop_arcs"
 // Landing-page animated background (plain module; no-ops if the canvas is absent).
 import "./landing_background"
 
-const Hooks = {GridCanvas, ActionFeedback, CodeomeSortable, ConfirmAction, CodeomePalette, RememberManualState, ManualLinkInterceptor, EditorKeyboard, AudioToggle, SliderValue, SnippetDrag, StepperCanvas, StepperFollowIP, ...colocatedHooks}
+const Hooks = {GridCanvas, ActionFeedback, CodeomeSortable, ConfirmAction, CodeomePalette, RememberManualState, ManualLinkInterceptor, EditorKeyboard, AudioToggle, SliderValue, SnippetDrag, StepperCanvas, StepperFollowIP, LoopArcs, ...colocatedHooks}
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {

@@ -52,6 +52,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:validation, GenomeBuffer.validate(genome))
       |> assign(:economics, current_economics(genome))
       |> assign(:jump_targets, LeniesWeb.JumpTargets.targets(GenomeBuffer.to_exec_list(genome)))
+      |> assign(:loops, LeniesWeb.JumpTargets.loops(GenomeBuffer.to_exec_list(genome)))
       |> assign(:show_spawn_form, false)
       |> assign(:show_save_form, false)
       |> assign(:save_form_error, nil)
@@ -75,7 +76,6 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:run_gen, 0)
       |> assign(:stepper_notice, nil)
       |> assign(:grid_payload_json, nil)
-      |> assign(:loops, [])
       |> put_caret(GenomeCaret.end_of(genome))
 
     {:ok, socket}
@@ -1452,7 +1452,43 @@ defmodule LeniesWeb.EditorLive do
             <% end %>
           </datalist>
           <% template_nops = template_nop_indices(GenomeBuffer.to_exec_list(@genome)) %>
-          <div id="codeome-listing" class="codeome-listing-sections">
+          <% overlay = debug_overlay(assigns) %>
+          <% overlay_on? = overlay == :match or match?({:tail, _}, overlay) %>
+          <%= if @stepper_notice == :invalid_genome do %>
+            <div class="stepper-status-banner stepper-status-banner-halted">
+              Debug session ended: the genome is no longer valid.
+            </div>
+          <% end %>
+          <%= if @session do %>
+            <%= cond do %>
+              <% @session.status == :halted -> %>
+                <div class="stepper-status-banner stepper-status-banner-halted">
+                  Halted: {@session.halt_reason}
+                </div>
+              <% @session.status == :breakpoint_hit -> %>
+                <div class="stepper-status-banner stepper-status-banner-breakpoint">
+                  Stopped at breakpoint @ ip {@session.interp.ip}
+                </div>
+              <% @session.status == :safety_cap_reached -> %>
+                <div class="stepper-status-banner stepper-status-banner-safety">
+                  Safety cap (10k steps) — paused
+                </div>
+              <% overlay == :diverged -> %>
+                <div class="stepper-status-banner stepper-status-banner-safety">
+                  Runtime genome diverged (plasmids changed during execution) —
+                  row overlay suspended; ip {@session.interp.ip} shown in the inspector.
+                </div>
+              <% true -> %>
+            <% end %>
+          <% end %>
+          <div
+            id="codeome-listing"
+            class="codeome-listing-sections"
+            phx-hook="LoopArcs"
+            data-loops={Jason.encode!(Enum.map(@loops, &Tuple.to_list/1))}
+            data-ip={@session && @session.interp.ip}
+          >
+            <svg class="codeome-loop-gutter" aria-hidden="true"></svg>
             <%= for {section, buf} <- GenomeBuffer.sections(@genome) do %>
               <% sec = encode_section(section) %>
               <%= if section != :chromosome do %>
@@ -1482,16 +1518,32 @@ defmodule LeniesWeb.EditorLive do
                       "codeome-block codeome-block-editable op op-" <>
                         Atom.to_string(Disassembler.opcode_class(opcode)),
                       selected?(range, section, idx) && "codeome-block-selected",
-                      MapSet.member?(template_nops, flat) && "codeome-template-nop"
+                      MapSet.member?(template_nops, flat) && "codeome-template-nop",
+                      overlay_on? && flat == @session.interp.ip && "codeome-block-ip",
+                      overlay_on? && MapSet.member?(@session.breakpoints, flat) &&
+                        "codeome-block-bp"
                     ]}
                     data-section={sec}
                     data-idx={idx}
                     data-flat={flat}
+                    data-current={overlay_on? && flat == @session.interp.ip && "true"}
                   >
                     <span class="codeome-drag-handle" title="Drag to reorder">≡</span>
-                    <span class="codeome-block-idx">
-                      {String.pad_leading(Integer.to_string(flat), 3, "0")}
-                    </span>
+                    <%= if overlay_on? do %>
+                      <button
+                        type="button"
+                        class="codeome-block-idx codeome-bp-toggle"
+                        phx-click="stepper_toggle_bp"
+                        phx-value-ip={flat}
+                        title="Toggle breakpoint"
+                      >
+                        {String.pad_leading(Integer.to_string(flat), 3, "0")}
+                      </button>
+                    <% else %>
+                      <span class="codeome-block-idx">
+                        {String.pad_leading(Integer.to_string(flat), 3, "0")}
+                      </span>
+                    <% end %>
                     <%= if @editing_addr == {section, idx} do %>
                       <form phx-submit="submit_replace" class="codeome-inline-edit">
                         <input type="hidden" name="section" value={sec} />
@@ -1565,6 +1617,36 @@ defmodule LeniesWeb.EditorLive do
                 >
                 </div>
               </div>
+            <% end %>
+            <%= case overlay do %>
+              <% {:tail, extra} -> %>
+                <div class="codeome-section-divider">── runtime plasmids (read-only) ──</div>
+                <div class="codeome-blocks codeome-blocks-runtime">
+                  <% base = length(GenomeBuffer.to_exec_list(@genome)) %>
+                  <%= for {op, off} <- Enum.with_index(extra) do %>
+                    <% flat = base + off %>
+                    <div
+                      class={[
+                        "codeome-block op op-" <> Atom.to_string(Disassembler.opcode_class(op)),
+                        flat == @session.interp.ip && "codeome-block-ip",
+                        MapSet.member?(@session.breakpoints, flat) && "codeome-block-bp"
+                      ]}
+                      data-flat={flat}
+                      data-current={flat == @session.interp.ip && "true"}
+                    >
+                      <button
+                        type="button"
+                        class="codeome-block-idx codeome-bp-toggle"
+                        phx-click="stepper_toggle_bp"
+                        phx-value-ip={flat}
+                      >
+                        {String.pad_leading(Integer.to_string(flat), 3, "0")}
+                      </button>
+                      <span class="codeome-block-name">{Atom.to_string(op) |> String.upcase()}</span>
+                    </div>
+                  <% end %>
+                </div>
+              <% _ -> %>
             <% end %>
           </div>
         </section>
@@ -1855,13 +1937,73 @@ defmodule LeniesWeb.EditorLive do
   end
 
   defp apply_genome_change(socket, new_genome) do
+    old_genome = socket.assigns.genome
+
     socket
     |> assign(:genome, new_genome)
     |> assign(:validation, GenomeBuffer.validate(new_genome))
     |> assign(:economics, current_economics(new_genome))
     |> assign(:jump_targets, LeniesWeb.JumpTargets.targets(GenomeBuffer.to_exec_list(new_genome)))
+    |> assign(:loops, LeniesWeb.JumpTargets.loops(GenomeBuffer.to_exec_list(new_genome)))
     |> put_caret(GenomeCaret.clamp(caret_pair(socket), new_genome))
     |> assign(:dirty, new_genome != socket.assigns.original_genome)
+    |> hot_restart(old_genome, new_genome)
+  end
+
+  # Spec §6.1: any genome mutation with an active session restarts it from
+  # the new genome — breakpoints remapped by {section, index}, placed seeds
+  # re-applied, PAUSED at step 0 (no surprise execution after an edit).
+  # An edit that invalidates the genome tears the session down instead.
+  defp hot_restart(%{assigns: %{session: nil}} = socket, _old, _new), do: socket
+
+  defp hot_restart(socket, old_genome, new_genome) do
+    session = socket.assigns.session
+    socket = assign(socket, :run_gen, socket.assigns.run_gen + 1)
+
+    case GenomeBuffer.validate(new_genome) do
+      {:ok, _} ->
+        bps = GenomeBuffer.remap_breakpoints(old_genome, new_genome, session.breakpoints)
+
+        new_session =
+          Lenies.Stepper.restart(
+            session,
+            LeniesWeb.CodeomeBuffer.to_codeome(new_genome.chromosome),
+            plasmids: plasmid_structs(new_genome),
+            breakpoints: bps
+          )
+
+        socket
+        |> assign(:stepper_notice, nil)
+        |> assign_session(new_session)
+
+      {:error, _} ->
+        socket
+        |> assign(:session, nil)
+        |> assign(:stepper_notice, :invalid_genome)
+        |> assign(:grid_payload_json, nil)
+        |> assign(:loops, [])
+    end
+  end
+
+  # Session-vs-editor geography:
+  #   :off               — no session
+  #   :match             — exec list == authored flat list (the common case)
+  #   {:tail, extra_ops} — execution GAINED plasmids (make_plasmid): authored
+  #                        list is a strict prefix; extra rows render read-only
+  #   :diverged          — plasmids were lost/replaced mid-run: flat indices
+  #                        no longer line up; suppress row overlay (the
+  #                        inspector still shows the ip) rather than lie.
+  defp debug_overlay(%{session: nil}), do: :off
+
+  defp debug_overlay(%{session: session, genome: genome}) do
+    exec = Lenies.Codeome.to_list(session.exec_codeome)
+    authored = GenomeBuffer.to_exec_list(genome)
+
+    cond do
+      exec == authored -> :match
+      List.starts_with?(exec, authored) -> {:tail, Enum.drop(exec, length(authored))}
+      true -> :diverged
+    end
   end
 
   # Reads `eat_amount` / `attack_damage` from Application env at the
@@ -1892,7 +2034,11 @@ defmodule LeniesWeb.EditorLive do
             plasmids: plasmid_structs(socket.assigns.genome)
           )
 
-        {:ok, socket |> assign(:right_tab, :debug) |> assign_session(session)}
+        {:ok,
+         socket
+         |> assign(:right_tab, :debug)
+         |> assign(:stepper_notice, nil)
+         |> assign_session(session)}
 
       true ->
         :invalid
@@ -2060,6 +2206,7 @@ defmodule LeniesWeb.EditorLive do
     |> assign(:show_save_form, false)
     |> assign(:save_form_error, nil)
     |> assign(:save_confirm, nil)
+    |> assign(:stepper_notice, nil)
     |> assign(:save_prefill, %{
       name: codeome.name,
       color_hex: codeome.color_hex,
