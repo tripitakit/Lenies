@@ -47,7 +47,9 @@ defmodule Lenies.Stepper do
   @spec start_session(Codeome.t(), keyword) :: t()
   def start_session(%Codeome{} = codeome, opts \\ []) do
     energy = Keyword.get(opts, :energy, 5000.0) * 1.0
-    pos = Keyword.get(opts, :pos, {32, 32})
+    # Centre of the 16×16 debug world (Stepper.World grid). Must stay in
+    # bounds — start_session pattern-matches {:ok, world} from place_lenie.
+    pos = Keyword.get(opts, :pos, {8, 8})
     dir = Keyword.get(opts, :dir, :n)
     plasmids = Keyword.get(opts, :plasmids, [])
 

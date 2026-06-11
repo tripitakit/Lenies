@@ -87,7 +87,7 @@ defmodule LeniesWeb.EditorComponents.DebugPanel do
 
         <section class="stepper-panel">
           <h3 class="stepper-panel-title">
-            Mini-world 64×64
+            Mini-world {elem(@session.world.grid, 0)}×{elem(@session.world.grid, 1)}
             <%= if @session.place_seed_mode do %>
               <span class="stepper-place-hint">— click to place</span>
             <% end %>

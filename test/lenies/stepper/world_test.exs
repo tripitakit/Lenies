@@ -5,12 +5,12 @@ defmodule Lenies.Stepper.WorldTest do
   alias Lenies.Interpreter.State
 
   describe "new/0" do
-    test "returns a 64×64 world with all empty cells and no Lenies" do
+    test "returns a 16×16 world with all empty cells and no Lenies" do
       world = World.new()
 
-      assert world.grid == {64, 64}
+      assert world.grid == {16, 16}
       assert world.lenies == %{}
-      assert map_size(world.cells) == 64 * 64
+      assert map_size(world.cells) == 16 * 16
 
       cell = world.cells[{0, 0}]
       assert cell.resource == 0
@@ -21,7 +21,7 @@ defmodule Lenies.Stepper.WorldTest do
     test "every cell is initialised — no missing keys" do
       world = World.new()
 
-      for x <- 0..63, y <- 0..63 do
+      for x <- 0..15, y <- 0..15 do
         assert Map.has_key?(world.cells, {x, y}),
                "missing cell at {#{x}, #{y}}"
       end
@@ -118,8 +118,8 @@ defmodule Lenies.Stepper.WorldTest do
 
       {:ok, w2, i2} = World.apply_action({:move, {10, 0}, :n}, w1, %{i | pos: {10, 0}}, "debug")
 
-      assert i2.pos == {10, 63}
-      assert w2.cells[{10, 63}].lenie_id == "debug"
+      assert i2.pos == {10, 15}
+      assert w2.cells[{10, 15}].lenie_id == "debug"
     end
 
     test "blocked when target cell has another lenie", %{world: w, interp: i} do
@@ -691,7 +691,7 @@ defmodule Lenies.Stepper.WorldTest do
     test "fills every cell with a value in 15..45 inclusive" do
       world = World.new() |> World.seed_resources(12345)
 
-      for x <- 0..63, y <- 0..63 do
+      for x <- 0..15, y <- 0..15 do
         r = world.cells[{x, y}].resource
         assert r >= 15 and r <= 45, "cell {#{x},#{y}} had resource #{r}"
       end
@@ -722,26 +722,43 @@ defmodule Lenies.Stepper.WorldTest do
   end
 
   defp world_with_target(target_energy) do
-    # attacker (debug) at {32,32} facing :e; target seed at {33,32}
+    # attacker (debug) at {8,8} facing :e; target seed at {9,8}
     {:ok, world} =
       World.new()
       |> World.place_lenie("debug", %{
-        codeome: %Lenies.Codeome{}, pos: {32, 32}, dir: :e,
-        energy: 1000.0, kind: :debug, plasmids: []
+        codeome: %Lenies.Codeome{},
+        pos: {8, 8},
+        dir: :e,
+        energy: 1000.0,
+        kind: :debug,
+        plasmids: []
       })
 
     {:ok, world} =
       World.place_lenie(world, "victim", %{
-        codeome: %Lenies.Codeome{}, pos: {33, 32}, dir: :n,
-        energy: target_energy, kind: :seed, plasmids: []
+        codeome: %Lenies.Codeome{},
+        pos: {9, 8},
+        dir: :n,
+        energy: target_energy,
+        kind: :seed,
+        plasmids: []
       })
 
     world
   end
 
   defp attacker_interp do
-    %State{ip: 0, stack: [], slots: %{0 => 0, 1 => 0, 2 => 0, 3 => 0},
-            call_stack: [], age: 0, energy: 1000.0, pos: {32, 32}, dir: :e, plasmids: []}
+    %State{
+      ip: 0,
+      stack: [],
+      slots: %{0 => 0, 1 => 0, 2 => 0, 3 => 0},
+      call_stack: [],
+      age: 0,
+      energy: 1000.0,
+      pos: {8, 8},
+      dir: :e,
+      plasmids: []
+    }
   end
 
   describe "apply_action :attack reward" do
@@ -750,7 +767,7 @@ defmodule Lenies.Stepper.WorldTest do
       interp = attacker_interp()
 
       {:ok, new_world, new_interp} =
-        World.apply_action({:attack, {32, 32}, :e}, world, interp, "debug")
+        World.apply_action({:attack, {8, 8}, :e}, world, interp, "debug")
 
       damage = Application.get_env(:lenies, :attack_damage, 10)
       assert new_world.lenies["victim"].energy == 100 - damage
@@ -763,12 +780,12 @@ defmodule Lenies.Stepper.WorldTest do
       interp = attacker_interp()
 
       {:ok, new_world, new_interp} =
-        World.apply_action({:attack, {32, 32}, :e}, world, interp, "debug")
+        World.apply_action({:attack, {8, 8}, :e}, world, interp, "debug")
 
       refute Map.has_key?(new_world.lenies, "victim")
-      new_energy = (damage - 1) - damage
-      assert new_world.cells[{33, 32}].carcass == max(0, trunc(new_energy * 0.5))
-      assert new_world.cells[{33, 32}].lenie_id == nil
+      new_energy = damage - 1 - damage
+      assert new_world.cells[{9, 8}].carcass == max(0, trunc(new_energy * 0.5))
+      assert new_world.cells[{9, 8}].lenie_id == nil
       # reward is capped at what the victim actually had
       assert new_interp.energy == 1000.0 + (damage - 1)
     end
@@ -790,10 +807,10 @@ defmodule Lenies.Stepper.WorldTest do
 
       payload = World.encode_grid_payload(world)
 
-      assert payload.w == 64
-      assert payload.h == 64
+      assert payload.w == 16
+      assert payload.h == 16
       assert is_list(payload.cells)
-      assert length(payload.cells) == 64 * 64
+      assert length(payload.cells) == 16 * 16
       assert is_list(payload.lenies)
       assert Enum.find(payload.lenies, &(&1.id == "debug"))
     end

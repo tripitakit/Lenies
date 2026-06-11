@@ -12,7 +12,7 @@ defmodule Lenies.Stepper.World do
 
   alias Lenies.Interpreter.State
 
-  @grid_size {64, 64}
+  @grid_size {16, 16}
 
   defstruct grid: @grid_size, cells: %{}, lenies: %{}, child_slots: %{}
 
@@ -23,7 +23,7 @@ defmodule Lenies.Stepper.World do
           child_slots: %{binary => map}
         }
 
-  @doc "Build a fresh 64×64 world with all cells empty and no Lenies placed."
+  @doc "Build a fresh 16×16 world with all cells empty and no Lenies placed."
   def new do
     {w, h} = @grid_size
 

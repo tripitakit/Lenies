@@ -29,7 +29,7 @@ const StepperCanvas = {
 
   render() {
     const payload = JSON.parse(this.el.dataset.payload);
-    const cellPx = 8;
+    const cellPx = 16;
     this.canvas.width = payload.w * cellPx;
     this.canvas.height = payload.h * cellPx;
 
@@ -53,7 +53,9 @@ const StepperCanvas = {
       }
     }
 
-    // Lenies — bodies + seed/child facing triangles.
+    // Lenies — a body square plus a dark facing triangle (arrow) drawn inside
+    // it, pointing in the current direction. Every Lenie gets the arrow,
+    // including the debug Lenie (yellow), so its heading reads at a glance.
     for (const l of payload.lenies) {
       const color =
         l.kind === "debug" ? "#facc15"   // yellow — the one being debugged
@@ -62,62 +64,35 @@ const StepperCanvas = {
       this.ctx.fillStyle = color;
       this.ctx.fillRect(l.x * cellPx, l.y * cellPx, cellPx, cellPx);
 
-      // Seeds / children get a small dark facing triangle (drawn with the body).
-      // The debug Lenie's whisker is drawn in a later pass so it sits on top of
-      // any adjacent Lenie square it extends over.
-      if (l.kind !== "debug") {
-        const cx = l.x * cellPx + cellPx / 2;
-        const cy = l.y * cellPx + cellPx / 2;
-        this.ctx.fillStyle = "#0f172a";
-        this.ctx.beginPath();
-        const r = cellPx / 3;
-        switch (l.dir) {
-          case "n":
-            this.ctx.moveTo(cx, cy - r);
-            this.ctx.lineTo(cx - r / 2, cy + r / 2);
-            this.ctx.lineTo(cx + r / 2, cy + r / 2);
-            break;
-          case "s":
-            this.ctx.moveTo(cx, cy + r);
-            this.ctx.lineTo(cx - r / 2, cy - r / 2);
-            this.ctx.lineTo(cx + r / 2, cy - r / 2);
-            break;
-          case "e":
-            this.ctx.moveTo(cx + r, cy);
-            this.ctx.lineTo(cx - r / 2, cy - r / 2);
-            this.ctx.lineTo(cx - r / 2, cy + r / 2);
-            break;
-          case "w":
-            this.ctx.moveTo(cx - r, cy);
-            this.ctx.lineTo(cx + r / 2, cy - r / 2);
-            this.ctx.lineTo(cx + r / 2, cy + r / 2);
-            break;
-        }
-        this.ctx.closePath();
-        this.ctx.fill();
-      }
-    }
-
-    // Debug Lenie whisker — last pass, so it renders on top of any neighbouring
-    // Lenie squares it crosses into (otherwise a later-drawn adjacent Lenie
-    // would paint over it and the direction would disappear).
-    for (const l of payload.lenies) {
-      if (l.kind !== "debug") continue;
       const cx = l.x * cellPx + cellPx / 2;
       const cy = l.y * cellPx + cellPx / 2;
-      let ex = cx, ey = cy;
-      switch (l.dir) {
-        case "n": ey = cy - cellPx; break;
-        case "s": ey = cy + cellPx; break;
-        case "e": ex = cx + cellPx; break;
-        case "w": ex = cx - cellPx; break;
-      }
-      this.ctx.strokeStyle = "#facc15"; // same colour as the debug Lenie
-      this.ctx.lineWidth = cellPx / 2;
+      this.ctx.fillStyle = "#0f172a";
       this.ctx.beginPath();
-      this.ctx.moveTo(cx, cy);
-      this.ctx.lineTo(ex, ey);
-      this.ctx.stroke();
+      const r = cellPx / 3;
+      switch (l.dir) {
+        case "n":
+          this.ctx.moveTo(cx, cy - r);
+          this.ctx.lineTo(cx - r / 2, cy + r / 2);
+          this.ctx.lineTo(cx + r / 2, cy + r / 2);
+          break;
+        case "s":
+          this.ctx.moveTo(cx, cy + r);
+          this.ctx.lineTo(cx - r / 2, cy - r / 2);
+          this.ctx.lineTo(cx + r / 2, cy - r / 2);
+          break;
+        case "e":
+          this.ctx.moveTo(cx + r, cy);
+          this.ctx.lineTo(cx - r / 2, cy - r / 2);
+          this.ctx.lineTo(cx - r / 2, cy + r / 2);
+          break;
+        case "w":
+          this.ctx.moveTo(cx - r, cy);
+          this.ctx.lineTo(cx + r / 2, cy - r / 2);
+          this.ctx.lineTo(cx + r / 2, cy + r / 2);
+          break;
+      }
+      this.ctx.closePath();
+      this.ctx.fill();
     }
   },
 };

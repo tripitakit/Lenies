@@ -4,13 +4,13 @@ defmodule Lenies.StepperTest do
   alias Lenies.{Codeome, Plasmid, Stepper}
 
   describe "start_session/2" do
-    test "initialises interp with default energy=5000, pos=(32,32), dir=:n" do
+    test "initialises interp with default energy=5000, pos=(8,8), dir=:n" do
       codeome = Codeome.from_list([:push1, :dup, :add])
       session = Stepper.start_session(codeome, [])
 
       assert session.codeome == codeome
       assert session.interp.energy == 5000.0
-      assert session.interp.pos == {32, 32}
+      assert session.interp.pos == {8, 8}
       assert session.interp.dir == :n
       assert session.interp.ip == 0
       assert session.interp.stack == []
@@ -26,7 +26,7 @@ defmodule Lenies.StepperTest do
       codeome = Codeome.from_list([:push1])
       session = Stepper.start_session(codeome, [])
 
-      assert session.world.cells[{32, 32}].lenie_id == "debug"
+      assert session.world.cells[{8, 8}].lenie_id == "debug"
       assert session.world.lenies["debug"].codeome == codeome
       assert session.world.lenies["debug"].kind == :debug
     end
@@ -196,18 +196,18 @@ defmodule Lenies.StepperTest do
       s0 = Stepper.start_session(codeome, [])
       seed = %{codeome: Codeome.from_list([:nop_0]), plasmids: []}
 
-      {:ok, s1} = Stepper.place_seed(s0, seed, {20, 20})
+      {:ok, s1} = Stepper.place_seed(s0, seed, {12, 12})
 
-      assert s1.world.cells[{20, 20}].lenie_id != nil
-      assert s1.world.cells[{20, 20}].lenie_id |> String.starts_with?("seed-")
+      assert s1.world.cells[{12, 12}].lenie_id != nil
+      assert s1.world.cells[{12, 12}].lenie_id |> String.starts_with?("seed-")
     end
 
     test "place_seed refuses to overwrite an occupied cell" do
       codeome = Codeome.from_list([:push1])
-      s0 = Stepper.start_session(codeome, pos: {20, 20})
+      s0 = Stepper.start_session(codeome, pos: {10, 10})
       seed = %{codeome: Codeome.from_list([:nop_0]), plasmids: []}
 
-      assert {:error, :cell_occupied} = Stepper.place_seed(s0, seed, {20, 20})
+      assert {:error, :cell_occupied} = Stepper.place_seed(s0, seed, {10, 10})
     end
   end
 
@@ -372,7 +372,11 @@ defmodule Lenies.StepperTest do
       codeome = Codeome.from_list([:push0, :push1, :push1, :add, :make_plasmid, :nop_0])
       session = Stepper.start_session(codeome, energy: 1000.0)
 
-      session = Enum.reduce(1..5, session, fn _, s -> {:ok, s2} = Stepper.step(s); s2 end)
+      session =
+        Enum.reduce(1..5, session, fn _, s ->
+          {:ok, s2} = Stepper.step(s)
+          s2
+        end)
 
       assert length(session.interp.plasmids) == 1
       assert Codeome.size(session.codeome) == 6
@@ -394,10 +398,20 @@ defmodule Lenies.StepperTest do
       session = Stepper.start_session(codeome, energy: 1000.0)
       before_exec = session.exec_codeome
 
-      session = Enum.reduce(1..5, session, fn _, s -> {:ok, s2} = Stepper.step(s); s2 end)
+      session =
+        Enum.reduce(1..5, session, fn _, s ->
+          {:ok, s2} = Stepper.step(s)
+          s2
+        end)
+
       assert Codeome.size(session.exec_codeome) == 8
 
-      session = Enum.reduce(1..5, session, fn _, s -> {:ok, s2} = Stepper.step_back(s); s2 end)
+      session =
+        Enum.reduce(1..5, session, fn _, s ->
+          {:ok, s2} = Stepper.step_back(s)
+          s2
+        end)
+
       assert session.exec_codeome == before_exec
     end
   end
