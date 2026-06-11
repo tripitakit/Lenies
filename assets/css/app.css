@@ -706,6 +706,9 @@
   align-items: center;
   gap: 4px;
   margin-bottom: 6px;
+  /* Stays fixed above the scrolling #codeome-listing (like the energy panel
+     and title), so the edit tools never scroll away while following the IP. */
+  flex-shrink: 0;
 }
 
 .lenies-dashboard .codeome-tool-btn {
@@ -811,7 +814,11 @@
 .lenies-dashboard.codeome-editor-page {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  /* Fill the layout's <main> (which is `100vh − navbar`), NOT the full
+     viewport. Using 100vh made editor-root taller than main, so main became
+     programmatically scrollable — and the debug IP-follow scrollIntoView
+     dragged the header up under the navbar. height:100% keeps it framed. */
+  height: 100%;
   overflow: hidden;
 }
 
@@ -940,14 +947,15 @@
    wider gap between blocks gives SortableJS clean insertion-line
    space, and a dashed border on an empty container gives the user a
    visual drop hint. */
+/* Per-section blocks are plain content blocks now — the scroll lives on the
+   #codeome-listing wrapper (.codeome-listing-sections), so each section grows
+   to its content height and they scroll together. */
 .lenies-dashboard.codeome-editor-page .codeome-listing-pane .codeome-blocks {
-  flex: 1 1 auto;
-  min-height: 80px;
   gap: 4px;
-  overflow-y: auto;
 }
 
 .lenies-dashboard.codeome-editor-page .codeome-listing-pane .codeome-blocks:empty {
+  min-height: 32px;
   border: 1px dashed rgba(34, 211, 238, 0.25);
 }
 
@@ -1163,7 +1171,21 @@
 .codeome-template-nop { outline: 1px dashed rgba(103, 232, 249, 0.5); outline-offset: -1px; }
 
 /* === Debug overlay on the unified listing (Task 9) === */
-.codeome-listing-sections { position: relative; padding-left: 36px; }
+/* The sectioned listing wrapper is the scroll container for the codeome
+   rows: the energy panel, toolbar, banners and title above it stay fixed
+   while the rows (and the absolute loop-gutter inside) scroll together —
+   the IP-follow scrollIntoView (loop_arcs.js, which reads this.el.scrollTop)
+   then scrolls THESE rows, not the pane or the page. padding-left leaves
+   room for the gutter; overflow-x:hidden keeps overflow-y:auto from also
+   adding a horizontal scrollbar. */
+.codeome-listing-sections {
+  position: relative;
+  padding-left: 36px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
 .codeome-loop-gutter { position: absolute; left: 0; top: 0; width: 36px; height: 100%; overflow: visible; }
 .codeome-block-ip { outline: 1px solid rgb(251 191 36 / 0.9); background: rgb(251 191 36 / 0.12); }
 .codeome-block-bp .codeome-block-idx, .codeome-block-bp .codeome-bp-toggle { color: rgb(248 113 113); }
