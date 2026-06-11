@@ -12,6 +12,7 @@ defmodule LeniesWeb.EditorComponents.Header do
 
   attr :mode, :atom, required: true
   attr :selected_hash, :string, default: nil
+  attr :seed_name, :string, default: nil
   attr :validation, :any, required: true
   attr :dirty, :boolean, required: true
   attr :session, :any, default: nil
@@ -33,11 +34,14 @@ defmodule LeniesWeb.EditorComponents.Header do
       >
         ← Back
       </.link>
-      <h1 class="text-sm flex-1">
-        <%= if @mode == :new_seed do %>
-          New Seed
-        <% else %>
-          Edit: {String.slice(@selected_hash || "", 0..15)}…
+      <h1 class="text-sm flex-1 min-w-0 truncate">
+        <%= cond do %>
+          <% @seed_name -> %>
+            {@seed_name}
+          <% @mode == :edit -> %>
+            Edit: {String.slice(@selected_hash || "", 0..15)}…
+          <% true -> %>
+            New Seed
         <% end %>
       </h1>
 

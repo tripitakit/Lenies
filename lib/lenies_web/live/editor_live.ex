@@ -37,7 +37,7 @@ defmodule LeniesWeb.EditorLive do
 
     scope = socket.assigns.current_scope
 
-    {mode, selected_hash, genome, save_prefill} =
+    {mode, selected_hash, genome, save_prefill, seed_name} =
       init_for_route(socket.assigns.live_action, params, world_id, world_handle, scope)
 
     socket =
@@ -46,6 +46,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:world_handle, world_handle)
       |> assign(:mode, mode)
       |> assign(:selected_hash, selected_hash)
+      |> assign(:seed_name, seed_name)
       |> assign(:genome, genome)
       |> assign(:original_genome, genome)
       |> assign(:dirty, false)
@@ -81,8 +82,10 @@ defmodule LeniesWeb.EditorLive do
     {:ok, socket}
   end
 
+  # The 5th element is the display name of the loaded seed/codeome (shown as
+  # the editor title); nil for a blank new buffer or a species-hash edit.
   defp init_for_route(:new, _params, _world_id, _handle, _scope) do
-    {:new_seed, nil, GenomeBuffer.new(), nil}
+    {:new_seed, nil, GenomeBuffer.new(), nil, nil}
   end
 
   defp init_for_route(:edit, %{"hash" => hash}, world_id, handle, _scope) do
@@ -105,7 +108,7 @@ defmodule LeniesWeb.EditorLive do
           {[], []}
       end
 
-    {:edit, hash, GenomeBuffer.new(chromosome, plasmids), nil}
+    {:edit, hash, GenomeBuffer.new(chromosome, plasmids), nil, nil}
   end
 
   # Custom seed: "custom:<id>" — scoped to the current user.
@@ -126,19 +129,19 @@ defmodule LeniesWeb.EditorLive do
           energy_default: trunc(entry.energy_default)
         }
 
-        {:new_seed, nil, genome, prefill}
+        {:new_seed, nil, genome, prefill, entry.name}
 
       _ ->
-        {:new_seed, nil, GenomeBuffer.new(), nil}
+        {:new_seed, nil, GenomeBuffer.new(), nil, nil}
     end
   end
 
   # Builtin seed by id atom.
   defp init_for_route(:seed, %{"seed_id" => sid}, _world_id, _handle, _scope) do
-    genome =
+    {genome, seed_name} =
       case safe_seed_atom(sid) do
         nil ->
-          GenomeBuffer.new()
+          {GenomeBuffer.new(), nil}
 
         atom ->
           case Lenies.Seeds.get(atom) do
@@ -149,14 +152,14 @@ defmodule LeniesWeb.EditorLive do
                   ops -> [ops]
                 end
 
-              GenomeBuffer.new(Lenies.Codeome.to_list(codeome), plasmids)
+              {GenomeBuffer.new(Lenies.Codeome.to_list(codeome), plasmids), Map.get(seed, :name)}
 
             _ ->
-              GenomeBuffer.new()
+              {GenomeBuffer.new(), nil}
           end
       end
 
-    {:new_seed, nil, genome, nil}
+    {:new_seed, nil, genome, nil, seed_name}
   end
 
   # Resolve a seed-id string to its atom. We match against the ids returned by
@@ -970,6 +973,7 @@ defmodule LeniesWeb.EditorLive do
       <EditorComponents.Header.header
         mode={@mode}
         selected_hash={@selected_hash}
+        seed_name={@seed_name}
         validation={@validation}
         dirty={@dirty}
         session={@session}
@@ -1328,6 +1332,7 @@ defmodule LeniesWeb.EditorLive do
   defp after_save(socket, codeome) do
     socket
     |> assign(:original_genome, socket.assigns.genome)
+    |> assign(:seed_name, codeome.name)
     |> assign(:dirty, false)
     |> assign(:show_save_form, false)
     |> assign(:save_form_error, nil)

@@ -50,12 +50,30 @@ defmodule LeniesWeb.EditorLiveSeedTest do
     assert n > 0
   end
 
-  test "editor header shows New Seed mode for seed route", %{conn: conn} do
+  test "editor header shows the builtin seed's name (not New Seed) for a seed route",
+       %{conn: conn} do
     seed = hd(Lenies.Seeds.all())
 
     {:ok, _view, html} = live(conn, ~p"/sandbox/editor/seed/#{Atom.to_string(seed.id)}")
 
-    assert html =~ "New Seed"
+    assert html =~ seed.name
+    refute html =~ "New Seed"
+  end
+
+  test "editor header shows a saved custom codeome's name (not New Seed)",
+       %{conn: conn, user: user} do
+    {:ok, codeome} =
+      Lenies.Collection.create_codeome(user, %{
+        name: "my-evolved-replicator",
+        color_hex: "#aabbcc",
+        energy_default: 10_000.0,
+        opcodes: ["eat", "move", "eat", "move", "eat", "move", "eat", "move", "push0", "push1"]
+      })
+
+    {:ok, _view, html} = live(conn, ~p"/sandbox/editor/seed/custom:#{codeome.id}")
+
+    assert html =~ "my-evolved-replicator"
+    refute html =~ "New Seed"
   end
 
   test "an unknown seed id opens an empty editor without crashing", %{conn: conn} do
