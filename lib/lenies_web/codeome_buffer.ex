@@ -138,9 +138,10 @@ defmodule LeniesWeb.CodeomeBuffer do
     Template-jumps (`:jmp_t`, `:jz_t`, `:jnz_t`, `:call_t`) read the
     actual run of `:nop_0`/`:nop_1` immediately after the opcode (capped
     at the interpreter's `template_max_len`, default 8). `:allocate` is
-    priced with `size = length(buffer)` (the typical replicator pattern,
-    where a Lenie allocates a copy of itself). `:ret` is always priced
-    with `t_len = 0` since it doesn't consume a template at runtime.
+    priced with `size = alloc_size` (defaults to `length(buffer)`; the
+    unified editor passes the chromosome length so plasmid regions don't
+    inflate replication cost). `:ret` is always priced with `t_len = 0`
+    since it doesn't consume a template at runtime.
   * `max_gain` — `n_eat × eat_amount + n_attack × attack_damage`,
     the strict upper bound on energy yielded by a pass (assumes every
     EAT and ATTACK succeeds — real hit rates are well below 1).
@@ -154,7 +155,7 @@ defmodule LeniesWeb.CodeomeBuffer do
   buffer's loops. A single linear pass is a strict lower bound on
   per-cycle cost and an over-estimate of per-cycle gain.
   """
-  @spec economics(buffer(), number(), number()) :: %{
+  @spec economics(buffer(), number(), number(), keyword()) :: %{
           cost: float(),
           max_gain: float(),
           net: float(),
@@ -164,8 +165,9 @@ defmodule LeniesWeb.CodeomeBuffer do
           attack_damage: number(),
           alloc_size: non_neg_integer()
         }
-  def economics(buffer, eat_amount, attack_damage) do
-    cost = pass_cost(buffer)
+  def economics(buffer, eat_amount, attack_damage, opts \\ []) do
+    alloc_size = Keyword.get(opts, :alloc_size, length(buffer))
+    cost = pass_cost(buffer, alloc_size)
     n_eat = Enum.count(buffer, &(&1 == :eat))
     n_attack = Enum.count(buffer, &(&1 == :attack))
     max_gain = (n_eat * eat_amount + n_attack * attack_damage) * 1.0
@@ -178,13 +180,12 @@ defmodule LeniesWeb.CodeomeBuffer do
       n_attack: n_attack,
       eat_amount: eat_amount,
       attack_damage: attack_damage,
-      alloc_size: length(buffer)
+      alloc_size: alloc_size
     }
   end
 
-  defp pass_cost(buffer) do
+  defp pass_cost(buffer, alloc_size) do
     template_max_len = Application.get_env(:lenies, :template_max_len, 8)
-    alloc_size = length(buffer)
     buffer_tuple = List.to_tuple(buffer)
 
     0..(tuple_size(buffer_tuple) - 1)//1
