@@ -181,5 +181,36 @@ defmodule LeniesWeb.EditorDebugTest do
       html = render(view)
       assert html =~ "runtime plasmids (read-only)"
     end
+
+    # Ported from stepper_run_loop_test.exs — "pause/run cycling does not accumulate loops".
+    # The generation guard in handle_info({:stepper_tick, gen}, socket) ensures that ticks
+    # from a superseded run (stale generation) are silently dropped and do NOT advance the
+    # step counter. This is the core invariant that prevents parallel-loop flooding.
+    test "stale stepper_tick (wrong generation) does not advance the step counter", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
+      seed_valid_buffer(view)
+
+      # Step once to create the session (step_count -> 1).
+      render_click(view, "stepper_step", %{})
+      # Start a run and immediately pause — the run_gen is now > 0 and the
+      # session status is :paused.
+      render_click(view, "stepper_run", %{})
+      render_click(view, "stepper_pause", %{})
+
+      html_before = render(view)
+      step_before = Regex.run(~r/Step #(\d+)/, html_before) |> Enum.at(1)
+
+      # Send two ticks with stale/impossible generation values.  The guard
+      # requires gen == run_gen AND status == :running; after pause neither
+      # condition holds, so both are dropped without advancing the counter.
+      send(view.pid, {:stepper_tick, 0})
+      send(view.pid, {:stepper_tick, 999_999})
+
+      html_after = render(view)
+      step_after = Regex.run(~r/Step #(\d+)/, html_after) |> Enum.at(1)
+
+      assert step_before == step_after,
+             "stale tick advanced step counter from #{step_before} to #{step_after}"
+    end
   end
 end

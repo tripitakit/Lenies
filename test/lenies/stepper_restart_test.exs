@@ -67,4 +67,17 @@ defmodule Lenies.StepperRestartTest do
     assert reset.breakpoints == MapSet.new([2])
     assert Enum.any?(reset.world.lenies, fn {_id, l} -> l.kind == :seed end)
   end
+
+  # Ported from stepper_live_test.exs "update/2 with :plasmids starts the session carrying them".
+  # The original tested via StepperLive.__test_build_session__/2 (now deleted); the real behaviour
+  # lives entirely in Stepper.start_session/2.
+  test "start_session with carried plasmids builds exec_codeome = chromosome + plasmid" do
+    codeome = Codeome.from_list([:nop_0, :move])
+    plasmid = Lenies.Plasmid.new([:nop_1])
+
+    session = Stepper.start_session(codeome, plasmids: [plasmid])
+
+    # chromosome length 2 + 1 plasmid opcode = 3 total exec opcodes
+    assert Lenies.Codeome.size(session.exec_codeome) == 3
+  end
 end
