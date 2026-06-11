@@ -133,6 +133,88 @@ defmodule Lenies.CollectionTest do
     end
   end
 
+  describe "get_codeome_by_name/2" do
+    import Lenies.AccountsFixtures
+
+    setup do
+      %{user: user_fixture()}
+    end
+
+    test "finds own codeome by exact (trimmed) name", %{user: user} do
+      {:ok, c} = Lenies.Collection.create_codeome(user, %{@valid_attrs | name: "replicator"})
+
+      assert %Lenies.Collection.Codeome{id: id} =
+               Lenies.Collection.get_codeome_by_name(user, "replicator")
+
+      assert id == c.id
+      assert Lenies.Collection.get_codeome_by_name(user, "  replicator  ").id == c.id
+    end
+
+    test "nil for unknown name and for other users' codeomes", %{user: user} do
+      other = user_fixture()
+      {:ok, _} = Lenies.Collection.create_codeome(other, %{@valid_attrs | name: "theirs"})
+      assert Lenies.Collection.get_codeome_by_name(user, "theirs") == nil
+      assert Lenies.Collection.get_codeome_by_name(user, "nope") == nil
+    end
+  end
+
+  describe "overwrite_codeome/2" do
+    import Lenies.AccountsFixtures
+
+    setup do
+      %{user: user_fixture()}
+    end
+
+    test "updates the existing row in place (same id, new content)", %{user: user} do
+      {:ok, c} = Lenies.Collection.create_codeome(user, %{@valid_attrs | name: "evo"})
+
+      attrs = %{
+        @valid_attrs
+        | name: "evo",
+          color_hex: "#112233",
+          opcodes: ["eat", "move", "eat", "move", "eat", "move", "eat", "move"]
+      }
+
+      assert {:ok, updated} = Lenies.Collection.overwrite_codeome(user, attrs)
+
+      assert updated.id == c.id
+      assert updated.color_hex == "#112233"
+      assert hd(updated.opcodes) == "eat"
+      assert length(Lenies.Collection.list_codeomes(user)) == 1
+    end
+
+    test "degrades to create when no row has that name", %{user: user} do
+      assert {:ok, created} =
+               Lenies.Collection.overwrite_codeome(user, %{@valid_attrs | name: "fresh"})
+
+      assert created.name == "fresh"
+    end
+
+    test "cannot overwrite another user's codeome (scoped lookup creates own row)", %{user: user} do
+      other = user_fixture()
+
+      {:ok, theirs} =
+        Lenies.Collection.create_codeome(other, %{@valid_attrs | name: "shared-name"})
+
+      assert {:ok, mine} =
+               Lenies.Collection.overwrite_codeome(user, %{@valid_attrs | name: "shared-name"})
+
+      assert mine.id != theirs.id
+      assert Lenies.Collection.get_codeome(other, theirs.id).opcodes == theirs.opcodes
+    end
+
+    test "invalid attrs surface the changeset", %{user: user} do
+      {:ok, _} = Lenies.Collection.create_codeome(user, %{@valid_attrs | name: "evo2"})
+
+      assert {:error, %Ecto.Changeset{}} =
+               Lenies.Collection.overwrite_codeome(user, %{
+                 @valid_attrs
+                 | name: "evo2",
+                   color_hex: "nope"
+               })
+    end
+  end
+
   describe "plasmid persistence" do
     setup do
       %{user: Lenies.AccountsFixtures.user_fixture()}
@@ -140,7 +222,9 @@ defmodule Lenies.CollectionTest do
 
     test "create_codeome persists plasmids and get_codeome returns them", %{user: user} do
       attrs = %{
-        name: "Twitchy", color_hex: "#00ff88", energy_default: 500.0,
+        name: "Twitchy",
+        color_hex: "#00ff88",
+        energy_default: 500.0,
         opcodes: ["nop_1", "store", "eat"],
         plasmids: [%{opcodes: ["nop_0", "move"]}, %{opcodes: ["eat"]}]
       }
@@ -148,8 +232,10 @@ defmodule Lenies.CollectionTest do
       assert {:ok, saved} = Lenies.Collection.create_codeome(user, attrs)
       reloaded = Lenies.Collection.get_codeome(user, saved.id)
 
-      assert [%Lenies.Collection.Plasmid{opcodes: ["nop_0", "move"]},
-              %Lenies.Collection.Plasmid{opcodes: ["eat"]}] = reloaded.plasmids
+      assert [
+               %Lenies.Collection.Plasmid{opcodes: ["nop_0", "move"]},
+               %Lenies.Collection.Plasmid{opcodes: ["eat"]}
+             ] = reloaded.plasmids
     end
 
     test "a seed saved without plasmids has an empty list", %{user: user} do
@@ -160,9 +246,13 @@ defmodule Lenies.CollectionTest do
 
     test "to_plasmid_structs/1 converts embeds to runtime Plasmid structs", %{user: user} do
       attrs = %{
-        name: "Conv", color_hex: "#445566", energy_default: 500.0,
-        opcodes: ["eat"], plasmids: [%{opcodes: ["nop_0", "move"]}, %{opcodes: ["eat"]}]
+        name: "Conv",
+        color_hex: "#445566",
+        energy_default: 500.0,
+        opcodes: ["eat"],
+        plasmids: [%{opcodes: ["nop_0", "move"]}, %{opcodes: ["eat"]}]
       }
+
       {:ok, saved} = Lenies.Collection.create_codeome(user, attrs)
       reloaded = Lenies.Collection.get_codeome(user, saved.id)
 
@@ -174,9 +264,13 @@ defmodule Lenies.CollectionTest do
 
     test "rejects a plasmid embed with an unknown opcode", %{user: user} do
       attrs = %{
-        name: "BadP", color_hex: "#778899", energy_default: 500.0,
-        opcodes: ["eat"], plasmids: [%{opcodes: ["not_an_opcode"]}]
+        name: "BadP",
+        color_hex: "#778899",
+        energy_default: 500.0,
+        opcodes: ["eat"],
+        plasmids: [%{opcodes: ["not_an_opcode"]}]
       }
+
       assert {:error, %Ecto.Changeset{}} = Lenies.Collection.create_codeome(user, attrs)
     end
   end

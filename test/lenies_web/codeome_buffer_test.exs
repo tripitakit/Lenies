@@ -291,6 +291,27 @@ defmodule LeniesWeb.CodeomeBufferTest do
     end
   end
 
+  describe "economics/4 alloc_size option" do
+    test "allocate is priced with the explicit alloc_size, not the buffer length" do
+      buffer = [:allocate, :nop_0, :nop_0, :nop_0]
+
+      default = CodeomeBuffer.economics(buffer, 20, 10)
+      sized = CodeomeBuffer.economics(buffer, 20, 10, alloc_size: 2)
+
+      assert default.alloc_size == 4
+      assert sized.alloc_size == 2
+      assert sized.cost < default.cost
+    end
+
+    test "default keeps the old behavior (alloc_size = buffer length)" do
+      buffer = [:push0, :allocate]
+      default = CodeomeBuffer.economics(buffer, 20, 10)
+      explicit = CodeomeBuffer.economics(buffer, 20, 10, alloc_size: 2)
+      assert default.alloc_size == 2
+      assert default.cost == explicit.cost
+    end
+  end
+
   describe "move_range/3" do
     test "moves a range forward, adjusting for the removed elements" do
       assert CodeomeBuffer.move_range([:a, :b, :c, :d, :e], {1, 2}, 4) == [:a, :d, :b, :c, :e]

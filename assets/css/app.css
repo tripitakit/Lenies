@@ -684,6 +684,17 @@
   overflow: hidden;
 }
 
+.codeome-section-divider {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: rgb(167 139 250 / 0.8); /* violet-400-ish, matches plasmid identity */
+  padding: 6px 4px 2px;
+  user-select: none;
+}
+.codeome-genome-panel { display: flex; flex-direction: column; gap: 6px; padding: 6px; }
+.codeome-genome-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.editor-debug-panel { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; }
+
 .lenies-dashboard .codeome-block-selected {
   outline: 1px solid #67e8f9;
   background: rgba(103, 232, 249, 0.12);
@@ -1151,6 +1162,14 @@
 .codeome-inline-error { color: #fbbf24; font-size: 11px; }
 .codeome-template-nop { outline: 1px dashed rgba(103, 232, 249, 0.5); outline-offset: -1px; }
 
+/* === Debug overlay on the unified listing (Task 9) === */
+.codeome-listing-sections { position: relative; padding-left: 36px; }
+.codeome-loop-gutter { position: absolute; left: 0; top: 0; width: 36px; height: 100%; overflow: visible; }
+.codeome-block-ip { outline: 1px solid rgb(251 191 36 / 0.9); background: rgb(251 191 36 / 0.12); }
+.codeome-block-bp .codeome-block-idx, .codeome-block-bp .codeome-bp-toggle { color: rgb(248 113 113); }
+.codeome-bp-toggle { cursor: pointer; }
+.codeome-blocks-runtime { opacity: 0.75; }
+
 /* === Splash landing page === */
 .lenies-splash {
   position: relative;
@@ -1300,48 +1319,10 @@
 }
 
 /* ============================================================ */
-/* Codeome Stepper modal — full-screen overlay debugger.        */
+/* Codeome Stepper — Debug tab + header transport.              */
+/* (Modal classes removed in Task 10 — StepperLive dissolved.) */
 /* ============================================================ */
-.stepper-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  background: rgba(2, 6, 23, 0.85);
-  display: flex;
-  align-items: stretch;
-  justify-content: stretch;
-}
-
-.stepper-modal {
-  flex: 1 1 0;
-  display: flex;
-  flex-direction: column;
-  background: rgba(15, 23, 42, 0.97);
-  color: #e2e8f0;
-  font-size: 12px;
-}
-
-.stepper-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
-  flex: 0 0 auto;
-}
-
-.stepper-header-title {
-  display: flex;
-  flex-direction: column;
-  font-weight: 600;
-}
 .stepper-step-counter { font-size: 10px; opacity: 0.7; font-weight: normal; }
-
-.stepper-controls {
-  display: flex;
-  gap: 0.25rem;
-  margin-left: 1rem;
-}
 
 .stepper-btn {
   font-size: 12px;
@@ -1353,48 +1334,6 @@
 }
 .stepper-btn:hover { border-color: #67e8f9; color: #a5f3fc; }
 .stepper-btn-primary { border-color: rgba(34, 211, 238, 0.6); color: #67e8f9; }
-
-.stepper-close {
-  margin-left: auto;
-  font-size: 16px;
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  cursor: pointer;
-}
-.stepper-close:hover { color: #f87171; }
-
-.stepper-body {
-  display: grid;
-  /* LEFT inspector keeps its 260px slab (its sub-panels are dense numerics).
-     RIGHT mini-world claims 50% of the page so the 64×64 canvas can render
-     at a usable size. CENTER codeome listing absorbs whatever's left
-     (≈ 50vw − 260px on widescreen) — plenty for a 3-column row of pos /
-     opcode / arrow without dead space. */
-  grid-template-columns: 260px minmax(0, 1fr) 50%;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  flex: 1 1 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-@media (max-width: 1279px) {
-  .stepper-body {
-    grid-template-columns: 260px 1fr;
-    grid-template-rows: 1fr 1fr;
-  }
-  .stepper-codeome { grid-row: 1 / 2; grid-column: 2 / 3; }
-  .stepper-world   { grid-row: 2 / 3; grid-column: 2 / 3; }
-}
-@media (max-width: 959px) {
-  .stepper-body {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
-  }
-}
-
-.stepper-inspector { display: flex; flex-direction: column; gap: 0.5rem; min-height: 0; overflow-y: auto; }
 
 .stepper-panel {
   border: 1px solid rgba(148, 163, 184, 0.2);
@@ -1446,109 +1385,11 @@
 .stepper-slot-value { font-variant-numeric: tabular-nums; font-weight: 600; }
 .stepper-slot-label { font-size: 10px; opacity: 0.6; }
 
-.stepper-codeome {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  background: rgba(2, 6, 23, 0.4);
-  padding: 0.5rem;
-}
-.stepper-codeome-panel {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-}
-.stepper-codeome-inner {
-  position: relative;
-}
-.stepper-codeome-list {
-  list-style: none;
-  padding: 0 0 0 32px;
-  margin: 0;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-}
-.stepper-codeome-row {
-  display: grid;
-  grid-template-columns: 14px 48px 1fr 24px;
-  gap: 0.25rem;
-  padding: 2px 6px;
-  height: 20px;
-  box-sizing: border-box;
-  cursor: pointer;
-  border-left: 3px solid transparent;
-}
-.stepper-loop-gutter {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 32px;
-  height: 100%;
-  pointer-events: none;
-  overflow: visible;
-}
 .stepper-loop-arc { fill: none; stroke: #64748b; stroke-width: 1.5; }
 .stepper-loop-arc--active { stroke: #22d3ee; stroke-width: 2; }
-.stepper-codeome-row:hover { background: rgba(34, 211, 238, 0.08); }
-.stepper-codeome-divider {
-  list-style: none;
-  text-align: center;
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  color: rgb(253 224 71 / 0.7); /* yellow-300/70, matches the plasmid badge */
-  padding: 2px 0;
-  user-select: none;
-  cursor: default;
-}
-.stepper-codeome-ip { background: rgba(34, 211, 238, 0.2); border-left-color: #22d3ee; }
-.stepper-codeome-bp { border-left-color: #ef4444; }
-/* Dedicated breakpoint gutter (first grid track). Always present so toggling a
-   breakpoint never shifts the pos/opcode columns — the bullet fills the
-   reserved cell instead of being injected as an extra grid item. */
-.stepper-codeome-bp-dot {
-  color: #ef4444;
-  font-size: 0.7em;
-  line-height: 1;
-  align-self: center;
-  text-align: center;
-}
-.stepper-codeome-bp .stepper-codeome-bp-dot::before { content: "●"; }
-.stepper-codeome-pos { opacity: 0.6; }
-.stepper-codeome-op { font-weight: 600; }
-.stepper-codeome-arrow { color: #22d3ee; }
-
-.stepper-world {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  background: rgba(2, 6, 23, 0.4);
-  padding: 0.5rem;
-  min-height: 0;
-  min-width: 0;
-}
-.stepper-world-canvas-placeholder {
-  flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.5;
-  border: 1px dashed rgba(148, 163, 184, 0.3);
-}
-
-.stepper-footer {
-  padding: 0.5rem 1rem;
-  border-top: 1px solid rgba(148, 163, 184, 0.25);
-  font-size: 10px;
-  opacity: 0.7;
-  font-family: ui-monospace, monospace;
-  flex: 0 0 auto;
-}
 
 .stepper-world-canvas {
-  /* Square canvas that fills the column up to the available vertical space.
-     `width: min(100%, calc(100vh − 180px))` makes it as large as possible
-     without overflowing past the modal header + footer + panel title.
+  /* Square canvas that fills the Debug panel up to the available vertical space.
      Combined with `aspect-ratio: 1` it stays a perfect square. */
   flex: 0 0 auto;
   aspect-ratio: 1;
@@ -1599,12 +1440,6 @@
   padding: 2px 6px;
   font-family: inherit;
 }
-.stepper-seed-active {
-  font-size: 10px;
-  color: #fbbf24;
-  font-style: italic;
-}
-
 .stepper-status-banner {
   padding: 4px 12px;
   font-size: 12px;

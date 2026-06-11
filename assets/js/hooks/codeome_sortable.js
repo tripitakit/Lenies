@@ -37,6 +37,8 @@ const CodeomeSortable = {
   attach() {
     if (this.sortable) this.sortable.destroy();
 
+    const section = this.el.dataset.section;
+
     this.sortable = Sortable.create(this.el, {
       animation: 120,
       handle: ".codeome-drag-handle",
@@ -48,12 +50,15 @@ const CodeomeSortable = {
       // is too tight when the empty .codeome-blocks has a tall flex
       // surface but no children to anchor the insert point.
       emptyInsertThreshold: 20,
-      // Explicitly accept every move into this sortable. SortableJS's
-      // default `onMove` returns `true`, but being explicit means cross-
-      // list adds from the palette (which carry a `.palette-chip` class,
-      // not matching this sortable's `draggable` selector) are guaranteed
-      // not to be silently rejected by any future option tweak.
-      onMove: () => true,
+      // Same SortableJS group as the palette/snippets (so chips drop in),
+      // but a codeome block may not be dragged ACROSS sections — an opcode
+      // belongs to one section (v1; use cut/paste to cross a divider).
+      onMove: (evt) => {
+        if (evt.dragged.classList.contains("codeome-block-editable")) {
+          return evt.from === evt.to;
+        }
+        return true;
+      },
       onEnd: (evt) => {
         // SortableJS gives oldDraggableIndex/newDraggableIndex counting only
         // elements matching the `draggable` selector — these correspond
@@ -66,9 +71,10 @@ const CodeomeSortable = {
           evt.oldDraggableIndex !== evt.newDraggableIndex
         ) {
           if (evt.item.classList.contains("codeome-block-selected")) {
-            this.pushEvent("move_range", { to: evt.newDraggableIndex });
+            this.pushEvent("move_range", { section, to: evt.newDraggableIndex });
           } else {
             this.pushEvent("edit_reorder", {
+              section,
               from: evt.oldDraggableIndex,
               to: evt.newDraggableIndex,
             });
@@ -85,13 +91,13 @@ const CodeomeSortable = {
 
         const snippetId = evt.item?.dataset?.snippetId;
         if (snippetId) {
-          this.pushEvent("insert_snippet_at", { id: snippetId, index });
+          this.pushEvent("insert_snippet_at", { id: snippetId, section, index });
           evt.item.remove();
           return;
         }
 
         const opcode = evt.item?.dataset?.opcode;
-        if (opcode) this.pushEvent("edit_insert", { index, opcode });
+        if (opcode) this.pushEvent("edit_insert", { section, index, opcode });
         evt.item.remove();
       },
     });

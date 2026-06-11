@@ -22,16 +22,18 @@ const EditorKeyboard = {
       const gap = e.target.closest(".codeome-gap");
       if (gap && this.el.contains(gap)) {
         const g = parseInt(gap.dataset.gap, 10);
-        if (Number.isNaN(g)) return;
-        this.pushEvent("place_caret", { gap: g, shift: e.shiftKey === true });
+        const section = gap.dataset.section;
+        if (Number.isNaN(g) || !section) return;
+        this.pushEvent("place_caret", { section, gap: g, shift: e.shiftKey === true });
         return;
       }
 
       const block = e.target.closest(".codeome-block-editable");
       if (!block || !this.el.contains(block)) return;
       const idx = parseInt(block.dataset.idx, 10);
-      if (Number.isNaN(idx)) return;
-      this.pushEvent("select_block", { index: idx, shift: e.shiftKey === true });
+      const section = block.dataset.section;
+      if (Number.isNaN(idx) || !section) return;
+      this.pushEvent("select_block", { section, index: idx, shift: e.shiftKey === true });
     };
 
     this.onKeydown = (e) => {
@@ -51,6 +53,12 @@ const EditorKeyboard = {
       }
       if (key === "home") { e.preventDefault(); this.pushEvent("move_caret_end", { to: "start" }); return; }
       if (key === "end") { e.preventDefault(); this.pushEvent("move_caret_end", { to: "end" }); return; }
+
+      if (mod && key === "s") {
+        e.preventDefault();
+        this.pushEvent("open_save_form", {});
+        return;
+      }
 
       let event = null;
       if (mod && key === "c") event = "copy_selection";
@@ -85,8 +93,9 @@ const EditorKeyboard = {
       const block = e.target.closest(".codeome-block-editable");
       if (!block || !this.el.contains(block)) return;
       const idx = parseInt(block.dataset.idx, 10);
-      if (Number.isNaN(idx)) return;
-      this.pushEvent("start_inline_edit", { index: idx });
+      const section = block.dataset.section;
+      if (Number.isNaN(idx) || !section) return;
+      this.pushEvent("start_inline_edit", { section, index: idx });
     };
     this.el.addEventListener("dblclick", this.onDblClick);
 

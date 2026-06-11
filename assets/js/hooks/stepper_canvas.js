@@ -15,10 +15,10 @@ const StepperCanvas = {
       const x = Math.max(0, Math.min(payload.w - 1, Math.floor((e.clientX - rect.left) / cellPxX)));
       const y = Math.max(0, Math.min(payload.h - 1, Math.floor((e.clientY - rect.top) / cellPxY)));
 
-      // pushEvent goes to the parent LiveView (EditorLive), which then
-      // forwards via send_update to the StepperLive LiveComponent. This
-      // is more reliable than pushEventTo with a component selector when
-      // the hook is inside a `phx-update="ignore"` subtree.
+      // pushEvent goes straight to EditorLive, which owns the stepper
+      // session and handles "stepper:canvas_click" directly. Plain
+      // pushEvent (not pushEventTo) is required because the hook lives
+      // inside a `phx-update="ignore"` subtree.
       this.pushEvent("stepper:canvas_click", {x, y});
     });
 
