@@ -2,7 +2,8 @@ defmodule Lenies.WorldCarcassEatTest do
   use ExUnit.Case, async: false
 
   setup do
-    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world()
+    # Pin eat_amount so the carcass/eat assertions are independent of the default.
+    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(eat_amount: 20)
     on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
     {:ok, world_id: world_id}
   end

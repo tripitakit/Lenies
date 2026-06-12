@@ -53,7 +53,7 @@ this idiom whenever a loop needs to pace itself without branching. (The cookbook
 chapter 11 has more on world-yield patterns.)
 
 **Position 3 — `:eat`**
-Yields to the world and attempts to consume up to `eat_amount` (20 energy units) from the
+Yields to the world and attempts to consume up to `eat_amount` (50 energy units by default) from the
 current cell's resource pool. If the cell is empty the yield still happens; you just don't
 gain energy. Cost: 2.0.
 

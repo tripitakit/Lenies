@@ -114,7 +114,7 @@ Total per cycle           968.20 energy   (~969)
 
 ## 8.3 Gain per cycle
 
-Each successful `:eat` returns `eat_amount = 20` energy. The forage loop runs K = 64 iterations.
+Each successful `:eat` returns up to `eat_amount` energy. The worked figures in this chapter use `eat_amount = 20` (the historical default; the current default is 50 — gains scale linearly). The forage loop runs K = 64 iterations.
 Define `hit_rate` as the fraction of visited cells that have resource when you arrive:
 
 ```
@@ -217,7 +217,7 @@ sustainable  iff
 Where:
 
 - `K` = number of forage iterations between divisions
-- `eat_amount = 20` (default)
+- `eat_amount = 20` (illustrative value; current default 50)
 - `hit_rate` = fraction of visited cells with resource (world-dependent, typically 0.7–1.0 in
   well-seeded runs)
 - `forage_cost_per_iter = 6.9` (for Ancestor's `eat; move` forage body; leaner bodies cost less)

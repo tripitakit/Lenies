@@ -635,7 +635,7 @@ replication — all spent before the child is even born. After the split, each l
 roughly half of whatever was left, and neither has enough energy to replicate again.
 
 With K = 64 iterations of eat+move, the parent earns roughly `K × (eat_gain − cost_per_step)`
-energy per cycle. At the default `eat_amount = 20` and per-step cost of about 6.6 (sense 0.5
+energy per cycle. At `eat_amount = 20` and per-step cost of about 6.6 (sense 0.5
 + drop 0.1 + eat 2.0 + move 2.0 + counter arithmetic ~2.0), the net gain is approximately
 `64 × (20 − 6.6) ≈ 858` energy per forage cycle. That comfortably covers the ~130-unit
 replication cost and leaves energy for the next generation. Chapter 8 does the full budget

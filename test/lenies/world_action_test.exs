@@ -2,7 +2,8 @@ defmodule Lenies.WorldActionTest do
   use ExUnit.Case, async: false
 
   setup do
-    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0)
+    # Pin eat_amount so the eat assertions are independent of the project default.
+    {:ok, world_id} = Lenies.WorldTestHelpers.start_test_world(tick_interval_ms: 0, eat_amount: 20)
     on_exit(fn -> Lenies.WorldTestHelpers.stop_test_world(world_id) end)
     {:ok, world_id: world_id}
   end

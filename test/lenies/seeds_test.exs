@@ -16,9 +16,9 @@ defmodule Lenies.SeedsTest do
     end
   end
 
-  test "all/0 is the four-rung capability ladder, in order" do
+  test "all/0 is the four-rung capability ladder plus the applied MaxForager, in order" do
     ids = Seeds.all() |> Enum.map(& &1.id)
-    assert ids == [:reflex, :ancestor, :architect, :symbiont]
+    assert ids == [:reflex, :ancestor, :architect, :symbiont, :max_forager]
   end
 
   test "get/1 returns a seed by id" do

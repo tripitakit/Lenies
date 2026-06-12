@@ -17,6 +17,10 @@ defmodule Lenies.Seeds do
   Forager) remains in `lib/lenies/codeomes/` for reference and is still covered
   by its tests, but is no longer offered as a default.
 
+  Beyond the ladder, `MaxForager` is an applied seed: a gradient-climbing
+  replicator that, each step, senses its four neighbours and moves onto the
+  highest-energy one to eat it.
+
   Each seed record has:
   - `id`: atom identifier (used in dropdown values)
   - `name`: human-readable label
@@ -27,7 +31,7 @@ defmodule Lenies.Seeds do
     plasmid at runtime instead.
   """
 
-  alias Lenies.Codeomes.{Ancestor, Architect, Reflex, Symbiont}
+  alias Lenies.Codeomes.{Ancestor, Architect, MaxForager, Reflex, Symbiont}
 
   @doc "All available seeds as a list of records, in ladder order (simple → complex)."
   def all do
@@ -55,6 +59,14 @@ defmodule Lenies.Seeds do
         name: "Symbiont (Conjugator)",
         codeome: Symbiont.codeome(),
         default_options: %{energy: 10_000.0}
+      },
+      %{
+        id: :max_forager,
+        name: "MaxForager (Gradient)",
+        codeome: MaxForager.codeome(),
+        # Generous starting buffer: the per-step argmax + the long chromosome
+        # make replication expensive, so it needs room to get a lineage going.
+        default_options: %{energy: 50_000.0}
       }
     ]
   end
