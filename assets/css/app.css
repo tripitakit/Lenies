@@ -1375,6 +1375,17 @@
 .stepper-state-list dt { opacity: 0.6; }
 .stepper-state-list dd { margin: 0; font-weight: 600; }
 
+/* DEBUG: compact State panel — smaller font, tighter rows, two key/value
+   pairs per row, so it takes roughly half the vertical space. */
+.stepper-panel-state { padding: 0.3rem 0.5rem; }
+.stepper-panel-state .stepper-panel-title { margin-bottom: 0.15rem; }
+.stepper-panel-state .stepper-state-list {
+  grid-template-columns: max-content 1fr max-content 1fr;
+  gap: 0 0.6rem;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
 .stepper-stack, .stepper-callstack { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
 .stepper-stack { flex-direction: column-reverse; }
 

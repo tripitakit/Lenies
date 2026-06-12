@@ -17,6 +17,64 @@ defmodule LeniesWeb.EditorComponents.DebugPanel do
     <%= if @session do %>
       <div class="editor-debug-panel">
         <section class="stepper-panel">
+          <h3 class="stepper-panel-title">
+            Mini-world {elem(@session.world.grid, 0)}×{elem(@session.world.grid, 1)}
+            <%= if @session.place_seed_mode do %>
+              <span class="stepper-place-hint">— click to place</span>
+            <% end %>
+          </h3>
+          <form phx-change="stepper_select_seed" class="stepper-seed-picker">
+            <label class="stepper-seed-label">Place:</label>
+            <select name="value" class="stepper-seed-select">
+              <option value="">(none)</option>
+              <optgroup label="Built-in">
+                <%= for seed <- Lenies.Seeds.all() do %>
+                  <option
+                    value={"builtin:" <> Atom.to_string(seed.id)}
+                    selected={
+                      @session.place_seed_mode &&
+                        @session.place_seed_mode.seed_id == {:builtin, seed.id}
+                    }
+                  >
+                    {seed.name}
+                  </option>
+                <% end %>
+              </optgroup>
+              <optgroup label="My collection">
+                <%= for c <- Lenies.Collection.list_codeomes(@current_user) do %>
+                  <option
+                    value={"collection:" <> Integer.to_string(c.id)}
+                    selected={
+                      @session.place_seed_mode &&
+                        @session.place_seed_mode.seed_id == {:collection, c.id}
+                    }
+                  >
+                    {c.name}
+                  </option>
+                <% end %>
+              </optgroup>
+            </select>
+          </form>
+          <div
+            id="stepper-canvas"
+            phx-hook="StepperCanvas"
+            phx-update="ignore"
+            class={[
+              "stepper-world-canvas",
+              @session.place_seed_mode && "stepper-world-canvas-arm"
+            ]}
+            data-payload={@grid_payload_json}
+          >
+          </div>
+          <div class="stepper-depth">
+            Genome: {codeome_size_label(@session)} ops
+            <%= if @session.halt_reason do %>
+              · halt: {@session.halt_reason}
+            <% end %>
+          </div>
+        </section>
+
+        <section class="stepper-panel stepper-panel-state">
           <h3 class="stepper-panel-title">State</h3>
           <dl class="stepper-state-list">
             <dt>energy</dt>
@@ -83,64 +141,6 @@ defmodule LeniesWeb.EditorComponents.DebugPanel do
               <li class="stepper-empty">empty</li>
             <% end %>
           </ol>
-        </section>
-
-        <section class="stepper-panel">
-          <h3 class="stepper-panel-title">
-            Mini-world {elem(@session.world.grid, 0)}×{elem(@session.world.grid, 1)}
-            <%= if @session.place_seed_mode do %>
-              <span class="stepper-place-hint">— click to place</span>
-            <% end %>
-          </h3>
-          <form phx-change="stepper_select_seed" class="stepper-seed-picker">
-            <label class="stepper-seed-label">Place:</label>
-            <select name="value" class="stepper-seed-select">
-              <option value="">(none)</option>
-              <optgroup label="Built-in">
-                <%= for seed <- Lenies.Seeds.all() do %>
-                  <option
-                    value={"builtin:" <> Atom.to_string(seed.id)}
-                    selected={
-                      @session.place_seed_mode &&
-                        @session.place_seed_mode.seed_id == {:builtin, seed.id}
-                    }
-                  >
-                    {seed.name}
-                  </option>
-                <% end %>
-              </optgroup>
-              <optgroup label="My collection">
-                <%= for c <- Lenies.Collection.list_codeomes(@current_user) do %>
-                  <option
-                    value={"collection:" <> Integer.to_string(c.id)}
-                    selected={
-                      @session.place_seed_mode &&
-                        @session.place_seed_mode.seed_id == {:collection, c.id}
-                    }
-                  >
-                    {c.name}
-                  </option>
-                <% end %>
-              </optgroup>
-            </select>
-          </form>
-          <div
-            id="stepper-canvas"
-            phx-hook="StepperCanvas"
-            phx-update="ignore"
-            class={[
-              "stepper-world-canvas",
-              @session.place_seed_mode && "stepper-world-canvas-arm"
-            ]}
-            data-payload={@grid_payload_json}
-          >
-          </div>
-          <div class="stepper-depth">
-            Genome: {codeome_size_label(@session)} ops
-            <%= if @session.halt_reason do %>
-              · halt: {@session.halt_reason}
-            <% end %>
-          </div>
         </section>
       </div>
     <% else %>
