@@ -705,7 +705,7 @@ subsequent `:mod` or `:sub` then operates on the wrong values entirely.
 `:read_self` pops the address from the top of the stack and pushes the
 **integer encoding** of the opcode found at `codeome[addr mod size]`.
 It does NOT push the opcode atom name — it pushes a small integer
-(0..37).  The canonical encoding map:
+(0..39).  The canonical encoding map:
 
 ```
 0  :nop_0          14 :jnz_t          28 :get_ip
@@ -718,8 +718,8 @@ It does NOT push the opcode atom name — it pushes a small integer
 7  :swap           21 :sense_size     35 :load
 8  :add            22 :move           36 :make_plasmid
 9  :sub            23 :turn_left      37 :conjugate
-10 :mul            24 :turn_right
-11 :mod            25 :eat
+10 :mul            24 :turn_right     38 :jlt_t
+11 :mod            25 :eat            39 :jgt_t
 12 :jmp_t          26 :attack
 13 :jz_t           27 :defend
 ```
