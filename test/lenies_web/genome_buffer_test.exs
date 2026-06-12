@@ -130,4 +130,122 @@ defmodule LeniesWeb.GenomeBufferTest do
       assert GenomeBuffer.remap_breakpoints(old, new, bps) == MapSet.new([])
     end
   end
+
+  describe "comments" do
+    test "a new genome has no comments" do
+      assert GenomeBuffer.new([:push0, :add]).comments == %{}
+    end
+
+    test "put_comment/get_comment store and read a cell comment" do
+      g = GenomeBuffer.put_comment(GenomeBuffer.new([:push0, :add]), :chromosome, 1, "the add")
+      assert GenomeBuffer.get_comment(g, :chromosome, 1) == "the add"
+      assert GenomeBuffer.get_comment(g, :chromosome, 0) == nil
+    end
+
+    test "put_comment trims and truncates to 32 chars; blank clears" do
+      long = String.duplicate("x", 50)
+      g = GenomeBuffer.put_comment(GenomeBuffer.new([:push0, :add]), :chromosome, 0, long)
+      assert String.length(GenomeBuffer.get_comment(g, :chromosome, 0)) == 32
+
+      g2 = GenomeBuffer.put_comment(g, :chromosome, 0, "   ")
+      assert GenomeBuffer.get_comment(g2, :chromosome, 0) == nil
+    end
+
+    test "insert shifts a comment so it stays on its opcode" do
+      g =
+        GenomeBuffer.new([:push0, :push1, :add, :move])
+        |> GenomeBuffer.put_comment(:chromosome, 2, "loop head")
+
+      g2 = GenomeBuffer.insert(g, :chromosome, 1, :dup)
+
+      assert GenomeBuffer.get_section(g2, :chromosome) == [:push0, :dup, :push1, :add, :move]
+      assert GenomeBuffer.get_comment(g2, :chromosome, 3) == "loop head"
+      assert GenomeBuffer.get_comment(g2, :chromosome, 2) == nil
+    end
+
+    test "delete drops the deleted cell's comment and shifts later ones" do
+      g =
+        GenomeBuffer.new([:push0, :push1, :add, :move])
+        |> GenomeBuffer.put_comment(:chromosome, 1, "b")
+        |> GenomeBuffer.put_comment(:chromosome, 2, "c")
+
+      g2 = GenomeBuffer.delete(g, :chromosome, 1)
+
+      assert GenomeBuffer.get_section(g2, :chromosome) == [:push0, :add, :move]
+      assert GenomeBuffer.get_comment(g2, :chromosome, 0) == nil
+      # "b" was on the deleted cell → gone; "c" followed :add down to idx 1
+      assert GenomeBuffer.get_comment(g2, :chromosome, 1) == "c"
+      refute Enum.any?(g2.comments, fn {_k, v} -> v == "b" end)
+    end
+
+    test "move relocates a comment with its opcode" do
+      g =
+        GenomeBuffer.new([:push0, :push1, :add, :move])
+        |> GenomeBuffer.put_comment(:chromosome, 2, "x")
+
+      g2 = GenomeBuffer.move(g, :chromosome, 2, 0)
+
+      assert GenomeBuffer.get_section(g2, :chromosome) == [:add, :push0, :push1, :move]
+      assert GenomeBuffer.get_comment(g2, :chromosome, 0) == "x"
+    end
+
+    test "delete_range and move_range remap comments consistently with the opcodes" do
+      g =
+        GenomeBuffer.new([:push0, :push1, :add, :move, :eat])
+        |> GenomeBuffer.put_comment(:chromosome, 3, "keep")
+
+      # delete the first two cells; :move(idx3) shifts to idx1
+      g2 = GenomeBuffer.delete_range(g, :chromosome, {0, 1})
+      assert GenomeBuffer.get_section(g2, :chromosome) == [:add, :move, :eat]
+      assert GenomeBuffer.get_comment(g2, :chromosome, 1) == "keep"
+    end
+
+    test "an edit in one section leaves other sections' comments untouched" do
+      g =
+        GenomeBuffer.new([:push0, :add], [[:move, :eat]])
+        |> GenomeBuffer.put_comment({:plasmid, 0}, 1, "p")
+
+      g2 = GenomeBuffer.insert(g, :chromosome, 0, :dup)
+      assert GenomeBuffer.get_comment(g2, {:plasmid, 0}, 1) == "p"
+    end
+
+    test "comments_by_flat maps section-local comments to flat exec indices" do
+      g =
+        GenomeBuffer.new([:push0, :add], [[:move, :eat]])
+        |> GenomeBuffer.put_comment(:chromosome, 1, "c")
+        |> GenomeBuffer.put_comment({:plasmid, 0}, 1, "e")
+
+      # chromosome occupies flat 0..1; plasmid 0 starts at flat 2
+      assert GenomeBuffer.comments_by_flat(g) == %{1 => "c", 3 => "e"}
+    end
+
+    test "comments_by_flat and put_comments_by_flat round-trip" do
+      g =
+        GenomeBuffer.new([:push0, :add], [[:move, :eat]])
+        |> GenomeBuffer.put_comment(:chromosome, 0, "head")
+        |> GenomeBuffer.put_comment({:plasmid, 0}, 1, "tail")
+
+      flat = GenomeBuffer.comments_by_flat(g)
+      rebuilt = GenomeBuffer.put_comments_by_flat(GenomeBuffer.new([:push0, :add], [[:move, :eat]]), flat)
+
+      assert rebuilt.comments == g.comments
+    end
+
+    test "put_comments_by_flat ignores indices past the end of the genome" do
+      g = GenomeBuffer.put_comments_by_flat(GenomeBuffer.new([:push0, :add]), %{0 => "ok", 99 => "x"})
+      assert GenomeBuffer.get_comment(g, :chromosome, 0) == "ok"
+      assert map_size(g.comments) == 1
+    end
+
+    test "remove_plasmid drops that plasmid's comments and shifts later plasmids" do
+      g =
+        GenomeBuffer.new([:push0], [[:move], [:eat]])
+        |> GenomeBuffer.put_comment({:plasmid, 0}, 0, "p0")
+        |> GenomeBuffer.put_comment({:plasmid, 1}, 0, "p1")
+
+      g2 = GenomeBuffer.remove_plasmid(g, 0)
+      assert GenomeBuffer.get_comment(g2, {:plasmid, 0}, 0) == "p1"
+      assert map_size(g2.comments) == 1
+    end
+  end
 end

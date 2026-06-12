@@ -23,6 +23,11 @@ defmodule Lenies.Codeome.OpcodesTest do
     assert :divide in Opcodes.all()
   end
 
+  test "comparison branch opcodes are in the whitelist" do
+    assert :jlt_t in Opcodes.all()
+    assert :jgt_t in Opcodes.all()
+  end
+
   test "encode/1 returns an integer for known opcodes" do
     assert is_integer(Opcodes.encode(:nop_0))
     assert is_integer(Opcodes.encode(:move))

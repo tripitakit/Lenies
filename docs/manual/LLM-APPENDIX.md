@@ -75,10 +75,11 @@ chromosome exactly.
 
 ---
 
-## 2. The 38 opcodes — quick reference
+## 2. The 40 opcodes — quick reference
 
-The 38 opcodes are indexed 0..37 in the encoding map. Any integer outside
-0..37 decodes as `:nop_0` (mutation tolerance).
+The 40 opcodes are indexed 0..39 in the encoding map. Any integer outside
+0..39 decodes as `:nop_0` (mutation tolerance). `:jlt_t`/`:jgt_t` are appended
+at indices 38/39 so all earlier encodings are unchanged.
 
 ### Notation in this table
 
@@ -128,6 +129,8 @@ The 38 opcodes are indexed 0..37 in the encoding map. Any integer outside
 | 35 | `:load` | 0.5 | `( slot_idx -- value )` | |
 | 36 | `:make_plasmid` | `2.0 + 0.05·length` | `( start_addr length -- ok? )` | Pushes 1 on success, 0 on fail |
 | 37 | `:conjugate` | `4.0 + 0.05·plasmid_size` | `( -- ok? )` | Push 1 if a neighbor accepted the plasmid, else 0 |
+| 38 | `:jlt_t` | `0.2 + 0.05·t_len` | `( a -- )` | Jumps iff popped < 0 (sign test; compare via `sub` first) |
+| 39 | `:jgt_t` | `0.2 + 0.05·t_len` | `( a -- )` | Jumps iff popped > 0 (sign test) |
 
 **Empty-pop rule.** Any opcode that pops with nothing on the stack reads `0`.
 So `:add` on `[]` becomes `0 + 0 = 0` (result pushed), `:store` with one
@@ -436,7 +439,7 @@ begin with an anchor matching a per-iteration jump the host performs.
     typos as valid atoms, and `Codeome.from_list/1` does NOT validate them
     — it stores whatever you give it. Validation happens at the editor
     layer (via `Codeome.Opcodes.known?/1`), which rejects any atom not in
-    the 38-opcode whitelist before the codeome is built. (At execution
+    the 40-opcode whitelist before the codeome is built. (At execution
     time an unrecognized opcode is treated as `:nop_0`, so a typo silently
     becomes a no-op rather than crashing.)
 
@@ -474,7 +477,7 @@ begin with an anchor matching a per-iteration jump the host performs.
 
 Before outputting a codeome, mentally run through this list:
 
-1. **All opcode atoms are in the 38-opcode whitelist (no typos).** Use
+1. **All opcode atoms are in the 40-opcode whitelist (no typos).** Use
    the table in §2 as the canonical reference. The editor rejects any
    atom outside the whitelist (via `Codeome.Opcodes.known?/1`) before
    building the codeome; `Codeome.from_list/1` itself does not validate,

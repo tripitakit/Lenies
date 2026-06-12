@@ -69,6 +69,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:show_snippet_form, false)
       |> assign(:snippet_form_error, nil)
       |> assign(:editing_addr, nil)
+      |> assign(:commenting_addr, nil)
       |> assign(:inline_edit_error, nil)
       |> assign(:right_tab, :genome)
       |> assign(:plasmid_remove_confirming, nil)
@@ -120,6 +121,7 @@ defmodule LeniesWeb.EditorLive do
             Lenies.Collection.to_opcode_atoms(entry),
             Lenies.Collection.to_plasmid_structs(entry) |> Enum.map(& &1.opcodes)
           )
+          |> GenomeBuffer.put_comments_by_flat(decode_saved_comments(entry.comments))
 
         # Loading one of your saved codeomes pre-fills the save form so the
         # edit -> save (overwrite) loop doesn't ask you to retype anything.
@@ -217,8 +219,7 @@ defmodule LeniesWeb.EditorLive do
     section = decode_section(sec)
     idx = to_int(index)
 
-    new_genome =
-      GenomeBuffer.update_section(socket.assigns.genome, section, &CodeomeBuffer.delete(&1, idx))
+    new_genome = GenomeBuffer.delete(socket.assigns.genome, section, idx)
 
     {:noreply,
      socket
@@ -229,12 +230,7 @@ defmodule LeniesWeb.EditorLive do
   def handle_event("edit_reorder", %{"section" => sec, "from" => from, "to" => to}, socket) do
     section = decode_section(sec)
 
-    new_genome =
-      GenomeBuffer.update_section(
-        socket.assigns.genome,
-        section,
-        &CodeomeBuffer.move(&1, to_int(from), to_int(to))
-      )
+    new_genome = GenomeBuffer.move(socket.assigns.genome, section, to_int(from), to_int(to))
 
     {:noreply,
      socket
@@ -471,12 +467,7 @@ defmodule LeniesWeb.EditorLive do
         buf = GenomeBuffer.get_section(socket.assigns.genome, section)
         clip = CodeomeBuffer.slice(buf, range)
 
-        new_genome =
-          GenomeBuffer.update_section(
-            socket.assigns.genome,
-            section,
-            &CodeomeBuffer.delete_range(&1, range)
-          )
+        new_genome = GenomeBuffer.delete_range(socket.assigns.genome, section, range)
 
         {:noreply,
          socket
@@ -503,12 +494,7 @@ defmodule LeniesWeb.EditorLive do
         clip = CodeomeBuffer.slice(buf, range)
         at = hi + 1
 
-        new_genome =
-          GenomeBuffer.update_section(
-            socket.assigns.genome,
-            section,
-            &CodeomeBuffer.insert_many(&1, at, clip)
-          )
+        new_genome = GenomeBuffer.insert_many(socket.assigns.genome, section, at, clip)
 
         {:noreply,
          socket
@@ -523,12 +509,7 @@ defmodule LeniesWeb.EditorLive do
         {:noreply, socket}
 
       {section, range} ->
-        new_genome =
-          GenomeBuffer.update_section(
-            socket.assigns.genome,
-            section,
-            &CodeomeBuffer.delete_range(&1, range)
-          )
+        new_genome = GenomeBuffer.delete_range(socket.assigns.genome, section, range)
 
         {:noreply,
          socket
@@ -543,12 +524,7 @@ defmodule LeniesWeb.EditorLive do
       buf = GenomeBuffer.get_section(socket.assigns.genome, section)
       to_gap = to_int(to) |> max(0) |> min(length(buf))
 
-      new_genome =
-        GenomeBuffer.update_section(
-          socket.assigns.genome,
-          section,
-          &CodeomeBuffer.move_range(&1, range, to_gap)
-        )
+      new_genome = GenomeBuffer.move_range(socket.assigns.genome, section, range, to_gap)
 
       n = hi - lo + 1
       new_lo = if to_gap <= lo, do: to_gap, else: to_gap - n
@@ -576,12 +552,7 @@ defmodule LeniesWeb.EditorLive do
         if (dir == "up" and lo == 0) or (dir == "down" and hi + 1 >= len) do
           {:noreply, socket}
         else
-          new_genome =
-            GenomeBuffer.update_section(
-              socket.assigns.genome,
-              section,
-              &CodeomeBuffer.move_range(&1, range, to_gap)
-            )
+          new_genome = GenomeBuffer.move_range(socket.assigns.genome, section, range, to_gap)
 
           n = hi - lo + 1
           new_lo = if dir == "up", do: lo - 1, else: lo + 1
@@ -746,6 +717,33 @@ defmodule LeniesWeb.EditorLive do
 
   def handle_event("cancel_inline_edit", _params, socket) do
     {:noreply, assign(socket, editing_addr: nil, inline_edit_error: nil)}
+  end
+
+  def handle_event("begin_comment", %{"section" => sec, "index" => index}, socket) do
+    {:noreply, assign(socket, :commenting_addr, {decode_section(sec), to_int(index)})}
+  end
+
+  def handle_event("cancel_comment", _params, socket) do
+    {:noreply, assign(socket, :commenting_addr, nil)}
+  end
+
+  # Comments are non-executable cell annotations: setting one records undo
+  # history and marks the buffer dirty, but does NOT recompute jump
+  # targets/economics or hot-restart the stepper (the exec codeome is
+  # unchanged). `put_comment` trims/truncates to the 32-char cap; a blank
+  # value clears the comment.
+  def handle_event("edit_comment", %{"section" => sec, "index" => index, "text" => text}, socket) do
+    section = decode_section(sec)
+    idx = to_int(index)
+    new_genome = GenomeBuffer.put_comment(socket.assigns.genome, section, idx, text)
+    history = EditorHistory.record(socket.assigns.history, socket.assigns.genome)
+
+    {:noreply,
+     socket
+     |> assign(:history, history)
+     |> assign(:genome, new_genome)
+     |> assign(:commenting_addr, nil)
+     |> assign(:dirty, new_genome != socket.assigns.original_genome)}
   end
 
   def handle_event("jump_to_flat", %{"flat" => flat}, socket) do
@@ -1016,6 +1014,7 @@ defmodule LeniesWeb.EditorLive do
           economics={@economics}
           jump_targets={@jump_targets}
           editing_addr={@editing_addr}
+          commenting_addr={@commenting_addr}
           inline_edit_error={@inline_edit_error}
           session={@session}
           stepper_notice={@stepper_notice}
@@ -1262,15 +1261,10 @@ defmodule LeniesWeb.EditorLive do
           {socket.assigns.genome, section, gap}
 
         {section, {lo, _hi} = range} ->
-          {GenomeBuffer.update_section(
-             socket.assigns.genome,
-             section,
-             &CodeomeBuffer.delete_range(&1, range)
-           ), section, lo}
+          {GenomeBuffer.delete_range(socket.assigns.genome, section, range), section, lo}
       end
 
-    new_genome =
-      GenomeBuffer.update_section(genome, section, &CodeomeBuffer.insert_many(&1, at, opcodes))
+    new_genome = GenomeBuffer.insert_many(genome, section, at, opcodes)
 
     socket
     |> put_caret(GenomeCaret.after_insert(section, at, length(opcodes)))
@@ -1298,6 +1292,27 @@ defmodule LeniesWeb.EditorLive do
 
   defp parse_clamped(_, _, _, default), do: default
 
+  # Persisted comments come back as a string-keyed JSON map (%{"3" => "txt"});
+  # parse keys to integers, dropping anything unparseable.
+  defp decode_saved_comments(map) when is_map(map) do
+    for {k, v} <- map, flat = parse_flat_key(k), is_integer(flat), is_binary(v), into: %{} do
+      {flat, v}
+    end
+  end
+
+  defp decode_saved_comments(_), do: %{}
+
+  defp parse_flat_key(k) when is_integer(k), do: k
+
+  defp parse_flat_key(k) when is_binary(k) do
+    case Integer.parse(k) do
+      {n, ""} -> n
+      _ -> nil
+    end
+  end
+
+  defp parse_flat_key(_), do: nil
+
   defp save_attrs(socket, name, color, energy_str) do
     %{
       name: name,
@@ -1307,7 +1322,12 @@ defmodule LeniesWeb.EditorLive do
       plasmids:
         socket.assigns.genome.plasmids
         |> Enum.reject(&(&1 == []))
-        |> Enum.map(fn ops -> %{opcodes: Enum.map(ops, &Atom.to_string/1)} end)
+        |> Enum.map(fn ops -> %{opcodes: Enum.map(ops, &Atom.to_string/1)} end),
+      # Cell comments persisted by flat exec index (string keys for JSON).
+      comments:
+        socket.assigns.genome
+        |> GenomeBuffer.comments_by_flat()
+        |> Map.new(fn {flat, text} -> {Integer.to_string(flat), text} end)
     }
   end
 

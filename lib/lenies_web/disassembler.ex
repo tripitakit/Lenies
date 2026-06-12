@@ -12,22 +12,28 @@ defmodule LeniesWeb.Disassembler do
   @type line :: %{
           index: non_neg_integer(),
           opcode: atom(),
-          is_current: boolean()
+          is_current: boolean(),
+          comment: String.t() | nil
         }
 
   @doc """
   Convert a Codeome into a list of line records, marking the current IP line.
 
-  `current_ip` may be `nil` (no highlight). Out-of-range IP also produces no highlight.
+  `current_ip` may be `nil` (no highlight). Out-of-range IP also produces no
+  highlight. `comments` is an optional `%{flat_index => text}` map of
+  non-executable cell annotations (see `LeniesWeb.GenomeBuffer.comments_by_flat/1`);
+  each line carries its `comment` (or `nil`).
   """
-  @spec disassemble(Codeome.t(), non_neg_integer() | nil) :: [line()]
-  def disassemble(%Codeome{} = c, current_ip) do
+  @spec disassemble(Codeome.t(), non_neg_integer() | nil, %{
+          optional(non_neg_integer()) => String.t()
+        }) :: [line()]
+  def disassemble(%Codeome{} = c, current_ip, comments \\ %{}) do
     opcodes = Codeome.to_list(c)
 
     opcodes
     |> Enum.with_index()
     |> Enum.map(fn {op, idx} ->
-      %{index: idx, opcode: op, is_current: idx == current_ip}
+      %{index: idx, opcode: op, is_current: idx == current_ip, comment: Map.get(comments, idx)}
     end)
   end
 
@@ -36,7 +42,8 @@ defmodule LeniesWeb.Disassembler do
   def opcode_class(op) when op in [:nop_0, :nop_1], do: :template
   def opcode_class(op) when op in [:push0, :push1, :pushN, :dup, :drop, :swap], do: :stack
   def opcode_class(op) when op in [:add, :sub, :mul, :mod], do: :arith
-  def opcode_class(op) when op in [:jmp_t, :jz_t, :jnz_t, :call_t, :ret], do: :control
+  def opcode_class(op) when op in [:jmp_t, :jz_t, :jnz_t, :jlt_t, :jgt_t, :call_t, :ret],
+    do: :control
 
   def opcode_class(op)
       when op in [:sense_front, :sense_self, :sense_energy, :sense_age, :sense_size],

@@ -26,7 +26,7 @@ An empty stack is safe: popping it returns `0` without crashing.
 | Template / no-op | 2 | Encode anchors and template values |
 | Stack | 6 | Manipulate values on the data stack |
 | Arithmetic | 4 | Integer math |
-| Control flow | 5 | Branching, subroutine calls, returns |
+| Control flow | 7 | Branching (zero/sign tests), subroutine calls, returns |
 | Sense (local) | 4 | Read self-state without touching the world |
 | Sense (world) | 1 | Query the cell directly in front |
 | Orientation | 2 | Rotate facing direction 90° |
@@ -37,7 +37,7 @@ An empty stack is safe: popping it returns `0` without crashing.
 | Memory | 2 | Slot store / load |
 | Horizontal transfer | 2 | Carve a plasmid, conjugate it to a neighbour |
 
-**Total: 38 opcodes.** Verified against `@opcodes` in `opcodes.ex`. The two
+**Total: 40 opcodes.** Verified against `@opcodes` in `opcodes.ex`. The two
 horizontal-transfer opcodes (`make_plasmid`, `conjugate`) are covered in depth
 in [Chapter 10](10-conjugation-and-plasmids.md).
 
@@ -173,6 +173,24 @@ through if `c != 0` or no complement is found.
 **Cost:** `0.2 + 0.05 × template_len`
 **Description:** Pops `c` (always consumed), then jumps if `c != 0`. Mirror
 image of `jz_t`.
+
+### `jlt_t`
+
+**Stack:** `( c -- )`
+**Cost:** `0.2 + 0.05 × template_len`
+**Description:** Pops `c` (always consumed), then jumps if `c < 0`. The
+sign-testing twin of `jz_t`: compare two values with `sub` first
+(`a; b; sub` leaves `a − b`), then `jlt_t` branches on the sign. Together with
+`jgt_t` and `jz_t` this gives the full set of order relations (`<`, `>`, `==`,
+and their negations).
+
+### `jgt_t`
+
+**Stack:** `( c -- )`
+**Cost:** `0.2 + 0.05 × template_len`
+**Description:** Pops `c` (always consumed), then jumps if `c > 0`. Mirror image
+of `jlt_t`. Enables threshold behaviour like "reproduce only if energy above X":
+`sense_energy; <build X>; sub; jgt_t REPRODUCE`.
 
 ### `call_t`
 

@@ -17,6 +17,7 @@ defmodule LeniesWeb.EditorComponents.Listing do
   attr :economics, :map, required: true
   attr :jump_targets, :map, required: true
   attr :editing_addr, :any, default: nil
+  attr :commenting_addr, :any, default: nil
   attr :inline_edit_error, :string, default: nil
   attr :session, :any, default: nil
   attr :stepper_notice, :any, default: nil
@@ -285,7 +286,51 @@ defmodule LeniesWeb.EditorComponents.Listing do
                     </span>
                   <% nil -> %>
                 <% end %>
+                <%= if @commenting_addr == {section, idx} do %>
+                  <form phx-submit="edit_comment" class="codeome-inline-edit">
+                    <input type="hidden" name="section" value={sec} />
+                    <input type="hidden" name="index" value={idx} />
+                    <input
+                      type="text"
+                      name="text"
+                      value={GenomeBuffer.get_comment(@genome, section, idx) || ""}
+                      maxlength={GenomeBuffer.comment_max_len()}
+                      placeholder="comment…"
+                      autocomplete="off"
+                      spellcheck="false"
+                      phx-blur="cancel_comment"
+                      phx-keydown="cancel_comment"
+                      phx-key="Escape"
+                      phx-mounted={JS.focus()}
+                      class="codeome-inline-input codeome-comment-input"
+                    />
+                  </form>
+                <% else %>
+                  <% comment = GenomeBuffer.get_comment(@genome, section, idx) %>
+                  <%= if comment do %>
+                    <button
+                      type="button"
+                      class="codeome-block-comment"
+                      phx-click="begin_comment"
+                      phx-value-section={sec}
+                      phx-value-index={idx}
+                      title="Edit comment"
+                    >
+                      💬 {comment}
+                    </button>
+                  <% end %>
+                <% end %>
                 <span class="codeome-block-actions">
+                  <button
+                    type="button"
+                    phx-click="begin_comment"
+                    phx-value-section={sec}
+                    phx-value-index={idx}
+                    class="codeome-action-btn"
+                    title="Comment"
+                  >
+                    💬
+                  </button>
                   <button
                     type="button"
                     phx-click="edit_delete"

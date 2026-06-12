@@ -29,6 +29,13 @@ defmodule Lenies.Codeome.CostsTest do
     assert Costs.cost(:jmp_t, 8) == 0.6
   end
 
+  test "cost/2 for comparison branches scales like other jumps" do
+    assert Costs.cost(:jlt_t, 0) == 0.2
+    assert Costs.cost(:jlt_t, 4) == 0.4
+    assert Costs.cost(:jgt_t, 0) == 0.2
+    assert Costs.cost(:jgt_t, 4) == 0.4
+  end
+
   test "cost/2 for unknown opcode returns 0.1 (treated as nop_0)" do
     assert Costs.cost(:foo_bar, 0) == 0.1
   end

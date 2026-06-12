@@ -46,7 +46,7 @@ that seems to vanish for no obvious reason.
 ## What is a codeome?
 
 A codeome is a list of **opcodes** — named instructions drawn from a fixed
-whitelist of 38 atoms. An opcode is just a symbol like `:move`, `:eat`, or
+whitelist of 40 atoms. An opcode is just a symbol like `:move`, `:eat`, or
 `:push1`. Every Lenie runs exactly one codeome, and the codeome can be
 anywhere from 5 to 1024 opcodes long.
 
@@ -66,7 +66,7 @@ simulator computes a species ID by hashing the opcode sequence with
 `:erlang.phash2` — the same sequence always produces the same ID, a
 fingerprint that lets the world track lineages across time.
 
-The 38 opcodes are grouped into categories you will learn gradually:
+The 40 opcodes are grouped into categories you will learn gradually:
 template/nop bits, stack manipulation, arithmetic, control flow, sensing,
 movement, eating, predation, self-inspection, replication, memory slots,
 and horizontal transfer (plasmid conjugation, Chapter 10).

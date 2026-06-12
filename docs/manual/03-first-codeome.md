@@ -142,7 +142,7 @@ Three things must be true:
 
 1. **Length in bounds:** the codeome must have between 5 and 1024 opcodes.
 2. **Enough non-nop opcodes:** at least 10 opcodes that are not `:nop_0` or `:nop_1`.
-3. **All opcodes in the whitelist:** every atom must be in the 38-entry opcode set.
+3. **All opcodes in the whitelist:** every atom must be in the 40-entry opcode set.
 
 The conceptual Crawler above has **8 opcodes total** and **6 non-nops**
 (`:sense_front`, `:drop`, `:eat`, `:move`, `:jmp_t`, `:push0`). It passes rule 1 and

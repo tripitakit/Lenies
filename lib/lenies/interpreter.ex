@@ -19,7 +19,7 @@ defmodule Lenies.Interpreter do
   alias Lenies.Codeome.Costs
   alias Lenies.Interpreter.{State, Template}
 
-  @jump_opcodes [:jmp_t, :jz_t, :jnz_t, :call_t]
+  @jump_opcodes [:jmp_t, :jz_t, :jnz_t, :jlt_t, :jgt_t, :call_t]
 
   @type step_result ::
           {:cont, State.t()}
@@ -214,6 +214,8 @@ defmodule Lenies.Interpreter do
   defp dispatch(:jmp_t, state, codeome, size), do: do_jump(state, codeome, size, :jmp_t, :always)
   defp dispatch(:jz_t, state, codeome, size), do: do_jump(state, codeome, size, :jz_t, :zero)
   defp dispatch(:jnz_t, state, codeome, size), do: do_jump(state, codeome, size, :jnz_t, :nonzero)
+  defp dispatch(:jlt_t, state, codeome, size), do: do_jump(state, codeome, size, :jlt_t, :negative)
+  defp dispatch(:jgt_t, state, codeome, size), do: do_jump(state, codeome, size, :jgt_t, :positive)
 
   defp dispatch(:call_t, state, codeome, size) do
     # :call_t always needs the complement (it jumps whenever one is found).
@@ -491,6 +493,14 @@ defmodule Lenies.Interpreter do
         :nonzero ->
           {top, s} = State.pop(state)
           {top != 0, s}
+
+        :negative ->
+          {top, s} = State.pop(state)
+          {top < 0, s}
+
+        :positive ->
+          {top, s} = State.pop(state)
+          {top > 0, s}
       end
 
     # Resolve the complement only when the branch is actually taken (preserves

@@ -59,7 +59,12 @@ defmodule Lenies.Codeome.Opcodes do
     :load,
     # Plasmid / horizontal gene transfer
     :make_plasmid,
-    :conjugate
+    :conjugate,
+    # Comparison branches (appended at the end to keep existing integer
+    # encodings stable). Sign-test twins of :jz_t/:jnz_t: pop top, jump to the
+    # template's complement iff top < 0 (:jlt_t) / top > 0 (:jgt_t).
+    :jlt_t,
+    :jgt_t
   ]
 
   @encoding @opcodes |> Enum.with_index() |> Enum.into(%{})

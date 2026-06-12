@@ -61,6 +61,95 @@ defmodule Lenies.Interpreter.ControlFlowTest do
     assert s.ip == 2
   end
 
+  test ":jlt_t jumps only if top of stack is negative" do
+    c = Codeome.from_list([:jlt_t, :nop_0, :push0, :nop_1, :sub])
+
+    # top < 0 → jump (lands past the matched complement :nop_1 at index 3 → ip 4)
+    state = State.new(energy: 100.0) |> State.push(-3)
+    {:cont, s} = Interpreter.step(state, c)
+    assert s.ip == 4
+    assert s.stack == []
+
+    # top == 0 → fall through past template (ip 2)
+    state = State.new(energy: 100.0) |> State.push(0)
+    {:cont, s} = Interpreter.step(state, c)
+    assert s.ip == 2
+    assert s.stack == []
+
+    # top > 0 → fall through past template (ip 2)
+    state = State.new(energy: 100.0) |> State.push(7)
+    {:cont, s} = Interpreter.step(state, c)
+    assert s.ip == 2
+    assert s.stack == []
+  end
+
+  test ":jgt_t jumps only if top of stack is positive" do
+    c = Codeome.from_list([:jgt_t, :nop_0, :push0, :nop_1, :sub])
+
+    # top > 0 → jump (lands past the matched complement :nop_1 at index 3 → ip 4)
+    state = State.new(energy: 100.0) |> State.push(5)
+    {:cont, s} = Interpreter.step(state, c)
+    assert s.ip == 4
+    assert s.stack == []
+
+    # top == 0 → fall through
+    state = State.new(energy: 100.0) |> State.push(0)
+    {:cont, s} = Interpreter.step(state, c)
+    assert s.ip == 2
+    assert s.stack == []
+
+    # top < 0 → fall through
+    state = State.new(energy: 100.0) |> State.push(-2)
+    {:cont, s} = Interpreter.step(state, c)
+    assert s.ip == 2
+    assert s.stack == []
+  end
+
+  test ":jlt_t consumes exactly one stack value (taken and fall-through)" do
+    c = Codeome.from_list([:jlt_t, :nop_0, :push0, :nop_1, :sub])
+
+    # taken: top -1, 99 below survives
+    state = State.new(energy: 100.0) |> State.push(99) |> State.push(-1)
+    {:cont, s} = Interpreter.step(state, c)
+    assert s.ip == 4
+    assert s.stack == [99]
+
+    # fall-through: top 4, 99 below survives
+    state = State.new(energy: 100.0) |> State.push(99) |> State.push(4)
+    {:cont, s} = Interpreter.step(state, c)
+    assert s.ip == 2
+    assert s.stack == [99]
+  end
+
+  test ":jgt_t consumes exactly one stack value (taken and fall-through)" do
+    c = Codeome.from_list([:jgt_t, :nop_0, :push0, :nop_1, :sub])
+
+    # taken: top 8, 99 below survives
+    state = State.new(energy: 100.0) |> State.push(99) |> State.push(8)
+    {:cont, s} = Interpreter.step(state, c)
+    assert s.ip == 4
+    assert s.stack == [99]
+
+    # fall-through: top -6, 99 below survives
+    state = State.new(energy: 100.0) |> State.push(99) |> State.push(-6)
+    {:cont, s} = Interpreter.step(state, c)
+    assert s.ip == 2
+    assert s.stack == [99]
+  end
+
+  test ":jlt_t / :jgt_t cost scales with template length like other jumps" do
+    # 4-bit template; base 0.2 + 0.05 * 4 = 0.4 whether taken or not
+    c_lt = Codeome.from_list([:jlt_t, :nop_0, :nop_0, :nop_0, :nop_0, :push0])
+    state = State.new(energy: 100.0) |> State.push(-1)
+    {:cont, s} = Interpreter.step(state, c_lt)
+    assert_in_delta s.energy, 100.0 - 0.4, 0.0001
+
+    c_gt = Codeome.from_list([:jgt_t, :nop_0, :nop_0, :nop_0, :nop_0, :push0])
+    state = State.new(energy: 100.0) |> State.push(1)
+    {:cont, s} = Interpreter.step(state, c_gt)
+    assert_in_delta s.energy, 100.0 - 0.4, 0.0001
+  end
+
   test ":call_t pushes return address on call_stack and jumps" do
     c = Codeome.from_list([:call_t, :nop_0, :push0, :push1, :nop_1, :ret])
     state = State.new(energy: 100.0)

@@ -14,6 +14,9 @@ defmodule Lenies.Collection.Codeome do
     field :color_hex, :string
     field :energy_default, :float, default: 10_000.0
     field :opcodes, {:array, :string}
+    # Non-executable cell annotations: `%{flat_index_string => text}`. Optional;
+    # absent on older rows (defaults to `%{}`). Stripped before execution.
+    field :comments, :map, default: %{}
     embeds_many :plasmids, Lenies.Collection.Plasmid, on_replace: :delete
     belongs_to :owner, Lenies.Accounts.User
 
@@ -23,7 +26,7 @@ defmodule Lenies.Collection.Codeome do
   @doc false
   def changeset(codeome, attrs) do
     codeome
-    |> cast(attrs, [:name, :color_hex, :energy_default, :opcodes])
+    |> cast(attrs, [:name, :color_hex, :energy_default, :opcodes, :comments])
     |> update_change(:name, &maybe_trim/1)
     |> validate_required([:name, :color_hex, :energy_default, :opcodes])
     |> validate_format(:name, @alnum_re, message: "must contain a letter or digit")

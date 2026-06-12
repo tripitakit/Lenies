@@ -1,7 +1,7 @@
 # Appendix: Stack Machines and Stack-Based Languages
 
 You have read the whole manual. You know that a Lenie runs on a small
-stack-based virtual machine — a data stack, a call stack, 38 opcodes, a ring
+stack-based virtual machine — a data stack, a call stack, 40 opcodes, a ring
 codeome, and the defensive rule that mutations never produce a syntax error.
 What you may not yet know is that this machine is not an isolated curiosity:
 it is a member of a large and venerable family. Stack machines underlie page

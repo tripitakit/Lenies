@@ -35,7 +35,7 @@ instructions in the top-level project README at
 
 - [Chapter 0 — Introduction](00-introduction.md) — what a Lenie is, the world it lives in
 - [Chapter 1 — VM Anatomy](01-vm-anatomy.md) — execution state and the ring
-- [Chapter 2 — Opcode Reference](02-opcode-reference.md) — all 38 opcodes
+- [Chapter 2 — Opcode Reference](02-opcode-reference.md) — all 40 opcodes
 - [Chapter 3 — Your First Codeome: The Crawler](03-first-codeome.md)
 - [Chapter 4 — Loops and Templates](04-loops-and-templates.md) — Reflex (rung 1)
 - [Chapter 5 — Memory and Arithmetic](05-memory-and-arithmetic.md) — Stepper, Wanderer

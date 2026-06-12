@@ -23,7 +23,8 @@ defmodule Lenies.Codeome.Costs do
   def cost(op, _) when op in [:add, :sub, :mul, :mod], do: 0.2
 
   # Template-based jumps: 0.2 + 0.05 * template_len
-  def cost(op, template_len) when op in [:jmp_t, :jz_t, :jnz_t, :call_t, :ret] do
+  def cost(op, template_len)
+      when op in [:jmp_t, :jz_t, :jnz_t, :jlt_t, :jgt_t, :call_t, :ret] do
     Float.round(0.2 + 0.05 * template_len, 10)
   end
 

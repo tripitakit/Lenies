@@ -12,10 +12,23 @@ defmodule LeniesWeb.GenomeBuffer do
 
   alias LeniesWeb.CodeomeBuffer
 
-  defstruct chromosome: [], plasmids: []
+  # `comments` are free-text cell annotations kept OUTSIDE the executable
+  # opcode stream (the VM never sees them). Keyed by `{section, in-section
+  # index}` so an annotation rides with its opcode through edits; rendered in
+  # the editor and disassembler/stepper, persisted with the seed, stripped at
+  # `to_codeome`. Stored in the struct so undo/redo snapshots and the dirty
+  # check include them for free.
+  defstruct chromosome: [], plasmids: [], comments: %{}
+
+  @comment_max_len 32
 
   @type section :: :chromosome | {:plasmid, non_neg_integer()}
-  @type t :: %__MODULE__{chromosome: [atom()], plasmids: [[atom()]]}
+  @type comment_key :: {section(), non_neg_integer()}
+  @type t :: %__MODULE__{
+          chromosome: [atom()],
+          plasmids: [[atom()]],
+          comments: %{optional(comment_key()) => String.t()}
+        }
 
   @spec new([atom()], [[atom()]]) :: t()
   def new(chromosome \\ [], plasmids \\ []),
@@ -59,7 +72,145 @@ defmodule LeniesWeb.GenomeBuffer do
 
   @spec remove_plasmid(t(), non_neg_integer()) :: t()
   def remove_plasmid(%__MODULE__{} = g, i) when i >= 0 do
-    if i < length(g.plasmids), do: %{g | plasmids: List.delete_at(g.plasmids, i)}, else: g
+    if i < length(g.plasmids) do
+      %{g | plasmids: List.delete_at(g.plasmids, i), comments: drop_plasmid_comments(g.comments, i)}
+    else
+      g
+    end
+  end
+
+  # Plasmid `removed` is deleted: drop its comments and renumber the sections
+  # of the plasmids that came after it (`{:plasmid, j}` → `{:plasmid, j-1}`).
+  defp drop_plasmid_comments(comments, removed) do
+    comments
+    |> Enum.flat_map(fn
+      {{{:plasmid, ^removed}, _idx}, _text} -> []
+      {{{:plasmid, j}, idx}, text} when j > removed -> [{{{:plasmid, j - 1}, idx}, text}]
+      kv -> [kv]
+    end)
+    |> Map.new()
+  end
+
+  # ----- comments -----
+
+  @doc """
+  Set (or, with blank text, clear) the comment on cell `{section, idx}`. Text
+  is trimmed and truncated to #{@comment_max_len} characters.
+  """
+  @spec put_comment(t(), section(), non_neg_integer(), String.t()) :: t()
+  def put_comment(%__MODULE__{} = g, section, idx, text) when idx >= 0 do
+    trimmed = text |> to_string() |> String.trim() |> String.slice(0, @comment_max_len)
+
+    comments =
+      if trimmed == "",
+        do: Map.delete(g.comments, {section, idx}),
+        else: Map.put(g.comments, {section, idx}, trimmed)
+
+    %{g | comments: comments}
+  end
+
+  @spec get_comment(t(), section(), non_neg_integer()) :: String.t() | nil
+  def get_comment(%__MODULE__{} = g, section, idx), do: Map.get(g.comments, {section, idx})
+
+  @doc "Comments re-keyed by flat exec index, for the disassembler/stepper view and persistence."
+  @spec comments_by_flat(t()) :: %{optional(non_neg_integer()) => String.t()}
+  def comments_by_flat(%__MODULE__{} = g) do
+    for {{section, idx}, text} <- g.comments,
+        flat = flat_index(g, section, idx),
+        is_integer(flat),
+        into: %{},
+        do: {flat, text}
+  end
+
+  @doc """
+  Attach comments given by flat exec index (the persisted shape) onto the
+  matching `{section, idx}` cells. Flat indices past the end of the genome are
+  ignored. Inverse of `comments_by_flat/1`.
+  """
+  @spec put_comments_by_flat(t(), %{optional(non_neg_integer()) => String.t()}) :: t()
+  def put_comments_by_flat(%__MODULE__{} = g, flat_map) when is_map(flat_map) do
+    Enum.reduce(flat_map, g, fn {flat, text}, acc ->
+      case section_at(acc, flat) do
+        {section, idx} -> put_comment(acc, section, idx, text)
+        nil -> acc
+      end
+    end)
+  end
+
+  @doc "Maximum comment length in characters."
+  @spec comment_max_len() :: pos_integer()
+  def comment_max_len, do: @comment_max_len
+
+  # ----- comment-aware section edits -----
+  #
+  # Each wraps the matching `CodeomeBuffer` op AND remaps this section's
+  # comments so every surviving cell keeps its annotation. Correctness is
+  # guaranteed by applying the *same* list op to a list of index tokens
+  # (`remap_section/3`): wherever an old index lands in the token result is
+  # where its comment goes; indices absent from the result were deleted.
+
+  @spec insert(t(), section(), non_neg_integer(), atom()) :: t()
+  def insert(%__MODULE__{} = g, section, idx, opcode) when is_atom(opcode),
+    do: edit_section(g, section, &CodeomeBuffer.insert(&1, idx, opcode))
+
+  @spec insert_many(t(), section(), non_neg_integer(), [atom()]) :: t()
+  def insert_many(%__MODULE__{} = g, section, idx, opcodes) when is_list(opcodes),
+    do: edit_section(g, section, &CodeomeBuffer.insert_many(&1, idx, opcodes))
+
+  @spec delete(t(), section(), non_neg_integer()) :: t()
+  def delete(%__MODULE__{} = g, section, idx),
+    do: edit_section(g, section, &CodeomeBuffer.delete(&1, idx))
+
+  @spec delete_range(t(), section(), {non_neg_integer(), non_neg_integer()}) :: t()
+  def delete_range(%__MODULE__{} = g, section, range),
+    do: edit_section(g, section, &CodeomeBuffer.delete_range(&1, range))
+
+  @spec move(t(), section(), non_neg_integer(), non_neg_integer()) :: t()
+  def move(%__MODULE__{} = g, section, from, to),
+    do: edit_section(g, section, &CodeomeBuffer.move(&1, from, to))
+
+  @spec move_range(t(), section(), {non_neg_integer(), non_neg_integer()}, non_neg_integer()) :: t()
+  def move_range(%__MODULE__{} = g, section, range, to_gap),
+    do: edit_section(g, section, &CodeomeBuffer.move_range(&1, range, to_gap))
+
+  # Apply `list_op` to a section's opcode buffer and remap its comments by the
+  # identical transformation on an index-token list.
+  defp edit_section(%__MODULE__{} = g, section, list_op) do
+    case get_section(g, section) do
+      nil ->
+        g
+
+      buf ->
+        new_buf = list_op.(buf)
+        tokens = list_op.(Enum.to_list(0..(length(buf) - 1)//1))
+
+        # new position of each surviving old index (token integers only;
+        # inserted opcodes are atoms and have no prior index).
+        new_pos =
+          tokens
+          |> Enum.with_index()
+          |> Enum.flat_map(fn
+            {old_idx, new_idx} when is_integer(old_idx) -> [{old_idx, new_idx}]
+            _inserted -> []
+          end)
+          |> Map.new()
+
+        comments =
+          g.comments
+          |> Enum.flat_map(fn
+            {{^section, old_idx}, text} ->
+              case Map.fetch(new_pos, old_idx) do
+                {:ok, new_idx} -> [{{section, new_idx}, text}]
+                :error -> []
+              end
+
+            other ->
+              [other]
+          end)
+          |> Map.new()
+
+        %{g | comments: comments} |> put_section(section, new_buf)
+    end
   end
 
   @spec plasmid_count(t()) :: non_neg_integer()

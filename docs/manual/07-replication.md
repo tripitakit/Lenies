@@ -105,7 +105,7 @@ The World:
 
 1. Computes the effective address as `addr mod N` (where N is the reserved buffer size),
    so you never need to bounds-check manually.
-2. Decodes `op_int` via `Lenies.Codeome.Opcodes.decode/1`. Integers outside `0..37` decode
+2. Decodes `op_int` via `Lenies.Codeome.Opcodes.decode/1`. Integers outside `0..39` decode
    to `:nop_0` defensively.
 3. Applies probabilistic copy errors before writing: substitution (replace with a random
    opcode), insertion (shift subsequent opcodes right), or deletion (shift left). Rates are
@@ -162,7 +162,7 @@ self-replicator reads its own instructions to copy them into the child buffer.
 The return value is an **integer encoding** of the opcode, not the opcode atom. The encoding
 is the index of the opcode in the whitelist defined in `Lenies.Codeome.Opcodes`:
 
-The full 38-entry whitelist (from `Lenies.Codeome.Opcodes`):
+The full 40-entry whitelist (from `Lenies.Codeome.Opcodes`):
 
 ```
 nop_0(0),  nop_1(1),  push0(2),  push1(3),  pushN(4),   dup(5),   drop(6),  swap(7),
@@ -173,10 +173,11 @@ move(22),  turn_left(23), turn_right(24), eat(25),
 attack(26), defend(27),
 get_ip(28), get_size(29), read_self(30),
 allocate(31), write_child(32), divide(33),
-store(34), load(35), make_plasmid(36), conjugate(37)
+store(34), load(35), make_plasmid(36), conjugate(37),
+jlt_t(38), jgt_t(39)
 ```
 
-38 entries (indices 0–37). Out-of-range integers decode to `:nop_0` (index 0).
+40 entries (indices 0–39). Out-of-range integers decode to `:nop_0` (index 0).
 
 ---
 

@@ -57,8 +57,9 @@ defmodule Lenies.Codeomes.Symbiont do
   Internal-state introspection (`sense_age`) as a **conditional dispatch**, an
   **environment-conditioned action** (`sense_front` → `conjugate`), and the
   **`make_plasmid` + `conjugate` HGT pathway** wired from the organism's own
-  opcodes. (The ISA has no sign/less-than test, so the regulatory switch is an
-  exact age-modulo clock, not an energy threshold — see the design doc §4.)
+  opcodes. (The regulatory switch is an exact age-modulo clock rather than an
+  energy threshold — a deliberate design choice; the `:jlt_t`/`:jgt_t` sign
+  branches added later would also permit a threshold form. See design doc §4.)
 
   ## Template anchors (4-bit; complement = bit-flip)
 
