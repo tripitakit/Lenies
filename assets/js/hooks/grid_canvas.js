@@ -39,6 +39,7 @@
 
 import { HUE_LUT } from "./grid_canvas_hue_lut.js";
 import { drawLenieSprite, decodeMeta } from "./lenie_sprite.js";
+import { drawFx, FX_DURATION_MS } from "./lenie_fx.js";
 
 const CARCASS_MAX = 50;
 const CARCASS_GRAY = 180;
@@ -127,31 +128,18 @@ const GridCanvas = {
     this.conjInterval = setInterval(() => this.renderConjugationRate(), 250);
 
     this.handleEvent("fx_conjugation", ({ sender, receiver, donor_seed, recipient_seed, plasmid_label }) => {
+      this.pushFx("conjugation", sender.x, sender.y);
+      this.pushFx("conjugation", receiver.x, receiver.y);
+
       const now = performance.now();
-      const durationMs = 3000;
-      const expireAt = now + durationMs;
-
-      const senderKey = `${sender.x},${sender.y}`;
-      const receiverKey = `${receiver.x},${receiver.y}`;
-
-      this.flashingCells.set(senderKey, { startMs: now, expireAt });
-      this.flashingCells.set(receiverKey, { startMs: now, expireAt });
-
-      // Fallback cleanup: drawFlashOverlay prunes expired entries during
-      // renderFrame, but if the simulation pauses or the tab backgrounds,
-      // no renders fire and entries pile up. setTimeout ensures the map
-      // never holds entries past their wall-clock expiry.
-      setTimeout(() => {
-        const s = this.flashingCells && this.flashingCells.get(senderKey);
-        if (s && s.expireAt <= performance.now()) this.flashingCells.delete(senderKey);
-        const r = this.flashingCells && this.flashingCells.get(receiverKey);
-        if (r && r.expireAt <= performance.now()) this.flashingCells.delete(receiverKey);
-      }, durationMs + 50);
-
       this.conjEvents.push(now);
       this.conjLastLabel = plasmid_label;
       this.renderConjugationRate();
     });
+
+    this.handleEvent("fx_division", ({ x, y }) => this.pushFx("division", x, y));
+    this.handleEvent("fx_death", ({ x, y }) => this.pushFx("death", x, y));
+    this.handleEvent("fx_predation", ({ x, y }) => this.pushFx("predation", x, y));
 
     this.handleEvent("render_frame", (payload) => {
       this.lastPayload = payload;
@@ -665,34 +653,35 @@ const GridCanvas = {
     this.drawSprites(eff, sx, sy, lBytes, eBytes, mBytes);
   },
 
-  // Draw fading yellow-white rectangles over flashing cells. Called
+  pushFx(type, x, y) {
+    const now = performance.now();
+    const dur = FX_DURATION_MS[type] || 800;
+    this.flashingCells.set(`${type}:${x},${y}:${now}`, {
+      type, gx: x, gy: y, startMs: now, expireAt: now + dur,
+    });
+    setTimeout(() => {
+      for (const [k, f] of this.flashingCells) {
+        if (f.expireAt <= performance.now()) this.flashingCells.delete(k);
+      }
+    }, dur + 50);
+  },
+
+  // Draw typed event-flash animations over flashing cells. Called
   // immediately after the drawImage blit so the overlay sits on top of
   // the rendered frame. Expired entries are pruned here.
   drawFlashOverlay(eff, sx, sy) {
     if (this.flashingCells.size === 0) return;
     const now = performance.now();
-    const ctx = this.ctx;
-
-    for (const [key, flash] of this.flashingCells) {
-      if (now >= flash.expireAt) {
-        this.flashingCells.delete(key);
-        continue;
-      }
-
-      const [gx, gy] = key.split(",").map(Number);
-
-      // Convert grid cell coords to display-canvas pixel coords.
-      // sx/sy are the top-left corner of the viewport in buffer space;
-      // eff is the display scale (display pixels per buffer pixel).
-      const cellPxX = (gx - sx) * eff;
-      const cellPxY = (gy - sy) * eff;
-      const cellPxW = eff;
-      const cellPxH = eff;
-
-      const progress = (now - flash.startMs) / (flash.expireAt - flash.startMs);
-      const alpha = 1 - progress; // fade from 1 to 0
-      ctx.fillStyle = `rgba(255, 255, 200, ${alpha * 0.8})`;
-      ctx.fillRect(cellPxX, cellPxY, cellPxW, cellPxH);
+    for (const [key, fx] of this.flashingCells) {
+      if (now >= fx.expireAt) { this.flashingCells.delete(key); continue; }
+      const progress = (now - fx.startMs) / (fx.expireAt - fx.startMs);
+      const rect = {
+        x: (fx.gx - sx) * eff,
+        y: (fx.gy - sy) * eff,
+        w: eff,
+        h: eff,
+      };
+      drawFx(this.ctx, fx.type, rect, progress);
     }
   },
 
