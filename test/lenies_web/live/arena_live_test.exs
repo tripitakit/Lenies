@@ -51,8 +51,10 @@ defmodule LeniesWeb.ArenaLiveTest do
     end
 
     test "shows the codeome dropdown + Seed button", %{conn: conn} do
-      {:ok, _view, html} = live(conn, ~p"/arena")
-      assert html =~ "Seed your Lenie"
+      {:ok, view, html} = live(conn, ~p"/arena")
+      # Assert on the interactive control, not a substring of the page text,
+      # so a copy tweak elsewhere can't silently pass/fail this.
+      assert has_element?(view, "button", "Seed your Lenie")
       assert html =~ "MyArenaSeed"
     end
 
@@ -95,8 +97,9 @@ defmodule LeniesWeb.ArenaLiveTest do
     end
 
     test "shows Apoptosis button with count", %{conn: conn} do
-      {:ok, _view, html} = live(conn, ~p"/arena")
-      assert html =~ "Apoptosis"
+      {:ok, view, html} = live(conn, ~p"/arena")
+      # Target the actual control by its phx-click, robust to label/markup edits.
+      assert has_element?(view, "button[phx-click=apoptosis_init]", "Apoptosis")
       assert html =~ "Your lineage:"
     end
 

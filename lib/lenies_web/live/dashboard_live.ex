@@ -18,6 +18,8 @@ defmodule LeniesWeb.DashboardLive do
   use LeniesWeb, :live_view
 
   alias Lenies.SpeciesColor
+  alias Lenies.World.Query
+  import LeniesWeb.WorldLiveShared
 
   # Whitelist of clickable species-table columns -> the sort key. Guards
   # `handle_event("sort_species", ...)` against arbitrary input.
@@ -92,14 +94,6 @@ defmodule LeniesWeb.DashboardLive do
       end
 
     {:ok, socket}
-  end
-
-  # Returns {top_n, all_species, total_count} from a single Species.aggregate/1
-  # pass. The dashboard table uses `top_n`; the World Detail modal needs the
-  # full `all_species` list (sorted by population descending, already).
-  defp aggregate_with_top(handle, n) do
-    all = Lenies.Species.aggregate(handle)
-    {Enum.take(all, n), all, length(all)}
   end
 
   defp find_selected_record(_handle, nil, _species), do: nil
@@ -329,7 +323,10 @@ defmodule LeniesWeb.DashboardLive do
                         <td class="text-right pl-3 whitespace-nowrap text-emerald-300">
                           {format_energy(sp.max_gain)}
                         </td>
-                        <td class={["text-right pl-3 whitespace-nowrap", net_color(sp.max_gain - sp.cost)]}>
+                        <td class={[
+                          "text-right pl-3 whitespace-nowrap",
+                          net_color(sp.max_gain - sp.cost)
+                        ]}>
                           {format_net(sp.max_gain - sp.cost)}
                         </td>
                         <td class="text-right pl-3 whitespace-nowrap">{sp.population}</td>
@@ -467,7 +464,7 @@ defmodule LeniesWeb.DashboardLive do
   # editor; misses (empty cells) are a silent no-op.
   def handle_event("select_lenie_at_cell", %{"x" => x, "y" => y}, socket)
       when is_integer(x) and is_integer(y) do
-    case lookup_lenie_at_cell(socket.assigns.world_handle, x, y) do
+    case Query.codeome_hash_at(socket.assigns.world_handle, x, y) do
       {:ok, hash} -> {:noreply, push_navigate(socket, to: ~p"/sandbox/editor/edit/#{hash}")}
       :error -> {:noreply, socket}
     end
@@ -487,37 +484,6 @@ defmodule LeniesWeb.DashboardLive do
   end
 
   def handle_event(_event, _params, socket), do: {:noreply, socket}
-
-  defp lookup_lenie_at_cell(handle, x, y) do
-    with handle when not is_nil(handle) <- handle,
-         [{_, %{lenie_id: id}}] when is_binary(id) <-
-           :ets.lookup(handle.tables.cells, {x, y}),
-         [{^id, lenie_meta}] <- :ets.lookup(handle.tables.lenies, id),
-         hash when is_binary(hash) <- Map.get(lenie_meta, :codeome_hash) do
-      {:ok, hash}
-    else
-      _ -> :error
-    end
-  end
-
-  defp lenie_hover_payload(handle, x, y) do
-    with handle when not is_nil(handle) <- handle,
-         [{_, %{lenie_id: id}}] when is_binary(id) <-
-           :ets.lookup(handle.tables.cells, {x, y}),
-         [{^id, snap}] <- :ets.lookup(handle.tables.lenies, id) do
-      %{
-        x: x,
-        y: y,
-        present: true,
-        seed_origin: Map.get(snap, :seed_origin),
-        age: Map.get(snap, :age, 0),
-        energy: trunc(Map.get(snap, :energy, 0.0)),
-        codeome_hash: Map.get(snap, :codeome_hash)
-      }
-    else
-      _ -> %{x: x, y: y, present: false}
-    end
-  end
 
   @impl true
   def handle_info({:tick, n, stats}, socket) do
@@ -660,53 +626,6 @@ defmodule LeniesWeb.DashboardLive do
   # them at a glance: thousand-separated below 1k, then k/M/B suffixes
   # so a runaway carcass_decay = 0 simulation doesn't render as an
   # unreadable 14-digit number that looks like a bug.
-  defp format_count(n) when is_integer(n) and n >= 0 do
-    cond do
-      n < 1_000 -> Integer.to_string(n)
-      n < 1_000_000 -> "#{Float.round(n / 1_000, 1)}k"
-      n < 1_000_000_000 -> "#{Float.round(n / 1_000_000, 2)}M"
-      true -> "#{Float.round(n / 1_000_000_000, 2)}B"
-    end
-  end
-
-  defp format_count(n) when is_float(n), do: format_count(trunc(n))
-  defp format_count(_), do: "0"
-
-  # Pristine-codeome hashes for every built-in seed, computed once at
-  # module load. Custom user seeds aren't covered because their pristine
-  # codeome lives in the per-user `Lenies.Collection` (the user could even
-  # edit and save back at any time) — for those we always show the "evolved
-  # from" form because we can't reliably know what "pristine" means.
-  @builtin_pristine_hashes Map.new(
-                             Lenies.Seeds.all(),
-                             fn s -> {s.name, Lenies.Codeome.hash(s.codeome)} end
-                           )
-
-  # Renders the Seed column. Three cases:
-  #   - seed_origin is nil → "—" (Lenie pre-feature or untracked).
-  #   - the species' hash matches the pristine hash of `seed_origin` → bare
-  #     seed name (Lenie hasn't drifted from its seed).
-  #   - otherwise → "evolved from <seed_origin>" (mutation / copy-error
-  #     descendant).
-  defp format_seed_origin(%{seed_origin: nil}), do: "—"
-
-  defp format_seed_origin(%{seed_origin: origin, hash: hash}) do
-    case Map.get(@builtin_pristine_hashes, origin) do
-      ^hash -> origin
-      _ -> "evolved from " <> origin
-    end
-  end
-
-  defp format_seed_origin(_), do: "—"
-
-  # Order the species rows by the active column/direction. `Enum.sort_by/3`
-  # handles both numeric keys and the (downcased) seed-name string via term
-  # ordering. Called from mount and event/tick handlers (not render) so the
-  # stream is always pre-sorted before being sent to the client.
-  defp sort_species(species, sort_by, sort_dir) do
-    Enum.sort_by(species, sort_key_fun(sort_by), sort_dir)
-  end
-
   # Re-stream the species table only when its rendered content would actually
   # change. `stream(reset: true)` re-sends the whole list and forces the
   # client to re-patch every row, so on a stable / paused world (population
@@ -725,53 +644,6 @@ defmodule LeniesWeb.DashboardLive do
       |> stream(:species_table, sorted, reset: true)
     end
   end
-
-  defp sort_key_fun(:seed), do: fn sp -> sp |> format_seed_origin() |> String.downcase() end
-  defp sort_key_fun(:size), do: & &1.size
-  defp sort_key_fun(:cost), do: & &1.cost
-  defp sort_key_fun(:gain), do: & &1.max_gain
-  defp sort_key_fun(:net), do: &(&1.max_gain - &1.cost)
-  defp sort_key_fun(:population), do: & &1.population
-  defp sort_key_fun(:avg_generation), do: & &1.avg_generation
-
-  # Sort indicator next to the active column header.
-  defp sort_arrow(active, :asc, active), do: " ▲"
-  defp sort_arrow(active, :desc, active), do: " ▼"
-  defp sort_arrow(_by, _dir, _col), do: ""
-
-  defp toggle_dir(:asc), do: :desc
-  defp toggle_dir(:desc), do: :asc
-
-  # Seed is alphabetical (asc) by default; numeric columns lead with the
-  # largest value (desc), which is what a user scanning for the dominant /
-  # most-expensive species expects.
-  defp default_sort_dir(:seed), do: :asc
-  defp default_sort_dir(_), do: :desc
-
-  # Compact energy display for the species table: integer when whole,
-  # one decimal otherwise. Avoids `0.0` clutter for codeomes with no
-  # eat/attack opcodes and keeps the column width predictable.
-  # Net = max_gain − cost for one linear pass. "+" prefix on positive so the
-  # sign reads at a glance (color carries it too: green ≥ 0, red < 0).
-  defp format_net(net) when net > 0, do: "+" <> format_energy(net)
-  defp format_net(net), do: format_energy(net)
-
-  defp net_color(net) when net < 0, do: "text-rose-300"
-  defp net_color(_net), do: "text-emerald-300"
-
-  defp format_energy(n) when is_integer(n), do: Integer.to_string(n)
-
-  defp format_energy(n) when is_float(n) do
-    rounded = Float.round(n, 1)
-
-    if rounded == trunc(rounded) do
-      Integer.to_string(trunc(rounded))
-    else
-      :erlang.float_to_binary(rounded, decimals: 1)
-    end
-  end
-
-  defp format_energy(_), do: "0"
 
   # When the species the user is inspecting falls out of the active set
   # (extinct or pushed out of the top-N), close the inspector and drop

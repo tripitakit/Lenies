@@ -190,7 +190,7 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
         {:no_sample, []}
 
       [{sample_id, _} | _] ->
-        case safe_whereis(world_id, sample_id) do
+        case Lenies.World.Query.lenie_pid(world_id, sample_id) do
           pid when is_pid(pid) ->
             try do
               case GenServer.call(pid, :get_codeome, 1_000) do
@@ -204,17 +204,6 @@ defmodule LeniesWeb.SpeciesInspectorComponent do
           _ ->
             {:no_sample, []}
         end
-    end
-  end
-
-  defp safe_whereis(world_id, id) do
-    try do
-      case Registry.lookup(Lenies.Registry, {:lenie, world_id, id}) do
-        [{pid, _}] -> pid
-        [] -> nil
-      end
-    catch
-      :exit, _ -> nil
     end
   end
 end

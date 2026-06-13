@@ -49,8 +49,8 @@ defmodule LeniesWeb.LenieInspectorLive do
     id = socket.assigns.id
     world_id = socket.assigns.world_id
 
-    case Registry.lookup(Lenies.Registry, {:lenie, world_id, id}) do
-      [{pid, _}] ->
+    case Lenies.World.Query.lenie_pid(world_id, id) do
+      pid when is_pid(pid) ->
         snap =
           try do
             Lenies.Lenie.inspect_state(pid)
@@ -67,8 +67,8 @@ defmodule LeniesWeb.LenieInspectorLive do
           assign(socket, :found?, false)
         end
 
-      [] ->
-        case lookup_lenie_snap(socket.assigns.world_handle, id) do
+      nil ->
+        case Lenies.World.Query.lenie_snap(socket.assigns.world_handle, id) do
           {:ok, snap} ->
             socket
             |> assign(:found?, false)
@@ -80,17 +80,6 @@ defmodule LeniesWeb.LenieInspectorLive do
         end
     end
   end
-
-  defp lookup_lenie_snap(%Lenies.WorldHandle{} = handle, id) do
-    case :ets.lookup(handle.tables.lenies, id) do
-      [{^id, snap}] -> {:ok, snap}
-      _ -> :error
-    end
-  rescue
-    ArgumentError -> :error
-  end
-
-  defp lookup_lenie_snap(_handle, _id), do: :error
 
   defp fetch_codeome_lines(pid, snap) do
     try do

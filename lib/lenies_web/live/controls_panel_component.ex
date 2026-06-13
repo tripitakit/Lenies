@@ -135,7 +135,7 @@ defmodule LeniesWeb.ControlsPanelComponent do
             :exit, _ -> 10
           end
 
-        cap != :infinity and (:ets.info(h.tables.lenies, :size) || 0) >= cap
+        cap != :infinity and Lenies.World.Query.population(h) >= cap
 
       _ ->
         false

@@ -17,6 +17,7 @@ defmodule LeniesWeb.EditorLive do
   alias LeniesWeb.EditorComponents
   alias LeniesWeb.EditorHistory
   alias LeniesWeb.{GenomeBuffer, GenomeCaret}
+  import LeniesWeb.EditorLive.Helpers
 
   require Logger
 
@@ -176,15 +177,15 @@ defmodule LeniesWeb.EditorLive do
   end
 
   defp safe_get_codeome(world_id, id) do
-    case Registry.lookup(Lenies.Registry, {:lenie, world_id, id}) do
-      [{pid, _}] ->
+    case Lenies.World.Query.lenie_pid(world_id, id) do
+      pid when is_pid(pid) ->
         try do
           GenServer.call(pid, :get_codeome, 1_000)
         catch
           :exit, _ -> {:error, :dead}
         end
 
-      [] ->
+      nil ->
         {:error, :not_alive}
     end
   end
@@ -1069,11 +1070,6 @@ defmodule LeniesWeb.EditorLive do
 
   defp current_range(socket), do: GenomeCaret.derive_range(caret_pair(socket))
 
-  # Param/DOM section encoding: "chromosome" | "p0", "p1", ...
-  defp decode_section("chromosome"), do: :chromosome
-  defp decode_section("p" <> i), do: {:plasmid, to_int(i)}
-  defp decode_section(_), do: :chromosome
-
   defp maybe_assign(socket, _key, nil), do: socket
   defp maybe_assign(socket, key, value), do: assign(socket, key, value)
 
@@ -1159,12 +1155,6 @@ defmodule LeniesWeb.EditorLive do
   # has set on the dashboard's Tuning Live sliders. No PubSub
   # subscription on purpose: tuning rarely shifts mid-edit, and the
   # numbers refresh on the next genome change anyway.
-  defp current_economics(genome) do
-    eat_amount = Application.get_env(:lenies, :eat_amount, 20)
-    attack_damage = Application.get_env(:lenies, :attack_damage, 10)
-    GenomeBuffer.economics(genome, eat_amount, attack_damage)
-  end
-
   # ── Embedded stepper session helpers ──────────────────────────────────
 
   # Lazily create a session from the current genome. :invalid when the
@@ -1207,13 +1197,6 @@ defmodule LeniesWeb.EditorLive do
       :grid_payload_json,
       Jason.encode!(Lenies.Stepper.World.encode_grid_payload(session.world))
     )
-  end
-
-  # Non-empty plasmid buffers as %Lenies.Plasmid{} structs — what the
-  # session carries (empty buffers contribute no exec rows, so they're
-  # rejected to keep the flat exec list aligned with GenomeBuffer).
-  defp plasmid_structs(%GenomeBuffer{} = g) do
-    g.plasmids |> Enum.reject(&(&1 == [])) |> Enum.map(&Lenies.Plasmid.new/1)
   end
 
   # Ported verbatim from StepperLive (no component coupling).
@@ -1271,48 +1254,6 @@ defmodule LeniesWeb.EditorLive do
     |> commit_genome_change(new_genome)
   end
 
-  # `select_block` indices come from the editor's own JS hook (always
-  # numeric), but parse defensively: unparseable input becomes -1, which
-  # the handler's `index < 0` guard treats as a no-op instead of crashing.
-  defp to_int(n) when is_integer(n), do: n
-
-  defp to_int(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, ""} -> i
-      _ -> -1
-    end
-  end
-
-  defp parse_clamped(str, min, max, default) when is_binary(str) do
-    case Integer.parse(str) do
-      {n, _} -> n |> max(min) |> min(max)
-      :error -> default
-    end
-  end
-
-  defp parse_clamped(_, _, _, default), do: default
-
-  # Persisted comments come back as a string-keyed JSON map (%{"3" => "txt"});
-  # parse keys to integers, dropping anything unparseable.
-  defp decode_saved_comments(map) when is_map(map) do
-    for {k, v} <- map, flat = parse_flat_key(k), is_integer(flat), is_binary(v), into: %{} do
-      {flat, v}
-    end
-  end
-
-  defp decode_saved_comments(_), do: %{}
-
-  defp parse_flat_key(k) when is_integer(k), do: k
-
-  defp parse_flat_key(k) when is_binary(k) do
-    case Integer.parse(k) do
-      {n, ""} -> n
-      _ -> nil
-    end
-  end
-
-  defp parse_flat_key(_), do: nil
-
   defp save_attrs(socket, name, color, energy_str) do
     %{
       name: name,
@@ -1364,39 +1305,5 @@ defmodule LeniesWeb.EditorLive do
       energy_default: trunc(codeome.energy_default)
     })
     |> put_flash(:info, "Saved “#{codeome.name}” ✓")
-  end
-
-  # Splits a free-text input on whitespace and commas, lowercases, then
-  # validates each token against the known opcode set. Returns
-  # `{:ok, [atom]}` if every token is a known opcode, or `{:error, [string]}`
-  # listing the unknown tokens. Empty input → `{:ok, []}`.
-  defp parse_opcode_text(text) when is_binary(text) do
-    tokens =
-      text
-      |> String.downcase()
-      |> String.split(~r/[\s,]+/, trim: true)
-
-    {valid, invalid} =
-      Enum.reduce(tokens, {[], []}, fn token, {valid, invalid} ->
-        case to_known_opcode(token) do
-          {:ok, atom} -> {[atom | valid], invalid}
-          :error -> {valid, [token | invalid]}
-        end
-      end)
-
-    if invalid == [] do
-      {:ok, Enum.reverse(valid)}
-    else
-      {:error, Enum.reverse(invalid)}
-    end
-  end
-
-  defp to_known_opcode(token) do
-    try do
-      atom = String.to_existing_atom(token)
-      if Lenies.Codeome.Opcodes.known?(atom), do: {:ok, atom}, else: :error
-    rescue
-      ArgumentError -> :error
-    end
   end
 end
