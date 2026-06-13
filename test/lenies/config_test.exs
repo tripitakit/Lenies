@@ -58,6 +58,15 @@ defmodule Lenies.ConfigTest do
     assert Config.plasmid_loss_probability() == 0.25
   end
 
+  describe "energy_ref/0" do
+    test "defaults to 1000 and reads from app env" do
+      assert Lenies.Config.energy_ref() == 1000
+      Application.put_env(:lenies, :energy_ref, 1234)
+      on_exit(fn -> Application.delete_env(:lenies, :energy_ref) end)
+      assert Lenies.Config.energy_ref() == 1234
+    end
+  end
+
   describe "configuration override" do
     setup do
       on_exit(fn -> Application.put_env(:lenies, :grid_size, {128, 128}) end)

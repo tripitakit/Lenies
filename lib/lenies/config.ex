@@ -21,5 +21,14 @@ defmodule Lenies.Config do
   def plasmid_loss_probability, do: get(:plasmid_loss_probability, 0.10)
   def reconcile_interval_ms, do: get(:reconcile_interval_ms, 30_000)
 
+  @doc """
+  Reference energy for the display brightness ramp. A Lenie at `energy_ref`
+  renders at full brightness; below it dims toward the client-side floor.
+  Not per-world (it's a display constant; the renderer has no per-world
+  config), so it lives here with the other system-wide bounds.
+  """
+  @spec energy_ref() :: pos_integer()
+  def energy_ref, do: Application.get_env(:lenies, :energy_ref, 1000)
+
   defp get(key, default), do: Application.get_env(@app, key, default)
 end
