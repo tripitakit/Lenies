@@ -38,9 +38,13 @@
 // so old carcasses stay legible on the black background.
 
 import { HUE_LUT } from "./grid_canvas_hue_lut.js";
+import { drawLenieSprite, decodeMeta } from "./lenie_sprite.js";
 
 const CARCASS_MAX = 50;
 const CARCASS_GRAY = 180;
+
+const SPRITE_ZOOM_THRESHOLD = 10; // display px per cell before sprites draw
+const SPRITE_CELL_CAP = 4000;     // safety: skip sprite pass above this many visible cells
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 32;
@@ -567,6 +571,8 @@ const GridCanvas = {
     const rBytes = this.decodeBase64(resource);
     const cBytes = this.decodeBase64(carcass);
     const hBytes = this.decodeBase64(carcass_hue);
+    const eBytes = this.decodeBase64(this.lastPayload.energy);
+    const mBytes = this.decodeBase64(this.lastPayload.meta);
 
     const showLenies = this.canvas.hasAttribute("data-show-lenies");
     const showResource = this.canvas.hasAttribute("data-show-resource");
@@ -603,7 +609,10 @@ const GridCanvas = {
 
       if (showLenies && speciesByte > 0) {
         const rgb = HUE_LUT[speciesByte];
-        r = rgb.r; g = rgb.g; b = rgb.b;
+        const ef = 0.25 + 0.75 * (eBytes[i] / 255);
+        r = Math.round(rgb.r * ef);
+        g = Math.round(rgb.g * ef);
+        b = Math.round(rgb.b * ef);
         a = 255;
         // A carcass sitting under a Lenie (low/zero carcass_decay,
         // respawn over remains) blends in at 30% so the carcass checkbox
@@ -653,6 +662,7 @@ const GridCanvas = {
     );
 
     this.drawFlashOverlay(eff, sx, sy);
+    this.drawSprites(eff, sx, sy, lBytes, eBytes, mBytes);
   },
 
   // Draw fading yellow-white rectangles over flashing cells. Called
@@ -683,6 +693,33 @@ const GridCanvas = {
       const alpha = 1 - progress; // fade from 1 to 0
       ctx.fillStyle = `rgba(255, 255, 200, ${alpha * 0.8})`;
       ctx.fillRect(cellPxX, cellPxY, cellPxW, cellPxH);
+    }
+  },
+
+  drawSprites(eff, sx, sy, lBytes, eBytes, mBytes) {
+    if (eff < SPRITE_ZOOM_THRESHOLD) return;
+
+    const x0 = Math.max(0, Math.floor(sx));
+    const y0 = Math.max(0, Math.floor(sy));
+    const x1 = Math.min(this.gridW - 1, Math.ceil(sx + this.canvas.width / eff));
+    const y1 = Math.min(this.gridH - 1, Math.ceil(sy + this.canvas.height / eff));
+
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) > SPRITE_CELL_CAP) return;
+
+    const ctx = this.ctx;
+    for (let gy = y0; gy <= y1; gy++) {
+      for (let gx = x0; gx <= x1; gx++) {
+        const i = gy * this.gridW + gx;
+        if (lBytes[i] === 0) continue; // empty
+        const meta = decodeMeta(mBytes[i]);
+        const rect = {
+          x: (gx - sx) * eff,
+          y: (gy - sy) * eff,
+          w: eff,
+          h: eff,
+        };
+        drawLenieSprite(ctx, rect, meta);
+      }
     }
   },
 
