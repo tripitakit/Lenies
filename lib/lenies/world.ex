@@ -163,7 +163,7 @@ defmodule Lenies.World do
         case Registry.lookup(Lenies.Registry, {:lenie, state.world_id, id}) do
           [{pid, _}] ->
             _ = DynamicSupervisor.terminate_child(sup, pid)
-            GenServer.cast(self(), {:lenie_died, id, pos, energy, hash, seeder_user_id})
+            GenServer.cast(self(), {:lenie_died, id, pos, energy, hash, seeder_user_id, :culled})
             acc + 1
 
           [] ->
@@ -384,9 +384,12 @@ defmodule Lenies.World do
     )
   end
 
+  def handle_cast({:lenie_died, id, pos, energy, hash, seeder_user_id}, state),
+    do: handle_cast({:lenie_died, id, pos, energy, hash, seeder_user_id, :natural}, state)
+
   @impl true
   def handle_cast(
-        {:lenie_died, id, {x, y}, energy_at_death, codeome_hash, seeder_user_id},
+        {:lenie_died, id, {x, y}, energy_at_death, codeome_hash, seeder_user_id, cause},
         state
       ) do
     state =
@@ -394,6 +397,10 @@ defmodule Lenies.World do
         [{key, cell}] ->
           carcass_value = max(0, trunc(energy_at_death * 0.5))
           hue = Lenies.SpeciesColor.hue_byte(state.handle, codeome_hash)
+
+          if cause == :natural do
+            broadcast(state, "fx", {:death, %{x: x, y: y, hue: hue}})
+          end
 
           new_cell = %{
             cell
@@ -446,7 +453,8 @@ defmodule Lenies.World do
   # (`:normal`, `:shutdown`, `{:shutdown, _}`) are silent.
   @impl true
   def terminate(reason, state)
-      when reason not in [:normal, :shutdown] and not (is_tuple(reason) and elem(reason, 0) == :shutdown) do
+      when reason not in [:normal, :shutdown] and
+             not (is_tuple(reason) and elem(reason, 0) == :shutdown) do
     Logger.error(
       "Lenies.World #{inspect(state.world_id)} TERMINATING abnormally " <>
         "(pop=#{safe_size(state)}, tick=#{Map.get(state, :tick_count)}): " <>
@@ -610,7 +618,7 @@ defmodule Lenies.World do
 
     carcass_cells =
       cond do
-        (old_cell.carcass > 0) == (new_cell.carcass > 0) -> state.carcass_cells
+        old_cell.carcass > 0 == new_cell.carcass > 0 -> state.carcass_cells
         new_cell.carcass > 0 -> MapSet.put(state.carcass_cells, key)
         true -> MapSet.delete(state.carcass_cells, key)
       end
@@ -714,7 +722,6 @@ defmodule Lenies.World do
         end
     end
   end
-
 
   defp maybe_schedule_tick(%{paused?: true} = state), do: state
 
@@ -998,6 +1005,11 @@ defmodule Lenies.World do
           [] -> :ok
         end
 
+        case record do
+          %{pos: {vx, vy}} -> broadcast(state, "fx", {:predation, %{x: vx, y: vy}})
+          _ -> :ok
+        end
+
         {{:ok, {result_tag, damage}}, state}
 
       _ ->
@@ -1072,6 +1084,10 @@ defmodule Lenies.World do
         # Clean up parent's slot
         ChildSlots.delete(state.tables.child_slots, slot_id)
         update_lenie_record(parent_id, &Map.put(&1, :child_slot_id, nil), state)
+
+        {cx, cy} = slot.target_cell
+        child_hue = Lenies.SpeciesColor.hue_byte(state.handle, Codeome.hash(child_codeome))
+        broadcast(state, "fx", {:division, %{x: cx, y: cy, hue: child_hue}})
 
         {{:ok, {:divided, child_id, child_energy}}, state}
 
