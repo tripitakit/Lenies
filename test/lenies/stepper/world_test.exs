@@ -814,5 +814,44 @@ defmodule Lenies.Stepper.WorldTest do
       assert is_list(payload.lenies)
       assert Enum.find(payload.lenies, &(&1.id == "debug"))
     end
+
+    test "each lenie entry includes boolean predator and plasmid fields" do
+      world = World.new()
+
+      # Herbivore (no :attack), no plasmids.
+      {:ok, world} =
+        World.place_lenie(world, "herb", %{
+          codeome: Lenies.Codeome.from_list([:eat, :move, :nop_0]),
+          pos: {3, 3},
+          dir: :n,
+          energy: 500.0,
+          kind: :seed,
+          plasmids: []
+        })
+
+      # Predator (has :attack), with a plasmid.
+      {:ok, world} =
+        World.place_lenie(world, "pred", %{
+          codeome: Lenies.Codeome.from_list([:attack, :move, :nop_0]),
+          pos: {7, 7},
+          dir: :e,
+          energy: 500.0,
+          kind: :seed,
+          plasmids: [[:nop_0]]
+        })
+
+      payload = World.encode_grid_payload(world)
+
+      assert Enum.all?(payload.lenies, &is_boolean(&1.predator))
+      assert Enum.all?(payload.lenies, &is_boolean(&1.plasmid))
+
+      herb = Enum.find(payload.lenies, &(&1.id == "herb"))
+      pred = Enum.find(payload.lenies, &(&1.id == "pred"))
+
+      assert herb.predator == false
+      assert herb.plasmid == false
+      assert pred.predator == true
+      assert pred.plasmid == true
+    end
   end
 end

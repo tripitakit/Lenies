@@ -279,7 +279,15 @@ defmodule Lenies.Stepper.World do
 
     lenies_payload =
       Enum.map(lenies, fn {id, l} ->
-        %{id: id, x: elem(l.pos, 0), y: elem(l.pos, 1), dir: l.dir, kind: l.kind}
+        %{
+          id: id,
+          x: elem(l.pos, 0),
+          y: elem(l.pos, 1),
+          dir: l.dir,
+          kind: l.kind,
+          predator: :attack in Lenies.Codeome.to_list(l.codeome),
+          plasmid: l.plasmids != []
+        }
       end)
 
     %{w: w, h: h, cells: cells_payload, lenies: lenies_payload}

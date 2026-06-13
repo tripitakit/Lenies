@@ -1,3 +1,6 @@
+import { drawLenieSprite } from "./lenie_sprite.js";
+import { drawFx, FX_DURATION_MS } from "./lenie_fx.js";
+
 const StepperCanvas = {
   mounted() {
     this.canvas = document.createElement("canvas");
@@ -6,6 +9,15 @@ const StepperCanvas = {
     this.canvas.style.imageRendering = "pixelated";
     this.el.appendChild(this.canvas);
     this.ctx = this.canvas.getContext("2d");
+
+    // State for diff-based birth flashes.
+    this.prevIds = new Set();
+    this.fx = new Map();
+
+    // Animate active FX between steps (60 ms cadence).
+    this.fxTimer = setInterval(() => {
+      if (this.fx.size) this.render();
+    }, 60);
 
     this.canvas.addEventListener("click", (e) => {
       const rect = this.canvas.getBoundingClientRect();
@@ -23,6 +35,10 @@ const StepperCanvas = {
     });
 
     this.render();
+  },
+
+  destroyed() {
+    if (this.fxTimer) clearInterval(this.fxTimer);
   },
 
   updated() { this.render(); },
@@ -53,9 +69,9 @@ const StepperCanvas = {
       }
     }
 
-    // Lenies — a body square plus a dark facing triangle (arrow) drawn inside
-    // it, pointing in the current direction. Every Lenie gets the arrow,
-    // including the debug Lenie (yellow), so its heading reads at a glance.
+    // Lenies — a body square plus the shared directional sprite overlay.
+    // Role colours (debug=yellow, seed=violet, child=slate) are the caller's
+    // fill; the sprite draws the facing notch + predator/plasmid markers.
     for (const l of payload.lenies) {
       const color =
         l.kind === "debug" ? "#facc15"   // yellow — the one being debugged
@@ -64,35 +80,39 @@ const StepperCanvas = {
       this.ctx.fillStyle = color;
       this.ctx.fillRect(l.x * cellPx, l.y * cellPx, cellPx, cellPx);
 
-      const cx = l.x * cellPx + cellPx / 2;
-      const cy = l.y * cellPx + cellPx / 2;
-      this.ctx.fillStyle = "#0f172a";
-      this.ctx.beginPath();
-      const r = cellPx / 3;
-      switch (l.dir) {
-        case "n":
-          this.ctx.moveTo(cx, cy - r);
-          this.ctx.lineTo(cx - r / 2, cy + r / 2);
-          this.ctx.lineTo(cx + r / 2, cy + r / 2);
-          break;
-        case "s":
-          this.ctx.moveTo(cx, cy + r);
-          this.ctx.lineTo(cx - r / 2, cy - r / 2);
-          this.ctx.lineTo(cx + r / 2, cy - r / 2);
-          break;
-        case "e":
-          this.ctx.moveTo(cx + r, cy);
-          this.ctx.lineTo(cx - r / 2, cy - r / 2);
-          this.ctx.lineTo(cx - r / 2, cy + r / 2);
-          break;
-        case "w":
-          this.ctx.moveTo(cx - r, cy);
-          this.ctx.lineTo(cx + r / 2, cy - r / 2);
-          this.ctx.lineTo(cx + r / 2, cy + r / 2);
-          break;
+      const rect = { x: l.x * cellPx, y: l.y * cellPx, w: cellPx, h: cellPx };
+      drawLenieSprite(this.ctx, rect, {
+        dir: l.dir,
+        predator: l.predator,
+        plasmid: l.plasmid,
+        notchColor: "rgba(15,23,42,0.9)",
+      });
+    }
+
+    // Diff ids → birth flashes (division). Death flashes need the vanished
+    // lenie's last cell which isn't tracked post-mortem in the stepper, so
+    // only births are flashed here (stepper's share of the vocabulary).
+    const now = performance.now();
+    const ids = new Set(payload.lenies.map((l) => l.id));
+    for (const l of payload.lenies) {
+      if (!this.prevIds.has(l.id) && this.prevIds.size > 0) {
+        const key = `d:${l.id}:${now}`;
+        this.fx.set(key, {
+          type: "division",
+          x: l.x,
+          y: l.y,
+          startMs: now,
+          expireAt: now + FX_DURATION_MS.division,
+        });
       }
-      this.ctx.closePath();
-      this.ctx.fill();
+    }
+    this.prevIds = ids;
+
+    // Draw active FX entries.
+    for (const [k, f] of this.fx) {
+      if (now >= f.expireAt) { this.fx.delete(k); continue; }
+      const p = (now - f.startMs) / (f.expireAt - f.startMs);
+      drawFx(this.ctx, f.type, { x: f.x * cellPx, y: f.y * cellPx, w: cellPx, h: cellPx }, p);
     }
   },
 };
