@@ -709,6 +709,11 @@ defmodule LeniesWeb.ArenaLive do
      })}
   end
 
+  def handle_info({tag, %{} = info}, socket) when tag in [:division, :death, :predation] do
+    {name, payload} = fx_client_event({tag, info})
+    {:noreply, push_event(socket, name, payload)}
+  end
+
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   # Recognise the two shipped seed plasmids by their phash2; fall back to

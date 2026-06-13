@@ -594,6 +594,11 @@ defmodule LeniesWeb.DashboardLive do
      })}
   end
 
+  def handle_info({tag, %{} = info}, socket) when tag in [:division, :death, :predation] do
+    {name, payload} = fx_client_event({tag, info})
+    {:noreply, push_event(socket, name, payload)}
+  end
+
   def handle_info({:flash, kind, msg}, socket) do
     {:noreply, put_flash(socket, kind, msg)}
   end

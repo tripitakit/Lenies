@@ -115,6 +115,15 @@ defmodule LeniesWeb.WorldLiveShared do
   def sort_arrow(active, :desc, active), do: " ▼"
   def sort_arrow(_by, _dir, _col), do: ""
 
+  @doc """
+  Map an internal `:fx` PubSub message to the `{client_event_name, payload}`
+  pushed to the canvas hook. Returns nil for messages with no client FX.
+  """
+  def fx_client_event({:division, info}), do: {"fx_division", info}
+  def fx_client_event({:death, info}), do: {"fx_death", info}
+  def fx_client_event({:predation, info}), do: {"fx_predation", info}
+  def fx_client_event(_), do: nil
+
   @doc "Flip a sort direction."
   def toggle_dir(:asc), do: :desc
   def toggle_dir(:desc), do: :asc
