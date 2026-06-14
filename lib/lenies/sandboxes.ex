@@ -109,7 +109,9 @@ defmodule Lenies.Sandboxes do
   defp start_sandbox(user_id) do
     world_id = world_id_for(user_id)
 
-    case Lenies.Worlds.start_world(world_id, %{}) do
+    # No spawn/replication caps in the Sandbox — population is still bounded by
+    # the grid (one Lenie per cell). Mirrors the Arena, which is also uncapped.
+    case Lenies.Worlds.start_world(world_id, %{spawn_cap: :infinity, replication_cap: :infinity}) do
       {:ok, sup_pid} ->
         maybe_auto_restore(world_id)
         {:ok, sup_pid}
