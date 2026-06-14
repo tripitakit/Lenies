@@ -75,33 +75,31 @@ defmodule LeniesWeb.ArenaControlsComponent do
           </div>
         <% true -> %>
           <p class="text-[11px] opacity-80">
-            Your lineage: {@lineage_count}/{Lenies.Arena.max_per_user()} alive
+            Your lineage: {@lineage_count} alive
           </p>
 
-          <%= if @lineage_count < Lenies.Arena.max_per_user() do %>
-            <.form
-              for={%{}}
-              as={:seed}
-              phx-submit="seed"
-              phx-target={@myself}
-              class="flex items-center gap-2"
+          <.form
+            for={%{}}
+            as={:seed}
+            phx-submit="seed"
+            phx-target={@myself}
+            class="flex items-center gap-2"
+          >
+            <select name="codeome_id" class="flex-1 text-xs">
+              <%= for c <- @codeomes do %>
+                <option value={c.id}>{c.name}</option>
+              <% end %>
+            </select>
+            <button
+              id="arena-seed-btn"
+              phx-hook="ActionFeedback"
+              data-fx="success"
+              type="submit"
+              class="text-xs px-3 py-1 border border-cyan-500/60 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/50 whitespace-nowrap"
             >
-              <select name="codeome_id" class="flex-1 text-xs">
-                <%= for c <- @codeomes do %>
-                  <option value={c.id}>{c.name}</option>
-                <% end %>
-              </select>
-              <button
-                id="arena-seed-btn"
-                phx-hook="ActionFeedback"
-                data-fx="success"
-                type="submit"
-                class="text-xs px-3 py-1 border border-cyan-500/60 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/50 whitespace-nowrap"
-              >
-                Seed your Lenie
-              </button>
-            </.form>
-          <% end %>
+              Seed your Lenie
+            </button>
+          </.form>
 
           <%= if @lineage_count > 0 do %>
             <button
@@ -134,12 +132,6 @@ defmodule LeniesWeb.ArenaControlsComponent do
       {:ok, :seeded} ->
         send(self(), {:arena_lineage_changed, user.id})
         {:noreply, assign(socket, :flash_msg, "Seeded!")}
-
-      {:error, :lineage_full, n} ->
-        send(self(), {:arena_lineage_changed, user.id})
-
-        {:noreply,
-         assign(socket, :flash_msg, "Arena is full for you (#{n}/#{Lenies.Arena.max_per_user()}).")}
 
       {:error, reason} ->
         {:noreply, assign(socket, :flash_msg, "Seed failed: #{inspect(reason)}")}

@@ -168,7 +168,7 @@ defmodule Lenies.ArenaTest do
       :ok = Lenies.Worlds.stop_world(:arena)
     end
 
-    test "arena world starts with :infinity caps so Arena's own lineage rule is the only enforcement" do
+    test "arena world starts uncapped (:infinity spawn/replication caps, no per-user limit)" do
       # Arena.start_link is already running under the application supervisor.
       # attach_viewer/1 is the trigger that brings up the :arena world the
       # first time (see arena.ex handle_call({:attach_viewer, _}, _, %{started?: false} = state)).
@@ -302,9 +302,8 @@ defmodule Lenies.ArenaTest do
       assert Lenies.Arena.lineage_count(user.id) == 1
     end
 
-    test "seed/2 allows up to max_per_user, then returns {:error, :lineage_full, N}" do
+    test "seed/2 has no per-user limit — every seed succeeds and grows the lineage" do
       user = Lenies.AccountsFixtures.user_fixture()
-      max = Lenies.Arena.max_per_user()
 
       {:ok, codeome} =
         Lenies.Collection.create_codeome(user, %{
@@ -314,13 +313,13 @@ defmodule Lenies.ArenaTest do
           opcodes: ["nop_1", "store", "eat", "eat", "move", "eat", "move", "eat", "move", "eat"]
         })
 
-      for _ <- 1..max do
+      # Seed well past the old cap (5) — all succeed.
+      for _ <- 1..7 do
         assert {:ok, :seeded} = Lenies.Arena.seed(user, codeome.id)
         Process.sleep(20)
       end
 
-      assert Lenies.Arena.lineage_count(user.id) == max
-      assert {:error, :lineage_full, ^max} = Lenies.Arena.seed(user, codeome.id)
+      assert Lenies.Arena.lineage_count(user.id) == 7
     end
 
     test "owned_species_hashes/1 returns the user's distinct alive species" do
@@ -369,7 +368,11 @@ defmodule Lenies.ArenaTest do
       Process.sleep(50)
 
       # Same opcodes → same codeome hash → one species shared by both users.
-      hash = Lenies.Codeome.hash(Lenies.Codeome.from_list(Enum.map(opcodes, &String.to_existing_atom/1)))
+      hash =
+        Lenies.Codeome.hash(
+          Lenies.Codeome.from_list(Enum.map(opcodes, &String.to_existing_atom/1))
+        )
+
       assert hash in Lenies.Arena.owned_species_hashes(user_a.id)
       assert hash in Lenies.Arena.owned_species_hashes(user_b.id)
 

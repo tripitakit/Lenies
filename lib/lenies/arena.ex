@@ -20,13 +20,6 @@ defmodule Lenies.Arena do
   @world_id :arena
   @grace_ms 30_000
 
-  # Max simultaneously-alive Lenies a single user may have seeded in the Arena.
-  @max_per_user 5
-
-  @doc "Max alive Lenies one user may have in the Arena."
-  @spec max_per_user() :: pos_integer()
-  def max_per_user, do: @max_per_user
-
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
   @doc "Attach the calling viewer pid to the Arena. Idempotent; starts the world on first attach."
@@ -54,12 +47,12 @@ defmodule Lenies.Arena do
   end
 
   @doc """
-  Atomically check the user's lineage count and (if below `max_per_user/0`)
-  spawn one Lenie from their collection into the Arena.
+  Spawn one Lenie from the user's collection into the Arena. There is no
+  per-user limit — a player may seed as many lineages as they like (the
+  population is still bounded by the grid: one Lenie per cell).
   """
   @spec seed(map(), integer | binary) ::
           {:ok, :seeded}
-          | {:error, :lineage_full, non_neg_integer()}
           | {:error, term}
   def seed(user, codeome_id), do: GenServer.call(__MODULE__, {:seed, user, codeome_id})
 
@@ -259,8 +252,7 @@ defmodule Lenies.Arena do
 
   defp do_seed(user, codeome_id) do
     with %Lenies.Collection.Codeome{} = entry <- Lenies.Collection.get_codeome(user, codeome_id),
-         {:ok, handle} <- Lenies.Worlds.handle(@world_id),
-         count when count < @max_per_user <- lineage_count(user.id) do
+         {:ok, handle} <- Lenies.Worlds.handle(@world_id) do
       codeome = Lenies.Codeome.from_list(Lenies.Collection.to_opcode_atoms(entry))
       hash = Lenies.Codeome.hash(codeome)
       Lenies.SpeciesColor.set_override(handle, hash, entry.color_hex)
@@ -290,7 +282,6 @@ defmodule Lenies.Arena do
       end
     else
       nil -> {:error, :not_found}
-      count when is_integer(count) -> {:error, :lineage_full, count}
       :error -> {:error, :arena_not_running}
       {:error, _} = err -> err
     end
