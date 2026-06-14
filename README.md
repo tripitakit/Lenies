@@ -1,9 +1,10 @@
-# Lenies — Digital Evolution Sandbox
+# Lenies — Digital Life Sandbox
 
 Lenies is a Phoenix LiveView application that runs a small artificial world
-where digital organisms — Lenies — live, eat, reproduce, mutate, fight, die,
-and gradually evolve under selection pressure. Each Lenie is a BEAM process
-animated by its own tiny program (its *codeome*).
+where digital organisms — Lenies — live, eat, replicate, mutate, fight, and
+die under selection pressure: codeomes that forage and copy cleanly spread,
+the rest die out. Each Lenie is a BEAM process animated by its own tiny
+program (its *codeome*).
 
 The world is **shared**: a single 128×128 toroidal grid called the **Arena**
 is the publicly-viewable homepage where any visitor can watch the ecosystem
@@ -13,9 +14,11 @@ quietly starve; the strongest patterns colonise the grid until something
 better displaces them.
 
 The point isn't to ship a finished game. It's to give you a window into
-evolution as a participatory ecosystem. Watch the Arena, log in to plant your
-own Lenie, craft codeomes in your private Sandbox, save them to your
-collection, see whether they survive.
+replication, mutation, and selection as a participatory ecosystem — a sandbox
+for those dynamics, not a controlled evolution experiment (there's no fitness
+logging or lineage tracking yet). Watch the Arena, log in to plant your own
+Lenie, craft codeomes in your private Sandbox, save them to your collection,
+see whether they survive.
 
 > 📘 **Want to write your own codeomes?** Start with the [Lenies Programming Manual](docs/manual/README.md) — a chapter-by-chapter guide that takes you from your first move-and-eat loop to a tuned self-replicator.
 
@@ -103,8 +106,8 @@ the ground up.
 function. Codeomes that waste energy, fail to forage, or crash on common
 mutations die out; codeomes that replicate cleanly and tolerate copy errors
 slowly spread. Predators (Lenies whose codeomes invoke `:attack`) appear, and
-herbivores evolve defences. There's no zero-sum scoreboard — just an ecosystem
-you contribute to and watch.
+the prey that happen to resist them are the ones that persist. There's no
+zero-sum scoreboard — just an ecosystem you contribute to and watch.
 
 ---
 
