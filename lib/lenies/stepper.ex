@@ -329,4 +329,12 @@ defmodule Lenies.Stepper do
     delay = Application.get_env(:lenies, :lenie_metabolize_delay_ms, 0)
     if delay > 0, do: round(steps * 1000 / delay), else: 100
   end
+
+  @doc """
+  Maximum RUN speed (steps/sec) for the debug stepper. The debugger is for
+  watching execution step-by-step, so it's deliberately capped well below the
+  live world's `world_ops_per_sec/0` — fast enough to skim, slow enough to read.
+  """
+  @spec max_run_speed() :: pos_integer()
+  def max_run_speed, do: 10
 end

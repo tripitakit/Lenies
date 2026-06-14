@@ -888,7 +888,8 @@ defmodule LeniesWeb.EditorLive do
   end
 
   def handle_event("stepper_set_speed", %{"value" => value}, socket) do
-    {:noreply, assign(socket, :run_speed, max(to_int(value), 1))}
+    speed = value |> to_int() |> max(1) |> min(Lenies.Stepper.max_run_speed())
+    {:noreply, assign(socket, :run_speed, speed)}
   end
 
   def handle_event("stepper_select_seed", %{"value" => value}, socket) do

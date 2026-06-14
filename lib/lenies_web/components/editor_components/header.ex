@@ -126,7 +126,7 @@ defmodule LeniesWeb.EditorComponents.Header do
             type="range"
             name="value"
             min="1"
-            max={Lenies.Stepper.world_ops_per_sec()}
+            max={Lenies.Stepper.max_run_speed()}
             value={@run_speed}
             class="stepper-speed-slider"
           />
