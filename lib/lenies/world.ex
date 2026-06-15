@@ -229,8 +229,16 @@ defmodule Lenies.World do
         # world's current config.
         restored_config =
           case Lenies.Snapshot.load_config(state.world_id, name) do
-            {:ok, cfg_map} -> Lenies.World.Config.merge(state.config, cfg_map)
-            :none -> state.config
+            {:ok, cfg_map} ->
+              # Spawn/replication caps are start-time policy, NOT user tuning —
+              # never resurrect them from an old sidecar (a pre-uncap Sandbox
+              # snapshot would otherwise reimpose the old replication_cap). Keep
+              # the world's current caps; restore the rest of the tunables.
+              tunables = Map.drop(cfg_map, [:spawn_cap, :replication_cap])
+              Lenies.World.Config.merge(state.config, tunables)
+
+            :none ->
+              state.config
           end
 
         # Bulk reload bypassed put_cell/4 — rebuild indices from the loaded

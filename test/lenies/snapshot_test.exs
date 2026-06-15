@@ -56,6 +56,42 @@ defmodule Lenies.SnapshotTest do
     assert restored.lenie_id == "TEST"
   end
 
+  test "restore keeps start-time caps even when the sidecar carries old ones", %{root: root} do
+    # A world started uncapped (mirrors Sandbox/Arena policy).
+    wid = {:sandbox, System.unique_integer([:positive])}
+
+    {:ok, _} =
+      Worlds.start_world(wid, %{
+        replication_cap: :infinity,
+        spawn_cap: :infinity,
+        tick_interval_ms: 0
+      })
+
+    on_exit(fn ->
+      Worlds.stop_world(wid)
+      Lenies.World.Tables.delete_all()
+    end)
+
+    :ok = Worlds.save_snapshot(wid, "auto")
+
+    # Simulate a pre-uncap snapshot: overwrite the config sidecar with the old
+    # caps (50) plus a genuine tunable.
+    dir = Path.join([root, Worlds.id_to_path(wid), "auto"])
+    tampered = %{replication_cap: 50, spawn_cap: 50, eat_amount: 777}
+    File.write!(Path.join(dir, "config.bin"), :erlang.term_to_binary(tampered))
+
+    :ok = Worlds.restore_snapshot(wid, "auto")
+
+    {:ok, handle} = Worlds.handle(wid)
+    config = :sys.get_state(handle.pid).config
+
+    # Caps come from the (uncapped) start policy — NOT the sidecar's 50.
+    assert config.replication_cap == :infinity
+    assert config.spawn_cap == :infinity
+    # Real tunables ARE still restored.
+    assert config.eat_amount == 777
+  end
+
   test "save_snapshot/2 writes all 5 tables under <root>/<id_to_path>/<name>",
        %{root: root, world_id: world_id, world_path: world_path} do
     :ok = Worlds.save_snapshot(world_id, "mysnap")
