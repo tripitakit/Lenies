@@ -8,8 +8,8 @@ program (its *codeome*).
 
 The world is **shared**: a single 128×128 toroidal grid called the **Arena**
 is the publicly-viewable homepage where any visitor can watch the ecosystem
-drift in real time, and logged-in users can seed their own creatures into it
-— **one alive lineage per player at a time**. Codeomes thrive, get eaten, or
+drift in real time, and logged-in users can seed their own creatures into it — **as many
+lineages as they like**. Codeomes thrive, get eaten, or
 quietly starve; the strongest patterns colonise the grid until something
 better displaces them.
 
@@ -44,10 +44,10 @@ Lenies has two complementary places where the simulation runs:
 **The Arena — `/`** is the shared public ecosystem. Anyone can land on the URL
 and watch the world drift; no account is required. A presence counter shows
 how many people are currently watching. If you have an account, you can seed
-**one Lenie at a time** from your personal collection. Your lineage — that
-seeded Lenie plus all of its descendants — propagates through replication; you
-cannot seed another until your last descendant dies naturally, OR you trigger
-**Apoptosis** to self-terminate your lineage and start fresh.
+**as many Lenies as you like** from your personal collection. Each seeded
+Lenie plus all of its descendants makes up your lineage, propagating through
+replication; trigger **Apoptosis** at any time to self-terminate *all* of your
+living descendants at once and start fresh.
 
 **The Sandbox — `/sandbox`** is your private laboratory, behind login. Same
 world model as the Arena, but exclusively yours: full control surface (tuning
@@ -130,17 +130,18 @@ The bottom-right control panel adapts to who you are:
   with a link to the registration / login pages.
 - **Logged in, empty collection**: a *"Save a codeome in your Sandbox first"*
   hint with a link to the editor.
-- **Logged in, lineage = 0**: a dropdown of your saved codeomes + a **"Seed
-  your Lenie"** button. Click and one Lenie spawns into the Arena, tagged with
-  your `seeder_user_id`.
-- **Logged in, lineage > 0**: *"Your lineage: N Lenies alive"* + an **"Apoptosis (N)"**
-  destructive button (with a two-step confirm). Pressing it triggers a
-  controlled die-off of all your descendants, freeing you to seed again.
+- **Logged in, with saved codeomes**: a dropdown of your saved codeomes + a
+  **"Seed your Lenie"** button, always available — seed as many as you like.
+  Each click spawns one Lenie into the Arena, tagged with your `seeder_user_id`.
+- **Once you have any alive**: a *"Your lineage: N alive"* readout + an
+  **"Apoptosis (N)"** destructive button (with a two-step confirm) appear
+  alongside the seed form. Pressing it triggers a controlled die-off of all
+  your descendants.
 
 The lineage tag propagates through replication: every child Lenie inherits
 its parent's `seeder_user_id`. The Arena counts your living lineage by
-scanning its `:lenies` ETS table with an `:ets.select` match spec; you can
-seed again only when the count drops to zero (or you trigger Apoptosis).
+scanning its `:lenies` ETS table with an `:ets.select` match spec — that count
+drives the readout and the Apoptosis button.
 
 The Arena lives only while at least one viewer is connected. When the last
 viewer disconnects, a 30-second grace timer starts; if no one returns, the
