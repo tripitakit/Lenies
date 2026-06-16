@@ -1077,14 +1077,14 @@ defmodule LeniesWeb.DashboardLiveTest do
     end
   end
 
-  describe "spawn cap UI (Task 4)" do
-    test "spawn button is disabled when sandbox is at spawn_cap", %{
+  describe "spawn button (uncapped sandbox)" do
+    test "spawn button stays enabled even with many Lenies alive", %{
       conn: conn,
       handle: handle
     } do
-      # The sandbox world boots with default spawn_cap=50. Fill the :lenies
-      # ETS table with 50 fake records so the component update/2 sees the
-      # cap as reached.
+      # The Sandbox now boots uncapped (spawn_cap: :infinity), so a large
+      # population must NOT disable the spawn button. Fill the :lenies ETS
+      # table with 50 fake records and confirm the button is still enabled.
       for i <- 1..50 do
         :ets.insert(
           handle.tables.lenies,
@@ -1094,30 +1094,7 @@ defmodule LeniesWeb.DashboardLiveTest do
 
       {:ok, _view, html} = live(conn, ~p"/sandbox")
 
-      # The submit button in the spawn form should be disabled.
-      assert html =~ ~r/<button[^>]*id="spawn-btn"[^>]*disabled/s
-    end
-
-    test "spawning when at cap surfaces a flash", %{conn: conn, handle: handle} do
-      for i <- 1..50 do
-        :ets.insert(
-          handle.tables.lenies,
-          {"fake-#{i}", %{id: "fake-#{i}", codeome_hash: "abc", lineage: {nil, 0}}}
-        )
-      end
-
-      {:ok, view, _html} = live(conn, ~p"/sandbox")
-
-      # Force the form submission even though the UI button is disabled —
-      # this exercises the engine-level :spawn_cap_exceeded path and verifies
-      # the flash relay from LiveComponent → parent LiveView fires.
-      view
-      |> form("form[phx-submit='spawn_seed']", %{seed_id: "ancestor"})
-      |> render_submit()
-
-      html = render(view)
-      # The flash reflects the world's actual spawn_cap (50), not a hardcoded value.
-      assert html =~ "Sandbox full: max 50 alive Lenies"
+      refute html =~ ~r/<button[^>]*id="spawn-btn"[^>]*disabled/s
     end
   end
 end

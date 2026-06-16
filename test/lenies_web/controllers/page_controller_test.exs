@@ -35,7 +35,7 @@ defmodule LeniesWeb.PageControllerTest do
 
       # Elevator pitch text appears in the splash-hero-pitch paragraph.
       assert html =~ "Programmable life on a 2D grid"
-      assert html =~ "Seed a creature, watch it evolve"
+      assert html =~ "watch it replicate, mutate, and compete to survive"
     end
 
     test "GET / includes the animated background canvas", %{conn: conn} do
