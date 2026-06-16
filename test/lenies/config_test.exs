@@ -15,10 +15,6 @@ defmodule Lenies.ConfigTest do
     assert Config.radiation_per_tick() == 500
   end
 
-  test "cell_resource_cap/0 returns configured value" do
-    assert Config.cell_resource_cap() == 100
-  end
-
   test "hotspot_count/0 returns configured value" do
     assert Config.hotspot_count() == 8
   end

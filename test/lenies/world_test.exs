@@ -61,11 +61,11 @@ defmodule Lenies.WorldTest do
     assert stats_after.tick_count == 1
   end
 
-  test "tick_now/0 caps total resource at grid_size × cell_resource_cap",
+  test "tick_now/0 caps total resource at grid_size × (3 × eat_amount)",
        %{world_id: world_id} do
-    max_total = 16_384 * 100
+    # Per-cell cap is now derived per-world: 3 × eat_amount (default eat=50 → 150).
+    max_total = 16_384 * 150
 
-    # 1000 ticks → 100_000 units poured (well below the global cap)
     for _ <- 1..1000, do: Lenies.Worlds.tick_now(world_id)
 
     stats = Lenies.Worlds.snapshot_stats(world_id)
@@ -474,7 +474,12 @@ defmodule Lenies.WorldTest do
 
   describe "segregate_plasmids/2" do
     test "p_loss = 0.0 keeps every plasmid" do
-      ps = [Lenies.Plasmid.new([:nop_0]), Lenies.Plasmid.new([:nop_1]), Lenies.Plasmid.new([:add])]
+      ps = [
+        Lenies.Plasmid.new([:nop_0]),
+        Lenies.Plasmid.new([:nop_1]),
+        Lenies.Plasmid.new([:add])
+      ]
+
       assert Lenies.World.segregate_plasmids(ps, 0.0) == ps
     end
 

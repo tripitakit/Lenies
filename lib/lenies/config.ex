@@ -11,10 +11,9 @@ defmodule Lenies.Config do
 
   def grid_size, do: get(:grid_size, {128, 128})
   def tick_interval_ms, do: get(:tick_interval_ms, 100)
-  def radiation_per_tick, do: get(:radiation_per_tick, 100)
-  def radiation_uniform_ratio, do: get(:radiation_uniform_ratio, 0.7)
+  def radiation_per_tick, do: get(:radiation_per_tick, 2500)
+  def radiation_uniform_ratio, do: get(:radiation_uniform_ratio, 1.0)
   def hotspot_count, do: get(:hotspot_count, 8)
-  def cell_resource_cap, do: get(:cell_resource_cap, 100)
   def carcass_decay, do: get(:carcass_decay, 0.05)
   def codeome_length_bounds, do: get(:codeome_length_bounds, {5, 1024})
   def min_viable_codeome_opcodes, do: get(:min_viable_codeome_opcodes, 10)
