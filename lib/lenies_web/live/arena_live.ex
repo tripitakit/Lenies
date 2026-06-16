@@ -189,7 +189,7 @@ defmodule LeniesWeb.ArenaLive do
             title="Toggle audio feedback"
             class="text-[10px] px-2 py-1 border border-cyan-500/40 hover:border-cyan-300 hover:text-cyan-200"
           >
-            ♪ AUDIO
+            ♪ SndFx
           </button>
         </div>
       </header>

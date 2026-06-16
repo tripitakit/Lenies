@@ -15,7 +15,7 @@ const AudioToggle = {
         this.el.textContent = "∅ MUTE";
         this.el.dataset.muted = "1";
       } else {
-        this.el.textContent = "♪ AUDIO";
+        this.el.textContent = "♪ SndFx";
         this.el.dataset.muted = "";
       }
     };
