@@ -3,13 +3,12 @@ defmodule Lenies.World.Cell do
   Struct for a single world-grid cell.
 
   - `lenie_id`: id of the resident Lenie, or `nil` if empty.
-  - `resource`: biomass accumulated by radiation (clamped to `cell_resource_cap`).
+  - `resource`: biomass accumulated by radiation (clamped to a per-world cap
+    = 3× `eat_amount`, applied by the radiation step).
   - `carcass`: energy from carcasses (decays at `carcass_decay` rate per tick).
   - `carcass_hue`: hue byte 0..255 (0 = no species color; 1..255 = hue byte
     of the dead Lenie). Reset to 0 when `carcass` returns to 0.
   """
-
-  alias Lenies.Config
 
   @type t :: %__MODULE__{
           lenie_id: nil | binary(),
@@ -20,12 +19,12 @@ defmodule Lenies.World.Cell do
 
   defstruct lenie_id: nil, resource: 0, carcass: 0, carcass_hue: 0
 
-  def add_resource(%__MODULE__{} = cell, amount) when amount > 0 do
-    cap = Config.cell_resource_cap()
+  def add_resource(%__MODULE__{} = cell, amount, cap)
+      when is_integer(amount) and amount > 0 and is_integer(cap) do
     %{cell | resource: min(cap, cell.resource + amount)}
   end
 
-  def add_resource(%__MODULE__{} = cell, _), do: cell
+  def add_resource(%__MODULE__{} = cell, _amount, _cap), do: cell
 
   def decay_carcass(%__MODULE__{} = cell, rate) when rate >= 0 and rate <= 1 do
     # Proportional decay: per tick remove `carcass * rate` on average.

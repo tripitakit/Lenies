@@ -3,17 +3,18 @@ defmodule Lenies.World.CellTest do
 
   alias Lenies.World.Cell
 
-  test "add_resource/2 caps at cell_resource_cap" do
+  test "add_resource/3 caps at the given cap" do
     cell = %Cell{}
-    cell = Cell.add_resource(cell, 80)
+    cell = Cell.add_resource(cell, 80, 150)
     assert cell.resource == 80
-    cell = Cell.add_resource(cell, 50)
-    assert cell.resource == 100
+    cell = Cell.add_resource(cell, 100, 150)
+    assert cell.resource == 150
   end
 
-  test "add_resource/2 ignores negative" do
+  test "add_resource/3 ignores non-positive amounts" do
     cell = %Cell{resource: 10}
-    assert Cell.add_resource(cell, -5).resource == 10
+    assert Cell.add_resource(cell, -5, 150).resource == 10
+    assert Cell.add_resource(cell, 0, 150).resource == 10
   end
 
   test "decay_carcass/2 applies decay rate" do

@@ -588,6 +588,8 @@ defmodule Lenies.World do
   end
 
   defp apply_radiation(state) do
+    cap = 3 * cfg(state, :eat_amount)
+
     deposit =
       Radiation.combined(
         state.grid,
@@ -598,8 +600,14 @@ defmodule Lenies.World do
 
     Enum.reduce(deposit, state, fn {{x, y}, amount}, acc ->
       case :ets.lookup(acc.tables.cells, {x, y}) do
-        [{key, cell}] -> put_cell(acc, key, cell, Cell.add_resource(cell, amount))
-        [] -> acc
+        [{key, cell}] ->
+          new_cell = Cell.add_resource(cell, amount, cap)
+          # Skip the ETS write + index diff when the cell is already at cap
+          # (common once the grid fills under the high uniform drip).
+          if new_cell == cell, do: acc, else: put_cell(acc, key, cell, new_cell)
+
+        [] ->
+          acc
       end
     end)
   end
