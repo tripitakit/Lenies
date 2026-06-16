@@ -16,6 +16,7 @@ defmodule LeniesWeb.ArenaControlsComponent do
      |> assign(assigns)
      |> assign_new(:apoptosis_confirming, fn -> false end)
      |> assign_new(:flash_msg, fn -> nil end)
+     |> assign_new(:last_seed_id, fn -> nil end)
      |> assign(:codeomes, codeomes_for(assigns[:current_scope]))}
   end
 
@@ -87,7 +88,7 @@ defmodule LeniesWeb.ArenaControlsComponent do
           >
             <select name="codeome_id" class="flex-1 text-xs">
               <%= for c <- @codeomes do %>
-                <option value={c.id}>{c.name}</option>
+                <option value={c.id} selected={c.id == @last_seed_id}>{c.name}</option>
               <% end %>
             </select>
             <button
@@ -131,7 +132,7 @@ defmodule LeniesWeb.ArenaControlsComponent do
     case Lenies.Arena.seed(user, codeome_id) do
       {:ok, :seeded} ->
         send(self(), {:arena_lineage_changed, user.id})
-        {:noreply, assign(socket, :flash_msg, "Seeded!")}
+        {:noreply, socket |> assign(:flash_msg, "Seeded!") |> assign(:last_seed_id, codeome_id)}
 
       {:error, reason} ->
         {:noreply, assign(socket, :flash_msg, "Seed failed: #{inspect(reason)}")}
