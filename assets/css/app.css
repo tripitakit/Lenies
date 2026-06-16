@@ -1154,11 +1154,15 @@
   background: rgba(34, 211, 238, 0.15);
 }
 
-.codeome-gap { height: 6px; cursor: text; }
+/* Inter-block caret gaps. Kept generous (12px) so they're an easy click
+   target: at 6px they were nearly impossible to hit, which left the caret
+   stuck at the end-gap and made palette double-click "always append at the
+   end". The end gap stays flex:1 so it fills the listing's slack. */
+.codeome-gap { height: 12px; cursor: text; }
 .codeome-gap-end { min-height: 24px; flex: 1; }
 .codeome-gap-caret { position: relative; }
 .codeome-gap-caret::before {
-  content: ""; position: absolute; left: 0; right: 0; top: 2px; height: 2px;
+  content: ""; position: absolute; left: 0; right: 0; top: 5px; height: 2px;
   background: var(--cyan-400, #22d3ee);
   animation: codeome-caret-blink 1s step-end infinite;
 }
