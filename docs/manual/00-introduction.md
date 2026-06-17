@@ -87,24 +87,27 @@ privileged position.
 Each cell holds at most one of the following:
 
 - **Nothing.** An empty cell a Lenie can move into.
-- **Resource.** A pool of energy that Lenies can eat. Resources accumulate
-  from radiation (see below) and are depleted by `:eat`.
+- **Resource.** A pool of energy that Lenies can eat. Each cell's resource is
+  set by a slowly-shifting energy **field** (see below) and is drained by
+  `:eat`, which empties the whole cell in one bite.
 - **Detritus.** The remains of a Lenie that has died. Detritus contains
-  energy — roughly half of what the dead Lenie had left — and can also be
-  eaten. Detritus yields energy 1:1 per unit consumed, the same as raw
-  resource; no bonus multiplier applies, so the total energy in the world is
-  conserved. Over time detritus decays and disappears.
+  energy — roughly half of what the dead Lenie had left — and is eaten together
+  with the cell's resource. Detritus yields energy 1:1 per unit consumed, the
+  same as raw resource; no bonus multiplier applies, so eating never creates
+  energy. Over time detritus decays and disappears.
 - **A Lenie.** A living organism occupying the cell.
 
 A cell can hold resource *and* detritus simultaneously, but only one Lenie
 at a time.
 
-**Radiation** is the primary energy source for the entire ecosystem. Every
-world tick, the simulator deposits resource across the grid — mostly to
-slowly-drifting hotspot regions, with a smaller uniform component. Think of
-it as sunlight: unevenly distributed, continuously falling. A Lenie that
-sits still will eventually exhaust its local resource even if the overall
-grid is rich.
+The **energy field** is the primary energy source for the entire ecosystem.
+Rather than a uniform drip, each cell's resource is continuously pulled toward
+a target set by a fluctuating field — a blend of slow travelling waves and
+drifting noise. The result is an ever-shifting landscape of **oases** (rich
+cells) and **deserts** (barren cells) that slowly moves and cycles over time.
+A Lenie that sits still empties its cell with the first `:eat` and then
+starves: survival means **grazing** — finding a charged cell, draining it, and
+moving on as the fertile regions drift.
 
 ---
 

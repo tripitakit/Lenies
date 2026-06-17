@@ -18,7 +18,7 @@ defmodule LeniesWeb.EditorLive.Helpers do
   `attack_damage` tuning. Pure given the runtime config.
   """
   def current_economics(genome) do
-    eat_amount = Application.get_env(:lenies, :eat_amount, 20)
+    eat_amount = Application.get_env(:lenies, :eat_amount, 50)
     attack_damage = Application.get_env(:lenies, :attack_damage, 10)
     GenomeBuffer.economics(genome, eat_amount, attack_damage)
   end

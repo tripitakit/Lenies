@@ -10,7 +10,7 @@ Lenies; the Chapter 7 sustainable replicator has the same shape.
 ## 8.1 Every codeome has a budget
 
 Think of a replication cycle as a ledger. On the cost side: every opcode you execute draws energy.
-On the gain side: every successful `:eat` adds energy. The rule is simple:
+On the gain side: every successful `:eat` empties a cell and banks its contents. The rule is simple:
 
 ```
 survive long-term  ->  gain per cycle >= cost per cycle
@@ -114,64 +114,61 @@ Total per cycle           968.20 energy   (~969)
 
 ## 8.3 Gain per cycle
 
-Each successful `:eat` returns up to `eat_amount` energy. The worked figures in this chapter use `eat_amount = 20` (the historical default; the current default is 50 — gains scale linearly). The forage loop runs K = 64 iterations.
-Define `hit_rate` as the fraction of visited cells that have resource when you arrive:
+The cost side is exact — opcode counts don't lie. The gain side is where the **energy field**
+comes in. A single `:eat` **empties the whole cell**, so each successful bite yields whatever that
+cell happens to hold: `0` in a desert, up to the per-cell cap (`3 × eat_amount` = 150 by default)
+in a full oasis. There is no fixed per-eat yield to multiply by.
 
-```
-gain per cycle = 64 x 20 x hit_rate = 1280 x hit_rate
-```
+So gain per cycle is the total resource your forager sweeps up over its K `eat; move` steps, and
+that depends on two things you do not control directly:
 
-| hit_rate | gain | cost | net |
-|----------|------|------|-----|
-| 1.00 | 1280 | 969 | +311 |
-| 0.80 | 1024 | 969 | +55 |
-| 0.76 | ~969 | 969 | ~0 (break-even) |
-| 0.50 | 640 | 969 | -329 |
+- **Field richness** — how much of the grid is oasis versus desert right now, and how full those
+  oasis cells are. The field slowly drifts and cycles, so a patch that is fertile this minute may
+  be barren later.
+- **Competition** — other Lenies draining the same cells before you reach them. A crowded world
+  thins the oases.
 
-At 50% hit rate the replicator starves. At 80% it survives with a surplus. Hit rate is not a free
-parameter — it emerges from radiation replenishment and population pressure. A crowded world
-collapses hit rate and triggers crashes.
+The practical consequence is that foraging is **bursty**. A forager that wanders into an oasis
+fills up in a handful of bites (each worth up to 150); one stuck in a desert burns its move budget
+for nothing. Survival is less about a steady trickle and more about **finding and draining charged
+cells faster than you spend energy moving between them** — grazing.
 
 ---
 
 ## 8.4 Why Ancestor picks K = 64
 
-The break-even hit rate at K = 64 is ~0.76. That places the operating point inside the sustainable
-zone for a well-seeded world while keeping generations short — important because shorter cycles
-mean a lineage adapts faster and spends less wall-clock time between divisions. K = 64 is also
-convenient to build exactly via six doublings of `push1` — no approximation needed.
+K is the forage budget — the number of `eat; move` steps between divisions. It has to be large
+enough to cross the lean stretches between oases without the parent starving, and to bank the
+~969-energy cycle cost plus a divide surplus. Because a single oasis bite now returns up to 150
+energy, a forager in a rich field needs far fewer *successful* eats than a fixed-yield model would
+suggest — but it still needs enough K to keep moving through deserts until it reaches the next
+charged cell.
 
-With K = 128 the surplus grows and the break-even hit rate drops, but each cycle takes twice as
-long in wall-clock time and mutation accumulates faster per unit time. With K = 32 the break-even
-rises toward ~0.9 — viable only in a very well-fed world. K = 64 is a deliberate sweet spot for a
-100-opcode body.
+K = 64 is a sensible budget for a 100-opcode body: long enough to graze across a few zones, short
+enough to keep generations fast (shorter cycles adapt faster and bank surplus sooner). It is also
+convenient to build exactly via six doublings of `push1`. In a sparse or crowded field you would
+want a larger K (more chances to find food); in a consistently rich field a smaller one suffices.
 
 ---
 
 ## 8.5 Steady-state energy formula
 
-At `:divide`, energy is split evenly. Let C = cost through divide (524) and F = net forage gain
-after divide = `K × eat_amount × hit_rate − forage_loop_cost − forage_init`. The recurrence is:
+At `:divide`, energy is split evenly. Let C = cost through divide (≈524) and F = net energy banked
+during the forage phase (resource swept from grazed cells, minus the forage loop and init cost).
+The recurrence still holds structurally:
 
 ```
-E_{k+1} = (E_k - C) / 2 + F
+E_{k+1} = (E_k - C) / 2 + F      ->      E_steady = 2F - C
 ```
 
-At steady state E_{k+1} = E_k:
+The difference from a fixed-yield world is that **F is set by the field, not by a formula**: it
+rises in rich, uncrowded conditions and falls in deserts or crowds. A codeome with a high F (an
+efficient forager in a generous field) settles at a high steady-state energy; one that barely
+covers C declines through repeated divide-halvings until it dies.
 
-```
-E_steady = 2F - C
-```
-
-For Ancestor at 100% hit rate:
-
-```
-F = 64 x 20 - 441.6 - 2.9 = 1280 - 444.5 = 835.5
-E_steady = 2 x 835.5 - 524 ~ 1147 energy
-```
-
-So a well-fed Ancestor settles around ~1150 energy per generation. E_steady rises with forage net
-gain and falls with replication cost — the two levers you tune when designing a codeome.
+The two levers you *do* control are the **replication cost** (keep the copy loop and body tight —
+see 8.2) and the **forage efficiency** (a cheap `eat; move` body and good movement, so you actually
+reach charged cells). The field — and how crowded the world is — sets the rest.
 
 ---
 
@@ -206,45 +203,33 @@ mutations per generation but most land in non-critical padding or anchor positio
 
 ---
 
-## 8.7 A general formula for "can my codeome survive?"
+## 8.7 A general rule for "can my codeome survive?"
+
+Putting the two sides together:
 
 ```
-sustainable  iff
-
-  K x (eat_amount x hit_rate  -  forage_cost_per_iter)  >  replication_cycle_cost
+sustainable  iff   energy swept from grazed cells per cycle  >  cycle cost
 ```
 
-Where:
+The **cost side is precise and under your control:**
 
-- `K` = number of forage iterations between divisions
-- `eat_amount = 20` (illustrative value; current default 50)
-- `hit_rate` = fraction of visited cells with resource (world-dependent, typically 0.7–1.0 in
-  well-seeded runs)
-- `forage_cost_per_iter = 6.9` (for Ancestor's `eat; move` forage body; leaner bodies cost less)
 - `replication_cycle_cost` = setup + allocate + copy loop + divide (≈ 524 for a 100-op codeome;
-  scales mainly with codeome length via the copy loop and allocate terms)
+  scales mainly with length via the copy loop and `allocate` terms). A leaner ~50-op replicator is
+  ≈ 280 — it breaks even on far less food.
+- `forage_loop_cost` = `K × forage_cost_per_iter` (≈ 6.9 for Ancestor's `eat; move` body; leaner
+  bodies cost less).
 
-Solve for the minimum K:
+The **gain side is field-dependent and bursty**, so there is no clean `K_min` table any more: the
+same codeome thrives in a rich, uncrowded field and starves in a desert or a crush of competitors.
+Three design rules follow:
 
-```
-K > replication_cycle_cost / (eat_amount x hit_rate - forage_cost_per_iter)
-```
-
-At different hit rates (for a 100-op codeome, forage_cost_per_iter = 6.9):
-
-| hit_rate | eat_amount × h | net per iter | K_min |
-|----------|----------------|--------------|-------|
-| 1.00 | 20.0 | 13.1 | 40 |
-| 0.80 | 16.0 | 9.1 | 58 |
-| 0.70 | 14.0 | 7.1 | 74 |
-| 0.50 | 10.0 | 3.1 | 169 |
-
-At 80% hit rate K = 58 already works; K = 64 gives a small margin. At 70% you would need K = 74,
-so a K = 64 Ancestor needs a reasonably well-fed world (hit rate ~0.78+). At 50% you would need
-K > 169, making each cycle very slow.
-
-For a leaner ~50-op replicator, `replication_cycle_cost ≈ 280`; at 80% hit rate K_min ≈ 31, so a
-short codeome can break even with a much smaller forage budget.
+- **Move well.** Since one bite empties a cell, the bottleneck is *reaching the next charged cell*.
+  Efficient turning and movement — not getting wedged against walls or other Lenies — matters more
+  than raw eat count.
+- **Keep cost low.** Every opcode you cut from the copy loop or forage body lowers the bar your
+  foraging has to clear.
+- **Right-size K.** Big enough to cross the deserts between oases; not so big that generations
+  crawl. Tune it to how rich and crowded your world is.
 
 ---
 

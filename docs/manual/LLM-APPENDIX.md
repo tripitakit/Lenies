@@ -116,7 +116,7 @@ at indices 38/39 so all earlier encodings are unchanged.
 | 22 | `:move` | 2.0 | `( -- )` | Step forward one cell; world action |
 | 23 | `:turn_left` | 0.5 | `( -- )` | Counter-clockwise: n→w→s→e→n |
 | 24 | `:turn_right` | 0.5 | `( -- )` | Clockwise: n→e→s→w→n |
-| 25 | `:eat` | 2.0 | `( -- )` | Consume `eat_amount` (default 50) from cell |
+| 25 | `:eat` | 2.0 | `( -- )` | Empties the cell: gain all resource+detritus, capped per cell at `3×eat_amount`=150 |
 | 26 | `:attack` | 5.0 | `( -- )` | Damage Lenie in front cell (deals 10, costs 5) |
 | 27 | `:defend` | 2.0 | `( -- )` | Activate defense for `defense_window_ticks=5`; incoming attacks deal half damage (10→5) and the attacker pays an extra `defense_attacker_penalty=5` |
 | 28 | `:get_ip` | 0.3 | `( -- ip )` | Current instruction pointer |
@@ -513,11 +513,12 @@ Before outputting a codeome, mentally run through this list:
    (`Ancestor` does this: slot[0] holds the copy index during replication,
    then the forage budget K); just make sure the value is fresh when you load it.
 
-8. **Energy budget is sustainable.** For a replicator: per-iter eat gain
-   must exceed per-iter cost, and `K × (gain - cost)` must exceed
-   replication cost. Default `eat_amount=50` minus per-iter cost
-   (~6-13 depending on body) leaves +7 to +14 per iter. K=32 → ~+50
-   margin (tight); K=128 → ~+800 margin (comfortable).
+8. **Energy budget is sustainable.** For a replicator: the energy grazed
+   per forage cycle must exceed the replication cycle cost. `:eat` empties
+   the whole cell (0 in a desert, up to cap `3×eat_amount`=150 in an oasis),
+   so per-cycle gain is field-dependent and bursty — there is no fixed
+   per-iter margin. Keep replication cost low, move well to reach charged
+   cells, and size K to cross the deserts between oases. (See ch. 8.)
 
 ---
 

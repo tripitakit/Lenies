@@ -290,7 +290,9 @@ the new position, or `:blocked`. The Lenie process updates `pos` on success.
 **Stack:** `( -- )`
 **Cost:** `2.0`
 **Description:** Yields with `{:eat, pos}`. World replies `{:ate, amount}`;
-the Lenie process adds `amount` to energy. Amount is `0` for an empty cell.
+the Lenie process adds `amount` to energy. A single `:eat` **empties the whole
+cell** — `amount` is all of the cell's resource plus any detritus (a cell holds
+at most `3 × eat_amount` = 150 by default), or `0` for an empty cell.
 
 ---
 

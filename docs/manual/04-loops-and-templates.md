@@ -191,7 +191,7 @@ cost = 0.2 + 0.05 x template_length
 
 A 4-bit template costs 0.40 per jump execution. An 8-bit template costs 0.60. Keep templates short when energy budget matters.
 
-To put this in context: Reflex executes one or two conditional jumps plus a loop-back `jmp_t` per iteration, each with a 4-bit template (0.40 each). On the food path it spends roughly `sense_front` (0.5) + `dup` (0.1) + `jz_t` (0.4) + `push1`+`add` (0.3) + `jz_t` (0.4) + `eat` (2.0) + `move` (2.0) + `jmp_t` (0.4) ≈ 6.1 energy; the cruise and turn paths are cheaper. With an initial 10 000 energy budget and `eat_amount = 20` per cell, it needs to eat often enough to offset the move cost. On a well-populated grid this is easy; on a sparse grid it will starve — and because Reflex never replicates, that is the end of that lineage.
+To put this in context: Reflex executes one or two conditional jumps plus a loop-back `jmp_t` per iteration, each with a 4-bit template (0.40 each). On the food path it spends roughly `sense_front` (0.5) + `dup` (0.1) + `jz_t` (0.4) + `push1`+`add` (0.3) + `jz_t` (0.4) + `eat` (2.0) + `move` (2.0) + `jmp_t` (0.4) ≈ 6.1 energy; the cruise and turn paths are cheaper. With an initial 10 000 energy budget it needs to eat often enough to offset the move cost — and because a single `:eat` empties a whole cell (up to 150 energy in a full oasis), one good bite covers many moves. On a well-populated grid this is easy; on a sparse grid it will starve — and because Reflex never replicates, that is the end of that lineage.
 
 ---
 

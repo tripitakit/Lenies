@@ -28,7 +28,7 @@ internally):
   :nop_0,        # 0  LOOP_HEAD anchor (bit pattern: [0])
   :sense_front,  # 1  yield to world; push cell info (we'll ignore the value)
   :drop,         # 2  discard the sense result - we just want the wait_world cycle
-  :eat,          # 3  yield; consume up to eat_amount from current cell if present
+  :eat,          # 3  yield; empties the current cell, gaining all its resource (if any)
   :move,         # 4  yield; step forward if the front cell is empty
   :jmp_t,        # 5  jump to complement of the following template
   :nop_1,        # 6  template (bit pattern: [1])
@@ -53,9 +53,9 @@ this idiom whenever a loop needs to pace itself without branching. (The cookbook
 chapter 11 has more on world-yield patterns.)
 
 **Position 3 — `:eat`**
-Yields to the world and attempts to consume up to `eat_amount` (50 energy units by default) from the
-current cell's resource pool. If the cell is empty the yield still happens; you just don't
-gain energy. Cost: 2.0.
+Yields to the world and **empties the current cell**, gaining all of its resource
+(plus any detritus) in one bite — up to the per-cell cap of `3 × eat_amount` (150 by
+default). If the cell is empty the yield still happens; you just don't gain energy. Cost: 2.0.
 
 **Position 4 — `:move`**
 Yields to the world and steps forward in the current facing direction (`:n` at birth).
@@ -129,9 +129,9 @@ Cost sources (from `Lenies.Codeome.Costs`):
 After birth the jump lands at position 1, so `:nop_0` (position 0) runs only once and the
 steady-state loop is positions 1–5: `sense_front; drop; eat; move; jmp_t` =
 0.5 + 0.1 + 2.0 + 2.0 + 0.25 = **4.85 energy per loop** (the very first pass adds the
-one-time 0.1 for `:nop_0`, for 4.95). With `eat_amount` = 20, a single successful eat more
-than pays for the entire loop. On a world with reasonable resource density the Crawler is
-comfortably energy-positive.
+one-time 0.1 for `:nop_0`, for 4.95). Because `:eat` empties the whole cell, a single
+successful eat in a charged cell more than pays for the entire loop. On a world with reasonable
+resource density the Crawler is comfortably energy-positive.
 
 ---
 
@@ -223,9 +223,9 @@ Fire up the app at `http://localhost:4000` and follow these steps exactly:
    Because the world is toroidal it disappears off the top edge and reappears at the
    bottom — the same creature, crossing the wrap.
 
-If the dot stays still, confirm the world has at least some initial resource (`eat_amount`
-is non-zero in the config). If it vanishes immediately, its starting energy may have been
-set too low — 10000 is safe.
+If the dot stays still, it may have spawned in a barren patch of the field (the field seeds
+resource everywhere, but deserts hold little). If it vanishes immediately, its starting energy
+may have been set too low — 10000 is safe.
 
 ---
 

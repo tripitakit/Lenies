@@ -218,10 +218,11 @@ defmodule LeniesWeb.CodeomeBufferTest do
       assert e.max_gain == 0.0
     end
 
-    test "eat opcodes contribute eat_amount × count to max_gain and 2.0 each to cost" do
+    test "eat opcodes contribute cell_cap (3×eat_amount) × count to max_gain and 2.0 each to cost" do
       e = CodeomeBuffer.economics([:eat, :eat, :eat], 20, 10)
       assert e.n_eat == 3
-      assert e.max_gain == 60.0
+      # :eat empties the whole cell → up to cell_cap = 3×20 = 60 each
+      assert e.max_gain == 180.0
       assert e.cost == 6.0
     end
 
@@ -234,8 +235,9 @@ defmodule LeniesWeb.CodeomeBufferTest do
     end
 
     test "max_gain reflects current tuning eat_amount/attack_damage" do
+      # eat → cell_cap 3×50 = 150; attack → 25
       e = CodeomeBuffer.economics([:eat, :attack], 50, 25)
-      assert e.max_gain == 75.0
+      assert e.max_gain == 175.0
     end
 
     test "template-jump cost scales with the run of nops following the jump" do
@@ -277,9 +279,9 @@ defmodule LeniesWeb.CodeomeBufferTest do
     end
 
     test "net is max_gain - cost, signed" do
-      # 1 eat: cost 2.0, gain 20 → net +18.0
+      # 1 eat: cost 2.0, gain cell_cap 60 → net +58.0
       e = CodeomeBuffer.economics([:eat], 20, 10)
-      assert e.net == 18.0
+      assert e.net == 58.0
 
       # 1 attack: cost 5.0, gain 10 → net +5.0
       e = CodeomeBuffer.economics([:attack], 20, 10)

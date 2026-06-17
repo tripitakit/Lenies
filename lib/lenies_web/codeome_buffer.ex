@@ -142,9 +142,11 @@ defmodule LeniesWeb.CodeomeBuffer do
     unified editor passes the chromosome length so plasmid regions don't
     inflate replication cost). `:ret` is always priced with `t_len = 0`
     since it doesn't consume a template at runtime.
-  * `max_gain` — `n_eat × eat_amount + n_attack × attack_damage`,
-    the strict upper bound on energy yielded by a pass (assumes every
-    EAT and ATTACK succeeds — real hit rates are well below 1).
+  * `max_gain` — `n_eat × cell_cap + n_attack × attack_damage`, where
+    `cell_cap = 3 × eat_amount` is the per-cell resource cap. A single
+    `:eat` empties the whole cell, so its best case is a full oasis cell
+    at the cap. Strict upper bound — assumes every EAT lands on a full
+    cell and every ATTACK succeeds (real hit rates are well below 1).
   * `net = max_gain - cost` is signed; the UI colours it.
 
   `eat_amount` and `attack_damage` are passed in so the function stays
@@ -162,6 +164,7 @@ defmodule LeniesWeb.CodeomeBuffer do
           n_eat: non_neg_integer(),
           n_attack: non_neg_integer(),
           eat_amount: number(),
+          cell_cap: number(),
           attack_damage: number(),
           alloc_size: non_neg_integer()
         }
@@ -170,7 +173,11 @@ defmodule LeniesWeb.CodeomeBuffer do
     cost = pass_cost(buffer, alloc_size)
     n_eat = Enum.count(buffer, &(&1 == :eat))
     n_attack = Enum.count(buffer, &(&1 == :attack))
-    max_gain = (n_eat * eat_amount + n_attack * attack_damage) * 1.0
+    # :eat empties the WHOLE cell, so a single eat can yield up to the per-cell
+    # resource cap (3 × eat_amount) — a full oasis cell. max_gain is the strict
+    # upper bound (every eat on a full cell, every attack landing).
+    cell_cap = 3 * eat_amount
+    max_gain = (n_eat * cell_cap + n_attack * attack_damage) * 1.0
 
     %{
       cost: cost,
@@ -179,6 +186,7 @@ defmodule LeniesWeb.CodeomeBuffer do
       n_eat: n_eat,
       n_attack: n_attack,
       eat_amount: eat_amount,
+      cell_cap: cell_cap,
       attack_damage: attack_damage,
       alloc_size: alloc_size
     }

@@ -27,14 +27,14 @@ defmodule LeniesWeb.EditorComponents.Listing do
     ~H"""
     <section class="codeome-listing-pane min-h-0">
       <%!-- Static energy budget for one linear pass through the buffer
-            — cost is exact, max gain assumes every EAT/ATTACK hits.
-            Reflects current eat_amount / attack_damage tuning at the
-            time the buffer last changed. --%>
+            — cost is exact, max gain assumes every EAT empties a full
+            cell (cap = 3×eat_amount) and every ATTACK hits. Reflects
+            current tuning at the time the buffer last changed. --%>
       <div class="codeome-energy-panel" id="codeome-energy-panel">
         <div class="codeome-energy-panel-head">
           <span class="codeome-energy-panel-title">Energy / pass</span>
           <span class="codeome-energy-panel-note">
-            {@economics.n_eat} eat × {fmt_num(@economics.eat_amount)} + {@economics.n_attack} attack × {fmt_num(
+            {@economics.n_eat} eat × {fmt_num(@economics.cell_cap)} + {@economics.n_attack} attack × {fmt_num(
               @economics.attack_damage
             )} · allocate sized {@economics.alloc_size}
           </span>

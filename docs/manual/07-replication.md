@@ -634,12 +634,12 @@ loop (~N × 1.0 + setup ≈ N + 20). For a 111-op replicator that is about 130 e
 replication — all spent before the child is even born. After the split, each lenie has
 roughly half of whatever was left, and neither has enough energy to replicate again.
 
-With K = 64 iterations of eat+move, the parent earns roughly `K × (eat_gain − cost_per_step)`
-energy per cycle. At `eat_amount = 20` and per-step cost of about 6.6 (sense 0.5
-+ drop 0.1 + eat 2.0 + move 2.0 + counter arithmetic ~2.0), the net gain is approximately
-`64 × (20 − 6.6) ≈ 858` energy per forage cycle. That comfortably covers the ~130-unit
-replication cost and leaves energy for the next generation. Chapter 8 does the full budget
-analysis.
+With K = 64 iterations of eat+move, the parent grazes up to 64 cells per cycle. Each `:eat`
+empties whatever cell it lands on — `0` in a desert, up to the per-cell cap (150) in a full
+oasis — at a per-step cost of about 6.6 (sense 0.5 + drop 0.1 + eat 2.0 + move 2.0 + counter
+arithmetic ~2.0). In a reasonably fed field a handful of oasis bites already covers the ~130-unit
+replication cost and leaves energy for the next generation; in a barren stretch the same loop runs
+at a loss. Chapter 8 does the full budget analysis.
 
 ---
 

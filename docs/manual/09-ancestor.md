@@ -276,7 +276,8 @@ replication cycle. Cross-reference: chapter 04
 :eat, :move,
 ```
 
-`:eat` collects food (up to `eat_amount`, default 50); `:move` steps forward
+`:eat` empties the current cell (all its resource + detritus, up to the per-cell
+cap of `3 × eat_amount`); `:move` steps forward
 (blocked → no-op). Ancestor forages by ploughing straight ahead — the
 deterministic post-divide turn already chose a fresh heading each generation.
 Cross-reference: chapter 03 ([03-first-codeome.md](03-first-codeome.md)).
