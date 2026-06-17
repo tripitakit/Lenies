@@ -9,11 +9,14 @@ defmodule Lenies.WorldTest do
     {:ok, world_id: world_id}
   end
 
-  test "starts and initializes ETS tables with 16_384 empty cells (128×128)",
+  test "starts and initializes ETS tables with 16_384 cells seeded from field (128×128)",
        %{world_id: world_id} do
     assert :ets.info(Lenies.WorldTestHelpers.cells(world_id), :size) == 16_384
     [{{0, 0}, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {0, 0})
-    assert cell.resource == 0
+    # Cells are seeded from the field at tick 0 — resource is >= 0 and bounded by cap.
+    max_cap = 3 * Application.get_env(:lenies, :eat_amount, 50)
+    assert cell.resource >= 0
+    assert cell.resource <= max_cap
     assert cell.lenie_id == nil
     assert cell.carcass == 0
   end
@@ -46,29 +49,33 @@ defmodule Lenies.WorldTest do
     stats = Lenies.Worlds.snapshot_stats(world_id)
     assert stats.cells == 16_384
     assert stats.population == 0
-    assert stats.total_resource == 0
+    # Cells are field-seeded at init, so total_resource > 0 and within bounds.
+    max_total = 16_384 * 3 * Application.get_env(:lenies, :eat_amount, 50)
+    assert stats.total_resource > 0
+    assert stats.total_resource <= max_total
     assert stats.total_carcass == 0
   end
 
-  test "tick_now/0 applies radiation to cells", %{world_id: world_id} do
-    stats_before = Lenies.Worlds.snapshot_stats(world_id)
-    assert stats_before.total_resource == 0
+  test "tick_now/0 applies field relaxation — total_resource stays within bounds", %{world_id: world_id} do
+    max_total = 16_384 * 3 * Application.get_env(:lenies, :eat_amount, 50)
 
     Lenies.Worlds.tick_now(world_id)
     stats_after = Lenies.Worlds.snapshot_stats(world_id)
-    # radiation_per_tick default (config/runtime.exs)
-    assert stats_after.total_resource == 500
+    # Field-seeded + one relaxation sweep: total_resource > 0 and bounded by cap.
+    assert stats_after.total_resource > 0
+    assert stats_after.total_resource <= max_total
     assert stats_after.tick_count == 1
   end
 
   test "tick_now/0 caps total resource at grid_size × (3 × eat_amount)",
        %{world_id: world_id} do
-    # Per-cell cap is now derived per-world: 3 × eat_amount (default eat=50 → 150).
-    max_total = 16_384 * 150
+    # Per-cell cap is derived per-world: 3 × eat_amount (default eat=50 → 150).
+    max_total = 16_384 * 3 * Application.get_env(:lenies, :eat_amount, 50)
 
     for _ <- 1..1000, do: Lenies.Worlds.tick_now(world_id)
 
     stats = Lenies.Worlds.snapshot_stats(world_id)
+    assert stats.total_resource > 0
     assert stats.total_resource <= max_total
     assert stats.tick_count == 1000
   end
@@ -219,20 +226,22 @@ defmodule Lenies.WorldTest do
 
     test "total_resource is correct at init (before first tick)",
          %{world_id: world_id} do
-      # Before any tick, radiation has not run (tick_interval_ms: 0 = no auto-tick,
-      # but prewarm_radiation uses :initial_radiation_ticks which defaults to 50 in
-      # test config — check actual resource).
+      # Cells are seeded from the field at tick 0, so total_resource > 0 and
+      # bounded by the per-cell cap. Cached total must match the direct fold.
+      max_total = 16_384 * 3 * Application.get_env(:lenies, :eat_amount, 50)
       stats = Lenies.Worlds.snapshot_stats(world_id)
       {direct_r, _} = direct_sum(world_id)
       assert stats.total_resource == direct_r
+      assert stats.total_resource > 0
+      assert stats.total_resource <= max_total
     end
   end
 
   describe "eat clears carcass_hue when carcass goes to 0" do
-    test "eating the last carcass unit clears carcass_hue", %{world_id: world_id} do
+    test "eating a cell with carcass clears carcass_hue (eat empties whole cell)", %{world_id: world_id} do
       :ok = Lenies.Worlds.tune(world_id, :eat_amount, 50)
 
-      # Plant a cell with carcass = 5 (less than eat_amount) and a hue marker
+      # Plant a cell with carcass = 5 and a hue marker; eat empties everything.
       :ets.insert(
         Lenies.WorldTestHelpers.cells(world_id),
         {{1, 1}, %Lenies.World.Cell{carcass: 5, carcass_hue: 137}}
@@ -245,19 +254,19 @@ defmodule Lenies.WorldTest do
       assert cell.carcass_hue == 0
     end
 
-    test "eating but leaving some carcass preserves carcass_hue", %{world_id: world_id} do
-      :ok = Lenies.Worlds.tune(world_id, :eat_amount, 3)
-
+    test "eating a large carcass cell still clears both carcass and carcass_hue", %{world_id: world_id} do
+      # eat now empties the whole cell regardless of how large the carcass is.
       :ets.insert(
         Lenies.WorldTestHelpers.cells(world_id),
         {{2, 2}, %Lenies.World.Cell{carcass: 20, carcass_hue: 99}}
       )
 
-      {:ok, {:ate, _}} = Lenies.Worlds.action(world_id, {:eat, {2, 2}})
+      {:ok, {:ate, amount}} = Lenies.Worlds.action(world_id, {:eat, {2, 2}})
 
       [{_, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {2, 2})
-      assert cell.carcass > 0
-      assert cell.carcass_hue == 99
+      assert amount == 20
+      assert cell.carcass == 0
+      assert cell.carcass_hue == 0
     end
   end
 

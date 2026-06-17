@@ -1,8 +1,8 @@
 defmodule Lenies.World do
   @moduledoc """
   The Lenies sandbox "world". GenServer that owns the ETS tables, drives the
-  environmental tick, applies radiation and carcass decay, and provides the
-  public API for snapshots and sterilization.
+  environmental tick, applies the resource field and carcass decay, and provides
+  the public API for snapshots and sterilization.
 
   ## Multi-world
 
@@ -29,7 +29,7 @@ defmodule Lenies.World do
   use GenServer
 
   alias Lenies.Config
-  alias Lenies.World.{Cell, ChildSlots, Hotspots, Radiation, Tables}
+  alias Lenies.World.{Cell, ChildSlots, Field, Tables}
   alias Lenies.{Codeome, Mutator}
 
   require Logger
@@ -83,9 +83,9 @@ defmodule Lenies.World do
     # `grid` is still sourced from Lenies.Config (system bounds), not from the
     # per-world Config. Multi-grid support is a later step.
     grid = Config.grid_size()
-    hotspots = Hotspots.initial(grid, Config.hotspot_count())
+    field = Field.new(:erlang.phash2(world_id))
 
-    init_cells(grid, tables)
+    init_cells_from_field(field, grid, tables, 3 * Application.get_env(:lenies, :eat_amount, 50))
 
     state = %{
       world_id: world_id,
@@ -93,7 +93,7 @@ defmodule Lenies.World do
       tables: tables,
       handle: handle,
       grid: grid,
-      hotspots: hotspots,
+      field: field,
       tick_ref: nil,
       tick_count: 0,
       paused?: false,
@@ -105,8 +105,6 @@ defmodule Lenies.World do
       total_resource: 0,
       total_carcass: 0
     }
-
-    state = prewarm_radiation(state)
     state = reseed_indices(state)
     state = maybe_schedule_tick(state)
     state = schedule_reconcile(state)
@@ -488,9 +486,9 @@ defmodule Lenies.World do
   # ----- internals -----
 
   # Wipes the simulation tables (cells, lenies, child_slots, history),
-  # terminates all live Lenies, cancels timers, repaints the cell grid with
-  # the initial resource value, prewarms radiation, and reschedules the tick
-  # and reconcile timers. Returns the new state. Color overrides are
+  # terminates all live Lenies, cancels timers, reseeds the cell grid from the
+  # resource field, and reschedules the tick and reconcile timers. Returns the
+  # new state. Color overrides are
   # preserved per the SpeciesColor contract — they represent user intent,
   # not simulation state.
   #
@@ -503,13 +501,11 @@ defmodule Lenies.World do
     if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
     if state.reconcile_ref, do: Process.cancel_timer(state.reconcile_ref)
     Tables.clear_all(Map.drop(state.tables, [:color_overrides]))
-    init_cells(state.grid, state.tables)
-    hotspots = Hotspots.initial(state.grid, Config.hotspot_count())
+    init_cells_from_field(state.field, state.grid, state.tables, 3 * cfg(state, :eat_amount))
 
     new_state = %{
       state
-      | hotspots: hotspots,
-        tick_count: 0,
+      | tick_count: 0,
         tick_ref: nil,
         reconcile_ref: nil,
         occupancy: %{},
@@ -517,8 +513,6 @@ defmodule Lenies.World do
         total_resource: 0,
         total_carcass: 0
     }
-
-    new_state = prewarm_radiation(new_state)
     # Rebuild indices + publish the (now empty-of-lenies) occupancy snapshot so
     # the canvas clears immediately — sterilize can run while paused (no tick).
     new_state = reseed_indices(new_state)
@@ -539,42 +533,27 @@ defmodule Lenies.World do
     Map.fetch!(state.config, key)
   end
 
-  defp init_cells({w, h}, tables) do
-    initial_resource = Application.get_env(:lenies, :initial_resource_per_cell, 30)
-
+  # Seed every cell's resource from the field at tick 0 → a coherent fluctuating
+  # field immediately, no radiation warmup loop.
+  defp init_cells_from_field(field, {w, h}, tables, cap) do
     for x <- 0..(w - 1), y <- 0..(h - 1) do
-      :ets.insert(tables.cells, {{x, y}, %Cell{resource: initial_resource}})
+      target = round(Field.level(field, x, y, 0) * cap)
+      :ets.insert(tables.cells, {{x, y}, %Cell{resource: target}})
     end
 
     :ok
   end
 
-  defp prewarm_radiation(state) do
-    n = Application.get_env(:lenies, :initial_radiation_ticks, 50)
-
-    if n > 0 do
-      Enum.reduce(1..n, state, fn _i, acc ->
-        acc = apply_radiation(acc)
-        hotspots = Hotspots.drift(acc.hotspots, acc.grid)
-        %{acc | hotspots: hotspots}
-      end)
-    else
-      state
-    end
-  end
-
   defp do_tick(state) do
     # Resource/carcass totals and the occupancy/carcass indices are maintained
     # incrementally via put_cell/4, so a tick no longer folds the whole grid:
-    # radiation touches ~`radiation_per_tick` cells, decay only the carcass set.
-    state = apply_radiation(state)
+    # field relaxation runs every FIELD_PERIOD ticks, decay only the carcass set.
+    state = apply_field(state)
     state = decay_carcasses(state)
     maybe_background_mutation(state)
 
     # Publish the occupancy snapshot the renderer reads (one atomic key write).
     state = store_occupancy(state)
-
-    hotspots = Hotspots.drift(state.hotspots, state.grid)
 
     stats = %{
       population: :ets.info(state.tables.lenies, :size),
@@ -584,31 +563,39 @@ defmodule Lenies.World do
 
     broadcast(state, "tick", {:tick, state.tick_count + 1, stats})
 
-    %{state | hotspots: hotspots, tick_count: state.tick_count + 1}
+    %{state | tick_count: state.tick_count + 1}
   end
 
-  defp apply_radiation(state) do
+  # Field-relaxation sweep: every FIELD_PERIOD ticks, pull each cell's resource
+  # toward field(x,y,tick) * cap. Deadband skips near-target cells (cheap under
+  # slow fields). Valleys (target ~0) recede → moving deserts.
+  @field_period 5
+  @relax_rate 0.15
+  @deadband 3
+
+  defp apply_field(%{tick_count: tc} = state) when rem(tc, @field_period) != 0, do: state
+
+  defp apply_field(state) do
     cap = 3 * cfg(state, :eat_amount)
+    {w, h} = state.grid
 
-    deposit =
-      Radiation.combined(
-        state.grid,
-        cfg(state, :radiation_per_tick),
-        state.hotspots,
-        uniform_ratio: Config.radiation_uniform_ratio()
-      )
+    Enum.reduce(0..(h - 1), state, fn y, acc_y ->
+      Enum.reduce(0..(w - 1), acc_y, fn x, acc ->
+        target = round(Field.level(acc.field, x, y, acc.tick_count) * cap)
 
-    Enum.reduce(deposit, state, fn {{x, y}, amount}, acc ->
-      case :ets.lookup(acc.tables.cells, {x, y}) do
-        [{key, cell}] ->
-          new_cell = Cell.add_resource(cell, amount, cap)
-          # Skip the ETS write + index diff when the cell is already at cap
-          # (common once the grid fills under the high uniform drip).
-          if new_cell == cell, do: acc, else: put_cell(acc, key, cell, new_cell)
+        case :ets.lookup(acc.tables.cells, {x, y}) do
+          [{key, cell}] ->
+            if abs(target - cell.resource) <= @deadband do
+              acc
+            else
+              new_cell = Cell.relax_resource(cell, target, @relax_rate)
+              if new_cell == cell, do: acc, else: put_cell(acc, key, cell, new_cell)
+            end
 
-        [] ->
-          acc
-      end
+          [] ->
+            acc
+        end
+      end)
     end)
   end
 
@@ -1180,26 +1167,12 @@ defmodule Lenies.World do
     end
   end
 
-  defp consume_eat(cell, eat_amount) do
-    # Carcass is consumed first (preferentially), then resource fills any remaining quota.
-    # Both sources yield energy 1:1 — no bonus multiplier — so energy gained always equals
-    # units consumed. This preserves the simulation's energy-conservation invariant:
-    # energy enters only via radiation and leaves only via starvation.
-    carcass_taken = min(cell.carcass, eat_amount)
-    remaining_quota = eat_amount - carcass_taken
-    resource_taken = min(cell.resource, remaining_quota)
-    total_energy = carcass_taken + resource_taken
-
-    new_carcass = cell.carcass - carcass_taken
-    new_carcass_hue = if new_carcass == 0, do: 0, else: cell.carcass_hue
-
-    new_cell = %{
-      cell
-      | carcass: new_carcass,
-        resource: cell.resource - resource_taken,
-        carcass_hue: new_carcass_hue
-    }
-
+  # Eat empties the cell: the Lenie gains ALL resource + carcass in one bite.
+  # Cells are batteries the field recharges (toward field*cap); a bite drains
+  # one fully, forcing graze-and-move foraging.
+  defp consume_eat(cell, _eat_amount) do
+    total_energy = cell.resource + cell.carcass
+    new_cell = %{cell | resource: 0, carcass: 0, carcass_hue: 0}
     {total_energy, new_cell}
   end
 
