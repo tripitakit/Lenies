@@ -11,9 +11,11 @@ defmodule Lenies.WorldFieldIntegrationTest do
     f = Field.new(:erlang.phash2(:integration_world))
     cap = 3 * Application.get_env(:lenies, :eat_amount, 50)
 
+    # Sample a wide window so the metric is robust to zone WIDTH (wider
+    # oasis/desert zones mean a small window can sit inside one zone).
     spreads =
       for tick <- [0, 25, 50, 100, 200] do
-        targets = for x <- 0..40, y <- 0..40, do: round(Field.level(f, x, y, tick) * cap)
+        targets = for x <- 0..110, y <- 0..110, do: round(Field.level(f, x, y, tick) * cap)
         Enum.max(targets) - Enum.min(targets)
       end
 

@@ -37,14 +37,14 @@ defmodule LeniesWeb.DashboardLiveTest do
     conn: conn,
     world_id: world_id
   } do
-    # Default eat_amount is 20; tune the live world to a distinctive value.
-    :ok = Lenies.Worlds.tune(world_id, :eat_amount, 77)
+    # Tune the live world to a distinctive value (default attack_damage is 10).
+    :ok = Lenies.Worlds.tune(world_id, :attack_damage, 42)
 
     {:ok, view, _html} = live(conn, ~p"/sandbox")
 
-    # The slider's value readout must show the world's current config (77),
+    # The slider's value readout must show the world's current config (42),
     # not the global Application default — this is the navigation-persistence fix.
-    assert has_element?(view, "#val-eat_amount", "77")
+    assert has_element?(view, "#val-attack_damage", "42")
   end
 
   test "mounts on /sandbox and renders dashboard panels", %{conn: conn} do
@@ -275,20 +275,20 @@ defmodule LeniesWeb.DashboardLiveTest do
        %{conn: conn, world_id: world_id, handle: handle} do
     {:ok, view, _html} = live(conn, ~p"/sandbox")
 
-    original = :sys.get_state(handle.pid).config.eat_amount
+    original = :sys.get_state(handle.pid).config.attack_damage
 
     view
-    |> element("#tune-eat_amount form")
-    |> render_change(%{"key" => "eat_amount", "value" => "250"})
+    |> element("#tune-attack_damage form")
+    |> render_change(%{"key" => "attack_damage", "value" => "30"})
 
     # The tune_param handler now hits Lenies.Worlds.tune/3, which writes to
     # state.config and broadcasts {:config_changed, …}. Allow a beat for the
     # synchronous call to land, then assert the world saw it.
     Process.sleep(50)
-    assert :sys.get_state(handle.pid).config.eat_amount == 250
+    assert :sys.get_state(handle.pid).config.attack_damage == 30
 
     # restore original so subsequent tests aren't affected
-    :ok = Lenies.Worlds.tune(world_id, :eat_amount, original)
+    :ok = Lenies.Worlds.tune(world_id, :attack_damage, original)
   end
 
   test "Save snapshot button triggers Worlds.save_snapshot/2",
@@ -938,10 +938,10 @@ defmodule LeniesWeb.DashboardLiveTest do
       # There must be no inline oninput attribute anywhere
       refute html =~ "oninput"
 
-      # Check one specific slider (eat_amount) for correct hook wiring
+      # Check one specific slider (attack_damage) for correct hook wiring
       assert has_element?(
                view,
-               "#slider-eat_amount[phx-hook='SliderValue'][data-value-target='val-eat_amount']"
+               "#slider-attack_damage[phx-hook='SliderValue'][data-value-target='val-attack_damage']"
              )
     end
 

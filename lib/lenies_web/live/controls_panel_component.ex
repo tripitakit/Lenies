@@ -9,7 +9,6 @@ defmodule LeniesWeb.ControlsPanelComponent do
   use LeniesWeb, :live_component
 
   @tunable_params [
-    %{key: :eat_amount, label: "Eat amount", min: 1, max: 1000, step: 10},
     %{key: :carcass_decay, label: "Detritus decay/tick", min: 0.0, max: 0.05, step: 0.0005},
     %{
       key: :lenie_metabolize_delay_ms,

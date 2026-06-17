@@ -13,15 +13,17 @@ defmodule Lenies.World.Field do
   # --- tunable constants (conservative; no runtime knob) ---
   @alpha 0.5
   @speed 0.02
-  @scale 0.10
+  # Lower spatial frequency = WIDER oasis/desert zones. Halved the noise scale
+  # and the wave wavevectors (kx,ky) vs the first cut, doubling feature size.
+  @scale 0.05
   @driftx 0.004
   @drifty 0.0017
   @modes [
-    {0.28, 0.10, 0.9, 1.0},
-    {-0.12, 0.24, -1.3, 0.85},
-    {0.18, -0.20, 1.7, 0.7},
-    {0.07, 0.33, 0.6, 0.6},
-    {-0.30, -0.06, -0.8, 0.5}
+    {0.14, 0.05, 0.9, 1.0},
+    {-0.06, 0.12, -1.3, 0.85},
+    {0.09, -0.10, 1.7, 0.7},
+    {0.035, 0.165, 0.6, 0.6},
+    {-0.15, -0.03, -0.8, 0.5}
   ]
   @amp Enum.reduce(@modes, 0.0, fn {_kx, _ky, _w, a}, s -> s + a end)
 
