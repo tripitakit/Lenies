@@ -82,6 +82,36 @@ defmodule Lenies.WorldTest do
     assert stats.tick_count == 1000
   end
 
+  test "cell resources track the field and stay heterogeneous over time (no homogenisation)",
+       %{world_id: world_id} do
+    cells = Lenies.WorldTestHelpers.cells(world_id)
+
+    spread = fn ->
+      {mn, mx} =
+        :ets.foldl(
+          fn {_k, c}, {mn, mx} -> {min(mn, c.resource), max(mx, c.resource)} end,
+          {1_000_000, -1},
+          cells
+        )
+
+      mx - mn
+    end
+
+    # Regression: the field-relaxation sweep must TRACK the (slowly moving)
+    # field, not low-pass it into a flat band. With a field that oscillates
+    # faster than the relaxation time-constant, every cell converges to the
+    # field's spatially-flat time-mean (~0.5·cap) and the world re-homogenises
+    # exactly like the old uniform-radiation model. Tick well past the
+    # relaxation time-constant and assert the spatial contrast survives.
+    for _ <- 1..300, do: Lenies.Worlds.tick_now(world_id)
+
+    final = spread.()
+    cap = 3 * Application.get_env(:lenies, :eat_amount, 50)
+
+    assert final > cap * 0.35,
+           "cell resource spread collapsed to #{final} (≤ #{round(cap * 0.35)}) — field homogenised"
+  end
+
   @tag tick_interval_ms: 50
   test "auto-tick fires at the configured interval", %{world_id: world_id} do
     {:ok, handle} = Lenies.Worlds.handle(world_id)

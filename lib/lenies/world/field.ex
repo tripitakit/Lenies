@@ -12,10 +12,10 @@ defmodule Lenies.World.Field do
 
   # --- tunable constants (conservative; no runtime knob) ---
   @alpha 0.5
-  @speed 0.3
+  @speed 0.02
   @scale 0.10
-  @driftx 0.06
-  @drifty 0.025
+  @driftx 0.004
+  @drifty 0.0017
   @modes [
     {0.28, 0.10, 0.9, 1.0},
     {-0.12, 0.24, -1.3, 0.85},
