@@ -56,7 +56,9 @@ defmodule Lenies.WorldTest do
     assert stats.total_carcass == 0
   end
 
-  test "tick_now/0 applies field relaxation — total_resource stays within bounds", %{world_id: world_id} do
+  test "tick_now/0 applies field relaxation — total_resource stays within bounds", %{
+    world_id: world_id
+  } do
     max_total = 16_384 * 3 * Application.get_env(:lenies, :eat_amount, 50)
 
     Lenies.Worlds.tick_now(world_id)
@@ -238,7 +240,9 @@ defmodule Lenies.WorldTest do
   end
 
   describe "eat clears carcass_hue when carcass goes to 0" do
-    test "eating a cell with carcass clears carcass_hue (eat empties whole cell)", %{world_id: world_id} do
+    test "eating a cell with carcass clears carcass_hue (eat empties whole cell)", %{
+      world_id: world_id
+    } do
       :ok = Lenies.Worlds.tune(world_id, :eat_amount, 50)
 
       # Plant a cell with carcass = 5 and a hue marker; eat empties everything.
@@ -254,7 +258,9 @@ defmodule Lenies.WorldTest do
       assert cell.carcass_hue == 0
     end
 
-    test "eating a large carcass cell still clears both carcass and carcass_hue", %{world_id: world_id} do
+    test "eating a large carcass cell still clears both carcass and carcass_hue", %{
+      world_id: world_id
+    } do
       # eat now empties the whole cell regardless of how large the carcass is.
       :ets.insert(
         Lenies.WorldTestHelpers.cells(world_id),

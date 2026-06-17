@@ -105,6 +105,7 @@ defmodule Lenies.World do
       total_resource: 0,
       total_carcass: 0
     }
+
     state = reseed_indices(state)
     state = maybe_schedule_tick(state)
     state = schedule_reconcile(state)
@@ -513,6 +514,7 @@ defmodule Lenies.World do
         total_resource: 0,
         total_carcass: 0
     }
+
     # Rebuild indices + publish the (now empty-of-lenies) occupancy snapshot so
     # the canvas clears immediately — sterilize can run while paused (no tick).
     new_state = reseed_indices(new_state)

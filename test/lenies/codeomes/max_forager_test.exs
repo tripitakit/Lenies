@@ -29,7 +29,15 @@ defmodule Lenies.Codeomes.MaxForagerTest do
     test "uses the replication machinery, the scan, and the sign-compare opcode" do
       ops = MaxForager.opcodes()
 
-      for required <- [:get_size, :allocate, :read_self, :write_child, :divide, :sense_front, :jgt_t] do
+      for required <- [
+            :get_size,
+            :allocate,
+            :read_self,
+            :write_child,
+            :divide,
+            :sense_front,
+            :jgt_t
+          ] do
         assert required in ops, "MaxForager must use #{required}"
       end
     end

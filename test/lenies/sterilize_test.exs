@@ -21,7 +21,10 @@ defmodule Lenies.SterilizeTest do
     # Sterilize reseeds the grid from the resource field, so resource is > 0
     # (only the Lenies + carcasses are cleared), bounded by the per-cell cap.
     assert after_stats.total_resource > 0
-    assert after_stats.total_resource <= 16_384 * 3 * Application.get_env(:lenies, :eat_amount, 50)
+
+    assert after_stats.total_resource <=
+             16_384 * 3 * Application.get_env(:lenies, :eat_amount, 50)
+
     assert after_stats.cells == 16_384
   end
 

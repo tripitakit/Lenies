@@ -83,6 +83,7 @@ defmodule Lenies.WorldCarcassEatTest do
     :ok = Lenies.Worlds.tune(world_id, :eat_amount, 15)
 
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {8, 8})
+
     :ets.insert(
       Lenies.WorldTestHelpers.cells(world_id),
       {key, %{cell | resource: 20, carcass: 5}}
@@ -99,7 +100,11 @@ defmodule Lenies.WorldCarcassEatTest do
 
   test ":eat falls through to resource when carcass empty", %{world_id: world_id} do
     [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 5})
-    :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 30, carcass: 0}})
+
+    :ets.insert(
+      Lenies.WorldTestHelpers.cells(world_id),
+      {key, %{cell | resource: 30, carcass: 0}}
+    )
 
     {:ok, {:ate, amount}} = Lenies.Worlds.action(world_id, {:eat, {5, 5}})
     # empties all resource
