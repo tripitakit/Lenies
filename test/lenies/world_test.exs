@@ -377,7 +377,6 @@ defmodule Lenies.WorldTest do
           spawn_cap: :infinity,
           replication_cap: 50,
           tick_interval_ms: 10,
-          radiation_per_tick: 12_000,
           # Mutation OFF — any species drift must come from plasmid leakage, not copy errors.
           copy_substitution_rate: 0.0,
           copy_insert_rate: 0.0,

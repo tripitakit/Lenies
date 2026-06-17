@@ -42,6 +42,6 @@ config :phoenix, :plug_init_mode, :runtime
 config :phoenix_live_view,
   enable_expensive_runtime_checks: true
 
-# Note: simulation-specific test overrides (carcass_decay: 0, initial_resource_per_cell: 0,
-# initial_radiation_ticks: 0) are set in config/runtime.exs inside `if config_env() == :test`
+# Note: simulation-specific test overrides (carcass_decay: 0, initial_resource_per_cell: 0)
+# are set in config/runtime.exs inside `if config_env() == :test`
 # because runtime.exs runs AFTER config/*.exs and would otherwise overwrite them.

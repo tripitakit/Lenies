@@ -13,7 +13,6 @@ defmodule Lenies.WorldTestHelpers do
   @config_keys [
     :tick_interval_ms,
     :eat_amount,
-    :radiation_per_tick,
     :carcass_decay,
     :lenie_metabolize_delay_ms,
     :copy_substitution_rate,

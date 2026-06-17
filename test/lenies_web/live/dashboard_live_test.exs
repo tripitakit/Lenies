@@ -275,20 +275,20 @@ defmodule LeniesWeb.DashboardLiveTest do
        %{conn: conn, world_id: world_id, handle: handle} do
     {:ok, view, _html} = live(conn, ~p"/sandbox")
 
-    original = :sys.get_state(handle.pid).config.radiation_per_tick
+    original = :sys.get_state(handle.pid).config.eat_amount
 
     view
-    |> element("#tune-radiation_per_tick form")
-    |> render_change(%{"key" => "radiation_per_tick", "value" => "250"})
+    |> element("#tune-eat_amount form")
+    |> render_change(%{"key" => "eat_amount", "value" => "250"})
 
     # The tune_param handler now hits Lenies.Worlds.tune/3, which writes to
     # state.config and broadcasts {:config_changed, …}. Allow a beat for the
     # synchronous call to land, then assert the world saw it.
     Process.sleep(50)
-    assert :sys.get_state(handle.pid).config.radiation_per_tick == 250
+    assert :sys.get_state(handle.pid).config.eat_amount == 250
 
     # restore original so subsequent tests aren't affected
-    :ok = Lenies.Worlds.tune(world_id, :radiation_per_tick, original)
+    :ok = Lenies.Worlds.tune(world_id, :eat_amount, original)
   end
 
   test "Save snapshot button triggers Worlds.save_snapshot/2",
@@ -938,10 +938,10 @@ defmodule LeniesWeb.DashboardLiveTest do
       # There must be no inline oninput attribute anywhere
       refute html =~ "oninput"
 
-      # Check one specific slider (radiation_per_tick) for correct hook wiring
+      # Check one specific slider (eat_amount) for correct hook wiring
       assert has_element?(
                view,
-               "#slider-radiation_per_tick[phx-hook='SliderValue'][data-value-target='val-radiation_per_tick']"
+               "#slider-eat_amount[phx-hook='SliderValue'][data-value-target='val-eat_amount']"
              )
     end
 

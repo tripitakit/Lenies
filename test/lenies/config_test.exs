@@ -11,19 +11,6 @@ defmodule Lenies.ConfigTest do
     assert Config.tick_interval_ms() == 200
   end
 
-  test "radiation_per_tick/0 returns configured value" do
-    assert Config.radiation_per_tick() == 500
-  end
-
-  test "hotspot_count/0 returns configured value" do
-    assert Config.hotspot_count() == 8
-  end
-
-  test "radiation_uniform_ratio/0 returns float 0..1" do
-    r = Config.radiation_uniform_ratio()
-    assert is_float(r) and r >= 0.0 and r <= 1.0
-  end
-
   test "carcass_decay/0 returns configured value" do
     original = Application.get_env(:lenies, :carcass_decay)
     Application.put_env(:lenies, :carcass_decay, 0.05)

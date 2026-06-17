@@ -21,7 +21,7 @@ defmodule Lenies.World.ConfigTest do
     assert cfg.eat_amount == 200.0
     assert cfg.attack_damage == 25
     # untouched fields keep their defaults
-    assert cfg.radiation_per_tick == Config.defaults().radiation_per_tick
+    assert cfg.carcass_decay == Config.defaults().carcass_decay
   end
 
   test "merge/2 ignores unknown keys" do

@@ -520,10 +520,10 @@ defmodule Lenies.World do
     schedule_reconcile(new_state)
   end
 
-  # Runtime source of truth for per-world tunables. The 9 keys previously
-  # served by @cfg_defaults (radiation_per_tick, eat_amount, carcass_decay,
-  # tick_interval_ms, copy_substitution_rate, copy_insert_rate,
-  # copy_delete_rate, background_mutation_rate_per_1000_ticks, attack_damage)
+  # Runtime source of truth for per-world tunables. The keys previously
+  # served by @cfg_defaults (eat_amount, carcass_decay, tick_interval_ms,
+  # copy_substitution_rate, copy_insert_rate, copy_delete_rate,
+  # background_mutation_rate_per_1000_ticks, attack_damage)
   # have all been promoted to %Lenies.World.Config{} fields (see config.ex).
   # `Lenies.Worlds.tune/3` mutates state.config and broadcasts
   # {:config_changed, key, value} on the world's control topic — the engine

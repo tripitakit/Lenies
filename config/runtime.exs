@@ -25,15 +25,7 @@ config :lenies,
   # secondary hard ceiling — a Lenie can only exist in a free cell, so
   # replication also back-pressures naturally once cells fill up.
   tick_interval_ms: 200,
-  # Radiation rework: a thin, fully-uniform drip. Each of the 16 384 cells gets
-  # ~0.15 units/tick (2500/16384) → a cell refills to its cap (3× eat_amount =
-  # 150) in ~1000 ticks. uniform_ratio 1.0 = no hotspots. The per-cell resource
-  # cap is now derived in code (3× eat_amount), so cell_resource_cap is gone.
-  radiation_per_tick: 2500,
   initial_resource_per_cell: 30,
-  initial_radiation_ticks: 50,
-  radiation_uniform_ratio: 1.0,
-  hotspot_count: 8,
   carcass_decay: 0.002,
   template_max_len: 8,
   template_search_radius: 512,
@@ -63,14 +55,7 @@ config :lenies,
 if config_env() == :test do
   config :lenies, carcass_decay: 0
   config :lenies, initial_resource_per_cell: 0
-  config :lenies, initial_radiation_ticks: 0
   config :lenies, lenie_metabolize_delay_ms: 0
-  # Pin radiation rate + ratio to the pre-rework values so the existing suite
-  # stays stable. The 2500/1.0 production drip is a tuning value, not logic —
-  # the 3× eat_amount cap (the actual rework) is code-derived and exercised
-  # directly by the unit/world tests regardless of rate.
-  config :lenies, radiation_per_tick: 500
-  config :lenies, radiation_uniform_ratio: 0.7
 end
 
 if System.get_env("PHX_SERVER") do

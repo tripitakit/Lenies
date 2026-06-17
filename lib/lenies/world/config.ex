@@ -14,8 +14,7 @@ defmodule Lenies.World.Config do
   # (see the removed `@cfg_defaults` in Lenies.World). Tests that
   # `Application.delete_env(:lenies, key)` on_exit expect this fallback to
   # match the pre-refactor behaviour.
-  defstruct radiation_per_tick: 2500,
-            eat_amount: 50,
+  defstruct eat_amount: 50,
             carcass_decay: 0.05,
             lenie_metabolize_delay_ms: 0,
             tick_interval_ms: 100,
@@ -36,7 +35,6 @@ defmodule Lenies.World.Config do
   @spec defaults() :: t()
   def defaults do
     %__MODULE__{
-      radiation_per_tick: get(:radiation_per_tick, 2500),
       eat_amount: get(:eat_amount, 50),
       carcass_decay: get(:carcass_decay, 0.05),
       lenie_metabolize_delay_ms: get(:lenie_metabolize_delay_ms, 0),
