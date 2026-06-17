@@ -40,6 +40,12 @@
 import { HUE_LUT } from "./grid_canvas_hue_lut.js";
 import { drawLenieSprite, decodeMeta } from "./lenie_sprite.js";
 import { drawFx, FX_DURATION_MS } from "./lenie_fx.js";
+import {
+  FRAME_PERIOD_MS,
+  shouldPresent,
+  energyShade,
+  RESOURCE_LUT,
+} from "./grid_canvas_render_core.mjs";
 
 const CARCASS_MAX = 50;
 const CARCASS_GRAY = 180;
@@ -78,7 +84,12 @@ const GridCanvas = {
     this.bufferCanvas.height = this.gridH;
     this.bufferCtx = this.bufferCanvas.getContext("2d");
 
-    this.lastPayload = null;
+    this.lastPayload = null;   // currently-presented simulation frame
+    this.nextFrame = null;     // queued incoming frame (1-deep)
+    this.lastPresentAt = 0;    // performance.now() of last promotion
+    this.bufferReady = false;  // composeBuffer has produced at least one frame
+    this.curLayers = null;     // decoded {lBytes,eBytes,mBytes} of lastPayload
+    this.presentRAF = null;    // continuous presentation rAF handle
 
     // View state — viewport in buffer coordinates.
     this.zoom = 1;
@@ -142,9 +153,7 @@ const GridCanvas = {
     this.handleEvent("fx_predation", ({ x, y }) => this.pushFx("predation", x, y));
 
     this.handleEvent("render_frame", (payload) => {
-      this.lastPayload = payload;
-      this.cachedLenieBytes = this.decodeBase64(payload.lenies);
-      this.renderFrame();
+      this.nextFrame = payload;
     });
 
     // Server pushes hover info in response to our request_lenie_hover
@@ -157,6 +166,11 @@ const GridCanvas = {
     // Initial black fill until the first frame arrives.
     this.ctx.fillStyle = "#000";
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Bind once and reuse — re-binding inside presentLoop would allocate a
+    // fresh closure ~60×/s.
+    this._boundPresentLoop = this.presentLoop.bind(this);
+    this.presentRAF = requestAnimationFrame(this._boundPresentLoop);
   },
 
   // LiveView morphs data-highlight-hue on species selection. The
@@ -164,7 +178,10 @@ const GridCanvas = {
   // cached payload so the highlight change takes effect immediately
   // without waiting for the next server frame.
   updated() {
-    if (this.lastPayload) this.renderFrame();
+    if (this.lastPayload) {
+      this.composeBuffer();
+      this.paint();
+    }
   },
 
   attachInteractionHandlers() {
@@ -536,12 +553,12 @@ const GridCanvas = {
   // Coalesce interaction-driven redraws to the next animation frame —
   // wheel/mousemove can fire faster than 60 Hz.
   requestDraw() {
-    if (!this.lastPayload) return;
+    if (!this.bufferReady) return;
     if (this.drawScheduled) return;
     this.drawScheduled = true;
     requestAnimationFrame(() => {
       this.drawScheduled = false;
-      this.renderFrame();
+      this.paint();
     });
   },
 
@@ -553,7 +570,24 @@ const GridCanvas = {
     return bytes;
   },
 
-  renderFrame() {
+  // Continuous rAF loop. Promotes a queued frame on the steady 200 ms clock
+  // (so display cadence is even regardless of network jitter), then paints
+  // every frame so FX/sprites animate at 60 fps.
+  presentLoop(now) {
+    if (this.nextFrame && shouldPresent(now, this.lastPresentAt, FRAME_PERIOD_MS)) {
+      this.lastPayload = this.nextFrame;
+      this.nextFrame = null;
+      this.lastPresentAt = now;
+      this.composeBuffer();
+    }
+    this.paint();
+    this.presentRAF = requestAnimationFrame(this._boundPresentLoop);
+  },
+
+  // Expensive per-pixel composition of the current frame into bufferCanvas.
+  // Runs only on a new frame promotion or a highlight change — NOT on pan/zoom.
+  composeBuffer() {
+    if (!this.lastPayload) return;
     const { lenies, resource, carcass, carcass_hue, width, height } = this.lastPayload;
     const lBytes = this.decodeBase64(lenies);
     const rBytes = this.decodeBase64(resource);
@@ -562,13 +596,17 @@ const GridCanvas = {
     const eBytes = this.decodeBase64(this.lastPayload.energy);
     const mBytes = this.decodeBase64(this.lastPayload.meta);
 
+    // Hover lookups read the currently-displayed occupancy.
+    this.cachedLenieBytes = lBytes;
+    this.curLayers = { lBytes, eBytes, mBytes };
+
     const showLenies = this.canvas.hasAttribute("data-show-lenies");
     const showResource = this.canvas.hasAttribute("data-show-resource");
     const showCarcass = this.canvas.hasAttribute("data-show-carcass");
     const highlightHue = parseInt(this.canvas.dataset.highlightHue || "0", 10);
 
     const imageData = this.bufferCtx.createImageData(width, height);
-    const px = imageData.data; // RGBA
+    const px = imageData.data;
 
     for (let i = 0; i < width * height; i++) {
       const speciesByte = lBytes[i];
@@ -578,15 +616,9 @@ const GridCanvas = {
 
       let r = 0, g = 0, b = 0, a = 192;
 
-      // Precompute the carcass display colour once: species (or red for
-      // untagged) lerped toward light gray by t = 1 - carc/CARCASS_MAX.
-      // Used both as the standalone carcass fill and as the 30% tint
-      // when a Lenie sits on top of an old carcass.
       let carcRgb = null;
       if (showCarcass && carc > 0) {
-        const fresh = carcHueByte > 0
-          ? HUE_LUT[carcHueByte]
-          : { r: 255, g: 60, b: 60 };
+        const fresh = carcHueByte > 0 ? HUE_LUT[carcHueByte] : { r: 255, g: 60, b: 60 };
         const t = 1 - carc / CARCASS_MAX;
         carcRgb = {
           r: Math.round(fresh.r + (CARCASS_GRAY - fresh.r) * t),
@@ -596,15 +628,9 @@ const GridCanvas = {
       }
 
       if (showLenies && speciesByte > 0) {
-        const rgb = HUE_LUT[speciesByte];
-        const ef = 0.25 + 0.75 * (eBytes[i] / 255);
-        r = Math.round(rgb.r * ef);
-        g = Math.round(rgb.g * ef);
-        b = Math.round(rgb.b * ef);
+        const sh = energyShade(HUE_LUT[speciesByte], eBytes[i]);
+        r = sh.r; g = sh.g; b = sh.b;
         a = 255;
-        // A carcass sitting under a Lenie (low/zero carcass_decay,
-        // respawn over remains) blends in at 30% so the carcass checkbox
-        // stays meaningful even when species are on top.
         if (carcRgb) {
           r = Math.floor(r * 0.7 + carcRgb.r * 0.3);
           g = Math.floor(g * 0.7 + carcRgb.g * 0.3);
@@ -614,27 +640,26 @@ const GridCanvas = {
         r = carcRgb.r; g = carcRgb.g; b = carcRgb.b;
         a = 255;
       } else if (showResource && res > 0) {
-        g = Math.min(255, res * 2);
+        const rc = RESOURCE_LUT[res];
+        r = rc.r; g = rc.g; b = rc.b;
       }
 
-      // Dim everything that doesn't belong to the highlighted species.
-      // highlightHue === 0 means "no highlight" — full intensity for all.
       if (highlightHue > 0 && speciesByte !== highlightHue) {
         a = Math.floor(a * 0.3);
       }
 
       const off = i * 4;
-      px[off] = r;
-      px[off + 1] = g;
-      px[off + 2] = b;
-      px[off + 3] = a;
+      px[off] = r; px[off + 1] = g; px[off + 2] = b; px[off + 3] = a;
     }
 
     this.bufferCtx.putImageData(imageData, 0, 0);
+    this.bufferReady = true;
+  },
 
-    // Nearest-neighbor upscale of the current viewport onto the display
-    // canvas. zoom=1 + center at grid center => full grid fills canvas
-    // (matches the pre-pan/zoom behavior).
+  // Cheap paint of the composed buffer at the current viewport + FX/sprite
+  // overlays. Runs every rAF and on pan/zoom (viewport-only changes).
+  paint() {
+    if (!this.bufferReady) return;
     const eff = this.effectiveScale();
     const srcW = this.canvas.width / eff;
     const srcH = this.canvas.height / eff;
@@ -650,7 +675,9 @@ const GridCanvas = {
     );
 
     this.drawFlashOverlay(eff, sx, sy);
-    this.drawSprites(eff, sx, sy, lBytes, eBytes, mBytes);
+    if (this.curLayers) {
+      this.drawSprites(eff, sx, sy, this.curLayers.lBytes, this.curLayers.eBytes, this.curLayers.mBytes);
+    }
   },
 
   pushFx(type, x, y) {
@@ -771,6 +798,11 @@ const GridCanvas = {
 
   destroyed() {
     this.detachInteractionHandlers();
+    if (this.presentRAF) {
+      cancelAnimationFrame(this.presentRAF);
+      this.presentRAF = null;
+    }
+    this._boundPresentLoop = null;
     if (this.conjInterval) {
       clearInterval(this.conjInterval);
       this.conjInterval = null;
