@@ -428,27 +428,35 @@ defmodule Lenies.WorldsTest do
       Task.await(task_b)
     end
 
-    test "per-world tuning takes effect on the engine: :eat_amount drives actual eat result" do
+    test "per-world tuning takes effect on the engine: :eat_amount sets the per-cell resource cap" do
       {:ok, _} = Lenies.Worlds.start_world(:a, %{eat_amount: 200})
       {:ok, _} = Lenies.Worlds.start_world(:b, %{eat_amount: 50})
       {:ok, ha} = Lenies.Worlds.handle(:a)
       {:ok, hb} = Lenies.Worlds.handle(:b)
 
-      # Seed identical cells with abundant resource at the same position in each world.
-      # :eat is a direct ETS action that does not require a Lenie process to drive it —
-      # it consumes carcass first then resource, returns {:ok, {:ate, energy_gained}}.
+      # eat now empties the whole cell, so eat_amount no longer drives the bite.
+      # What it drives per-world is the per-cell resource CAP = 3 × eat_amount.
+      # Seed a cell ABOVE both caps in each world; the field-relaxation sweep must
+      # clamp each world's cell toward its OWN cap. If :b wrongly used :a's
+      # eat_amount, its cell could exceed 150 — so cb ≤ 150 proves per-world tuning
+      # reaches the engine.
       pos = {10, 10}
-      :ets.insert(ha.tables.cells, {pos, %Lenies.World.Cell{resource: 1_000}})
-      :ets.insert(hb.tables.cells, {pos, %Lenies.World.Cell{resource: 1_000}})
+      :ets.insert(ha.tables.cells, {pos, %Lenies.World.Cell{resource: 2_000}})
+      :ets.insert(hb.tables.cells, {pos, %Lenies.World.Cell{resource: 2_000}})
 
-      # Behavioural assertion: the eat result must reflect each world's own
-      # :eat_amount tunable. Pre-fix (cfg/2 reads Application.get_env) BOTH calls
-      # see the SAME global value — proving the per-world tuning gap.
-      assert {:ok, {:ate, eaten_a}} = Lenies.Worlds.action(:a, {:eat, pos})
-      assert {:ok, {:ate, eaten_b}} = Lenies.Worlds.action(:b, {:eat, pos})
+      # Relaxation is geometric (~RELAX_RATE/sweep, every 5 ticks), so allow
+      # enough ticks for each cell to converge from 2000 down to its target
+      # (≤ cap) — even a desert target (~0) clears its cap within ~16 sweeps.
+      for _ <- 1..250 do
+        Lenies.Worlds.tick_now(:a)
+        Lenies.Worlds.tick_now(:b)
+      end
 
-      assert eaten_a == 200, "expected :a to eat 200 (its eat_amount), got #{eaten_a}"
-      assert eaten_b == 50, "expected :b to eat 50 (its eat_amount), got #{eaten_b}"
+      [{_, ca}] = :ets.lookup(ha.tables.cells, pos)
+      [{_, cb}] = :ets.lookup(hb.tables.cells, pos)
+
+      assert ca.resource <= 3 * 200, "world :a must clamp to its cap 600, got #{ca.resource}"
+      assert cb.resource <= 3 * 50, "world :b must clamp to its cap 150, got #{cb.resource}"
     end
 
     test "8. supervision: per-world tree contains World + LenieSupervisor + Telemetry" do

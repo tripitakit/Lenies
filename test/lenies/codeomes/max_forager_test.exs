@@ -37,7 +37,7 @@ defmodule Lenies.Codeomes.MaxForagerTest do
 
   describe "behaviour (stepper mini-world)" do
     setup do
-      prev = Application.get_env(:lenies, :eat_amount)
+      prev = Application.get_env(:lenies, :eat_amount, 50)
       Application.put_env(:lenies, :eat_amount, 50)
       on_exit(fn -> Application.put_env(:lenies, :eat_amount, prev) end)
       :ok

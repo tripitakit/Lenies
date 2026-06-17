@@ -10,6 +10,9 @@ defmodule Lenies.WorldActionTest do
 
   describe "sense_front" do
     test "returns :empty when the front cell is empty", %{world_id: world_id} do
+      # Cells are field-seeded with resource; clear the front cell so it reads empty.
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {11, 10})
+      :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 0, carcass: 0}})
       result = Lenies.Worlds.action(world_id, {:sense_front, {10, 10}, :e})
       assert result == {:ok, :empty}
     end
@@ -76,22 +79,25 @@ defmodule Lenies.WorldActionTest do
   end
 
   describe "eat" do
-    test "transfers min(eat_amount, cell.resource) and clears that much",
+    test "empties the cell and returns its full contents (resource + carcass)",
          %{world_id: world_id} do
       [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 5})
-      :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 30}})
+      :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 30, carcass: 0}})
 
-      # default eat_amount = 20
+      # eat now empties the whole cell — eat_amount no longer caps the bite.
       result = Lenies.Worlds.action(world_id, {:eat, {5, 5}})
-      assert result == {:ok, {:ate, 20}}
+      assert result == {:ok, {:ate, 30}}
 
       assert :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 5})
              |> hd()
              |> elem(1)
-             |> Map.get(:resource) == 10
+             |> Map.get(:resource) == 0
     end
 
     test "returns {:ate, 0} if cell has no resource", %{world_id: world_id} do
+      # Cells are field-seeded; empty this one so the no-resource path is exercised.
+      [{key, cell}] = :ets.lookup(Lenies.WorldTestHelpers.cells(world_id), {5, 5})
+      :ets.insert(Lenies.WorldTestHelpers.cells(world_id), {key, %{cell | resource: 0, carcass: 0}})
       result = Lenies.Worlds.action(world_id, {:eat, {5, 5}})
       assert result == {:ok, {:ate, 0}}
     end

@@ -85,7 +85,7 @@ defmodule Lenies.World do
     grid = Config.grid_size()
     field = Field.new(:erlang.phash2(world_id))
 
-    init_cells_from_field(field, grid, tables, 3 * Application.get_env(:lenies, :eat_amount, 50))
+    init_cells_from_field(field, grid, tables, 3 * config.eat_amount)
 
     state = %{
       world_id: world_id,
