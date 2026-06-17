@@ -59,4 +59,34 @@ defmodule Lenies.World.CellTest do
       assert decayed.carcass_hue == 0
     end
   end
+
+  test "relax_resource moves toward a higher target by at least 1" do
+    c = %Cell{resource: 0}
+    c2 = Cell.relax_resource(c, 75, 0.15)
+    assert c2.resource > 0 and c2.resource <= 75
+  end
+
+  test "relax_resource moves toward a lower target (valley receding)" do
+    c = %Cell{resource: 100}
+    c2 = Cell.relax_resource(c, 10, 0.15)
+    assert c2.resource < 100 and c2.resource >= 10
+  end
+
+  test "relax_resource never overshoots the target" do
+    assert Cell.relax_resource(%Cell{resource: 74}, 75, 0.15).resource == 75
+    assert Cell.relax_resource(%Cell{resource: 11}, 10, 0.15).resource == 10
+  end
+
+  test "relax_resource converges to target after enough steps" do
+    final =
+      Enum.reduce(1..200, %Cell{resource: 0}, fn _, c ->
+        Cell.relax_resource(c, 75, 0.15)
+      end)
+
+    assert final.resource == 75
+  end
+
+  test "relax_resource never goes negative" do
+    assert Cell.relax_resource(%Cell{resource: 2}, 0, 0.15).resource >= 0
+  end
 end

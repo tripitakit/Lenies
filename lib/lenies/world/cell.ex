@@ -26,6 +26,25 @@ defmodule Lenies.World.Cell do
 
   def add_resource(%__MODULE__{} = cell, _amount, _cap), do: cell
 
+  @doc """
+  Move `resource` toward `target` by `rate` of the gap, guaranteeing at least
+  ±1 of progress when not already at target (so small gaps don't round to 0 and
+  stall a cell short of its target). Never overshoots, never goes negative.
+  """
+  def relax_resource(%__MODULE__{} = cell, target, rate)
+      when is_integer(target) and is_number(rate) do
+    diff = target - cell.resource
+
+    delta =
+      cond do
+        diff == 0 -> 0
+        diff > 0 -> min(diff, max(1, round(diff * rate)))
+        true -> -min(-diff, max(1, round(-diff * rate)))
+      end
+
+    %{cell | resource: max(0, cell.resource + delta)}
+  end
+
   def decay_carcass(%__MODULE__{} = cell, rate) when rate >= 0 and rate <= 1 do
     # Proportional decay: per tick remove `carcass * rate` on average.
     # The integer part is removed deterministically; the fractional part
