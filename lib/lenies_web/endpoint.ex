@@ -12,7 +12,7 @@ defmodule LeniesWeb.Endpoint do
   ]
 
   socket "/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [:user_agent, session: @session_options]],
+    websocket: [compress: true, connect_info: [:user_agent, session: @session_options]],
     longpoll: [connect_info: [:user_agent, session: @session_options]]
 
   # Enable the Phoenix Ecto SQL sandbox in the test environment so that
