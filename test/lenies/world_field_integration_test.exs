@@ -24,12 +24,13 @@ defmodule Lenies.WorldFieldIntegrationTest do
     assert Enum.all?(spreads, &(&1 > cap * 0.3))
   end
 
-  test "field mean sits near the calibrated midpoint (not saturated)" do
+  test "field is lean / desert-dominant (gamma-shaped) but not dead" do
     f = Field.new(123)
     cap = 3 * Application.get_env(:lenies, :eat_amount, 50)
     targets = for x <- 0..60, y <- 0..60, do: Field.level(f, x, y, 30) * cap
     mean = Enum.sum(targets) / length(targets)
-    # leaner than the old ~cap saturation; roughly the middle of the range
-    assert mean > cap * 0.25 and mean < cap * 0.75
+    # @gamma pushes the level toward 0 → mean energy well BELOW half-cap (a
+    # dark desert with sparse oases), but the field is not dead.
+    assert mean > cap * 0.04 and mean < cap * 0.45
   end
 end

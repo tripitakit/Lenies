@@ -13,17 +13,19 @@ defmodule Lenies.World.Field do
   # --- tunable constants (conservative; no runtime knob) ---
   @alpha 0.5
   @speed 0.02
-  # Lower spatial frequency = WIDER oasis/desert zones. Halved the noise scale
-  # and the wave wavevectors (kx,ky) vs the first cut, doubling feature size.
-  @scale 0.05
+  # Zone size + green↔desert dialed to taste (companion): zoom 1.5× → noise
+  # @scale and wave kx/ky divided by 1.5; @gamma 3.5 pushes the level toward 0
+  # → sparse bright oases on a dark desert background, a leaner world.
+  @scale 0.0333
+  @gamma 3.5
   @driftx 0.004
   @drifty 0.0017
   @modes [
-    {0.14, 0.05, 0.9, 1.0},
-    {-0.06, 0.12, -1.3, 0.85},
-    {0.09, -0.10, 1.7, 0.7},
-    {0.035, 0.165, 0.6, 0.6},
-    {-0.15, -0.03, -0.8, 0.5}
+    {0.0933, 0.0333, 0.9, 1.0},
+    {-0.04, 0.08, -1.3, 0.85},
+    {0.06, -0.0667, 1.7, 0.7},
+    {0.0233, 0.11, 0.6, 0.6},
+    {-0.1, -0.02, -0.8, 0.5}
   ]
   @amp Enum.reduce(@modes, 0.0, fn {_kx, _ky, _w, a}, s -> s + a end)
 
@@ -51,7 +53,9 @@ defmodule Lenies.World.Field do
     waves = wave_sum(x, y, t, phases)
     waves_norm = (waves / @amp + 1.0) / 2.0
     n = noise(x * @scale + tick * @driftx, y * @scale + tick * @drifty, seed)
-    clamp01((1.0 - @alpha) * waves_norm + @alpha * n)
+    base = clamp01((1.0 - @alpha) * waves_norm + @alpha * n)
+    # @gamma > 1 darkens mid/low values → more desert, sharper oases.
+    :math.pow(base, @gamma)
   end
 
   defp wave_sum(x, y, t, phases) do

@@ -18,14 +18,23 @@ defmodule Lenies.World.FieldTest do
 
   test "level/4 varies across space (not flat)" do
     f = Field.new(7)
-    vals = for x <- 0..30, y <- 0..30, do: Field.level(f, x, y, 0)
-    assert Enum.max(vals) - Enum.min(vals) > 0.2
+    # Full grid: robust to zone width + the @gamma shape (which crushes most of
+    # the field toward 0, leaving sparse oases — a small window can sit in one).
+    vals = for x <- 0..127, y <- 0..127, do: Field.level(f, x, y, 0)
+    assert Enum.max(vals) - Enum.min(vals) > 0.1
   end
 
-  test "level/4 varies across time at a fixed cell" do
+  test "level/4 varies across time somewhere (not temporally frozen)" do
     f = Field.new(7)
-    vals = for t <- 0..200, do: Field.level(f, 40, 40, t)
-    assert Enum.max(vals) - Enum.min(vals) > 0.1
+    # The most-varying cell (an oasis) must move over time; a desert cell barely
+    # changes under the gamma shape, so take the max over a coarse cell grid.
+    ranges =
+      for x <- 0..120//8, y <- 0..120//8 do
+        vals = for t <- [0, 100, 200, 300, 400], do: Field.level(f, x, y, t)
+        Enum.max(vals) - Enum.min(vals)
+      end
+
+    assert Enum.max(ranges) > 0.03
   end
 
   test "different seeds give different fields" do
