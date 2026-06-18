@@ -46,8 +46,8 @@ defmodule LeniesWeb.EditorLiveStdLibTest do
     :sys.get_state(view.pid).socket.assigns.genome.chromosome |> length()
   end
 
-  # Re-enabled in the replicate-self task: the only catalog function snippet
-  # (scan-turn) was retired; this exercises the generic function-insert flow.
+  # To be re-enabled in the replicate-self task — these still reference the retired
+  # `scan-turn` id and MUST be re-pointed at `replicate-self` before un-skipping.
   @tag :skip
   test "inserting a function appends a body and a call; re-inserting adds only a call", %{
     conn: conn
@@ -64,7 +64,8 @@ defmodule LeniesWeb.EditorLiveStdLibTest do
     assert len2 - len1 <= 6
   end
 
-  # Re-enabled in the replicate-self task (needs a catalog function snippet).
+  # To be re-enabled in the replicate-self task — these still reference the retired
+  # `scan-turn` id and MUST be re-pointed at `replicate-self` before un-skipping.
   @tag :skip
   test "function button label reflects whether it is already defined", %{conn: conn} do
     {:ok, view, html} = live(conn, ~p"/sandbox/editor/new")

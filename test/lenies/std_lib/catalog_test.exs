@@ -4,10 +4,9 @@ defmodule Lenies.StdLib.CatalogTest do
 
   test "all/0 returns Snippet structs with unique ids" do
     all = Catalog.all()
-    assert length(all) >= 6
+    assert length(all) >= 28
+    assert length(all) == length(Enum.uniq_by(all, & &1.id))
     assert Enum.all?(all, &match?(%Snippet{}, &1))
-    ids = Enum.map(all, & &1.id)
-    assert ids == Enum.uniq(ids)
   end
 
   test "get/1 finds by id, nil otherwise" do
@@ -133,10 +132,31 @@ defmodule Lenies.StdLib.CatalogTest do
   test "sprint runs move exactly K times (slot-2 counter ends at 0)" do
     s = Catalog.get("sprint")
     {:ok, plan} = Expander.expand(s, %{"K" => 3}, LeniesWeb.GenomeBuffer.new([:eat, :move, :jmp_t, :ret, :nop_0]), {:chromosome, 0})
-    # move yields to the world; we assert the loop scaffold drove the counter to 0
-    # by counting :move occurrences in the emitted ops (one per iteration body).
+    # The Expander emits ONE body copy inside a runtime-counted loop (not K unrolled
+    # copies), so :move appears exactly once regardless of K.
     assert Enum.count(plan.caret_ops, &(&1 == :move)) == 1
     # and the repeat counter slot is loaded/stored (loop present)
+    assert :jnz_t in plan.caret_ops
+  end
+
+  test "forage emits eat+move body inside a counted loop (not unrolled)" do
+    s = Catalog.get("forage")
+    {:ok, plan} = Expander.expand(s, %{"K" => 3}, LeniesWeb.GenomeBuffer.new([:eat, :move, :jmp_t, :ret, :nop_0]), {:chromosome, 0})
+    # The Expander emits ONE body copy inside a runtime-counted loop (not K unrolled
+    # copies), so :eat and :move each appear exactly once regardless of K.
+    assert Enum.count(plan.caret_ops, &(&1 == :eat)) == 1
+    assert Enum.count(plan.caret_ops, &(&1 == :move)) == 1
+    assert :jnz_t in plan.caret_ops
+  end
+
+  test "scan-sweep emits sense+turn+drop body inside a counted loop (not unrolled)" do
+    s = Catalog.get("scan-sweep")
+    {:ok, plan} = Expander.expand(s, %{"K" => 3}, LeniesWeb.GenomeBuffer.new([:eat, :move, :jmp_t, :ret, :nop_0, :turn_right, :sense_front, :drop]), {:chromosome, 0})
+    # The Expander emits ONE body copy inside a runtime-counted loop (not K unrolled
+    # copies), so each world-yielding opcode appears exactly once regardless of K.
+    assert Enum.count(plan.caret_ops, &(&1 == :turn_right)) == 1
+    assert Enum.count(plan.caret_ops, &(&1 == :sense_front)) == 1
+    assert Enum.count(plan.caret_ops, &(&1 == :drop)) == 1
     assert :jnz_t in plan.caret_ops
   end
 
