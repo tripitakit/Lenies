@@ -46,7 +46,25 @@ defmodule Lenies.StdLib.Catalog do
     %Snippet{id: "slot-load", name: "load slot 1", category: "Memory", kind: :inline, signature: "( -- v )", doc: "Push memory slot 1 onto the stack.", body: [:push1, :load]},
     %Snippet{id: "slot-inc", name: "increment slot 1", category: "Memory", kind: :inline, signature: "( -- )", doc: "Add 1 to memory slot 1 in place.", body: [:push1, :load, :push1, :add, :push1, :store]},
     %Snippet{id: "slot-dec", name: "decrement slot 1", category: "Memory", kind: :inline, signature: "( -- )", doc: "Subtract 1 from memory slot 1 in place.", body: [:push1, :load, :push1, :sub, :push1, :store]},
-    %Snippet{id: "slot-acc", name: "accumulate into slot 1", category: "Memory", kind: :inline, signature: "( v -- )", doc: "Add the top value into memory slot 1.", body: [:push1, :load, :add, :push1, :store]}
+    %Snippet{id: "slot-acc", name: "accumulate into slot 1", category: "Memory", kind: :inline, signature: "( v -- )", doc: "Add the top value into memory slot 1.", body: [:push1, :load, :add, :push1, :store]},
+
+    # Replication
+    %Snippet{id: "replicate-self", name: "replicate self", category: "Replication", kind: :function, signature: "( -- )",
+      doc: "Allocate a child, copy the chromosome into it, then divide. Uses slots 2 (index) and 3 (size).",
+      body: [
+        {:anchor, :self},
+        :get_size, {:const, 3}, :store,                 # slot3 = size
+        {:const, 3}, :load, :allocate, :drop,           # allocate child of size
+        :push0, {:const, 2}, :store,                    # slot2 = 0 (copy index i)
+        {:label, :cp},
+          {:const, 2}, :load, :read_self,               # read self[i]  -> op_int
+          {:const, 2}, :load, :swap, :write_child,      # write_child(i, op_int)
+          {:const, 2}, :load, :push1, :add, {:const, 2}, :store,  # i = i + 1
+          {:const, 3}, :load, {:const, 2}, :load, :sub, # size - i
+          {:branch, :jnz, :cp},                         # loop while size - i != 0
+        :divide,
+        :ret
+      ]}
   ]
 
   @spec all() :: [Snippet.t()]

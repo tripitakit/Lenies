@@ -46,31 +46,25 @@ defmodule LeniesWeb.EditorLiveStdLibTest do
     :sys.get_state(view.pid).socket.assigns.genome.chromosome |> length()
   end
 
-  # To be re-enabled in the replicate-self task — these still reference the retired
-  # `scan-turn` id and MUST be re-pointed at `replicate-self` before un-skipping.
-  @tag :skip
   test "inserting a function appends a body and a call; re-inserting adds only a call", %{
     conn: conn
   } do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
-    render_hook(view, "insert_stdlib", %{"id" => "scan-turn"})
+    render_hook(view, "insert_stdlib", %{"id" => "replicate-self"})
     html1 = render(view)
     assert html1 =~ "call_t"
     assert html1 =~ "ret"
     len1 = chromosome_len(view)
-    render_hook(view, "insert_stdlib", %{"id" => "scan-turn"})
+    render_hook(view, "insert_stdlib", %{"id" => "replicate-self"})
     len2 = chromosome_len(view)
     # only a small call added, no second body
     assert len2 - len1 <= 6
   end
 
-  # To be re-enabled in the replicate-self task — these still reference the retired
-  # `scan-turn` id and MUST be re-pointed at `replicate-self` before un-skipping.
-  @tag :skip
   test "function button label reflects whether it is already defined", %{conn: conn} do
     {:ok, view, html} = live(conn, ~p"/sandbox/editor/new")
     assert html =~ "+ definition &amp; call"
-    render_hook(view, "insert_stdlib", %{"id" => "scan-turn"})
+    render_hook(view, "insert_stdlib", %{"id" => "replicate-self"})
     assert render(view) =~ "+ call"
   end
 end

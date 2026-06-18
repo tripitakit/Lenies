@@ -123,6 +123,20 @@ defmodule Lenies.StdLib.CatalogTest do
     end
   end
 
+  test "replicate-self: function with copy loop, body appended once, call at caret" do
+    s = Catalog.get("replicate-self")
+    g = LeniesWeb.GenomeBuffer.new([:nop_0, :eat, :move, :jmp_t, :ret])
+    {:ok, plan} = Expander.expand(s, %{}, g, {:chromosome, 2})
+    assert [:call_t | _] = plan.caret_ops
+    assert hd(plan.appended_ops) == :push0
+    assert :divide in plan.appended_ops and :write_child in plan.appended_ops and :ret in plan.appended_ops
+    assert :jnz_t in plan.appended_ops               # the copy loop branch compiled
+    assert [{_, "stdlib:replicate-self:anchor=" <> _}] = plan.comments
+    # all ops whitelisted, merged codeome valid
+    ok = Lenies.Codeome.Opcodes.all() |> MapSet.new()
+    assert Enum.all?(plan.caret_ops ++ plan.appended_ops, &MapSet.member?(ok, &1))
+  end
+
   test "if-food retired, graze renamed" do
     assert Catalog.get("if-food") == nil
     assert Catalog.get("graze-step") == nil

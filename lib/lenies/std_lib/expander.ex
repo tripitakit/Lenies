@@ -23,18 +23,18 @@ defmodule Lenies.StdLib.Expander do
         finalize(genome, %InsertPlan{caret_ops: call_ops(anchor)})
 
       :undefined ->
-        with {:ok, anchor} <- allocate_anchor(genome) do
-          appended = [:push0] ++ concretise_function_body(body, anchor)
+        with {:ok, anchor} <- allocate_anchor(genome),
+             body1 = substitute_anchor(body, anchor),
+             anchor_bits = MapSet.new([bits(anchor_to_int(anchor))]),
+             {:ok, ops} <- compile_body(body1, %{}, genome, anchor_bits) do
+          appended = [:push0] ++ ops
 
-          finalize(
-            genome,
-            %InsertPlan{
-              caret_ops: call_ops(anchor),
-              appended_ops: appended,
-              anchor: anchor,
-              comments: [{1, "stdlib:#{id}:anchor=#{bits_str(anchor)}"}]
-            }
-          )
+          finalize(genome, %InsertPlan{
+            caret_ops: call_ops(anchor),
+            appended_ops: appended,
+            anchor: anchor,
+            comments: [{1, "stdlib:#{id}:anchor=#{bits_str(anchor)}"}]
+          })
         end
     end
   end
@@ -47,11 +47,11 @@ defmodule Lenies.StdLib.Expander do
     if length(genome.chromosome) + added > max, do: {:error, :too_long}, else: {:ok, plan}
   end
 
-  defp compile_body(body, params, genome) do
+  defp compile_body(body, params, genome, extra_used \\ MapSet.new()) do
     items = expand_repeats(body, 0, 0) |> elem(0)
     labels = items |> Enum.flat_map(fn {:label, n} -> [n]; _ -> [] end) |> Enum.uniq()
 
-    with {:ok, pats} <- allocate_labels(genome, length(labels)) do
+    with {:ok, pats} <- allocate_labels(genome, length(labels), extra_used) do
       pmap = labels |> Enum.zip(pats) |> Map.new()
       emit(items, params, pmap)
     end
@@ -161,12 +161,18 @@ defmodule Lenies.StdLib.Expander do
 
   defp call_ops(anchor), do: [:call_t | Lenies.Interpreter.Template.complement(anchor)]
 
-  defp concretise_function_body(body, anchor) do
+  defp substitute_anchor(body, anchor) do
     Enum.flat_map(body, fn
       {:anchor, :self} -> anchor
       {:sep} -> [:push0]
-      op when is_atom(op) -> [op]
+      other -> [other]
     end)
+  end
+
+  defp anchor_to_int(anchor) do
+    anchor
+    |> Enum.map(fn :nop_1 -> 1; :nop_0 -> 0 end)
+    |> Integer.undigits(2)
   end
 
   defp bits_str(anchor),
@@ -227,12 +233,17 @@ defmodule Lenies.StdLib.Expander do
   @doc "Allocate n distinct genome-global-unique 5-bit patterns (lists of :nop_0/:nop_1)."
   @spec allocate_labels(LeniesWeb.GenomeBuffer.t(), non_neg_integer()) ::
           {:ok, [[atom()]]} | {:error, :anchor_namespace_full}
-  def allocate_labels(_genome, 0), do: {:ok, []}
+  def allocate_labels(genome, n), do: allocate_labels(genome, n, MapSet.new())
 
-  def allocate_labels(genome, n) when is_integer(n) and n > 0 do
+  @spec allocate_labels(LeniesWeb.GenomeBuffer.t(), non_neg_integer(), MapSet.t()) ::
+          {:ok, [[atom()]]} | {:error, :anchor_namespace_full}
+  def allocate_labels(_genome, 0, _extra_used), do: {:ok, []}
+
+  def allocate_labels(genome, n, extra_used) when is_integer(n) and n > 0 do
     all = 0..(trunc(:math.pow(2, @anchor_len)) - 1) |> Enum.map(&bits/1)
+    base_used = MapSet.union(used_anchor_bits(genome), extra_used)
 
-    Enum.reduce_while(1..n, {:ok, [], used_anchor_bits(genome)}, fn _, {:ok, pats, used} ->
+    Enum.reduce_while(1..n, {:ok, [], base_used}, fn _, {:ok, pats, used} ->
       case Enum.find(all, fn b ->
              not MapSet.member?(used, b) and not MapSet.member?(used, flip(b))
            end) do

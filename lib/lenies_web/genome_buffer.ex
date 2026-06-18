@@ -20,7 +20,7 @@ defmodule LeniesWeb.GenomeBuffer do
   # check include them for free.
   defstruct chromosome: [], plasmids: [], comments: %{}
 
-  @comment_max_len 32
+  @comment_max_len 40
 
   @type section :: :chromosome | {:plasmid, non_neg_integer()}
   @type comment_key :: {section(), non_neg_integer()}
