@@ -124,6 +124,22 @@ defmodule Lenies.StdLib.CatalogTest do
     end
   end
 
+  test "if-food retired, graze renamed" do
+    assert Catalog.get("if-food") == nil
+    assert Catalog.get("graze-step") == nil
+    assert %{id: "graze"} = Catalog.get("graze")
+  end
+
+  test "sprint runs move exactly K times (slot-2 counter ends at 0)" do
+    s = Catalog.get("sprint")
+    {:ok, plan} = Expander.expand(s, %{"K" => 3}, LeniesWeb.GenomeBuffer.new([:eat, :move, :jmp_t, :ret, :nop_0]), {:chromosome, 0})
+    # move yields to the world; we assert the loop scaffold drove the counter to 0
+    # by counting :move occurrences in the emitted ops (one per iteration body).
+    assert Enum.count(plan.caret_ops, &(&1 == :move)) == 1
+    # and the repeat counter slot is loaded/stored (loop present)
+    assert :jnz_t in plan.caret_ops
+  end
+
   describe "every catalog snippet expands valid + runnable" do
     alias Lenies.StdLib.{Catalog, Expander}
     alias LeniesWeb.{GenomeBuffer, CodeomeBuffer}

@@ -27,9 +27,9 @@ defmodule LeniesWeb.EditorLiveStdLibTest do
   test "std-lib panel lists snippets and inserts one at the caret", %{conn: conn} do
     {:ok, view, html} = live(conn, ~p"/sandbox/editor/new")
     assert html =~ "Std-lib"
-    assert html =~ "graze step"
+    assert html =~ "graze"
 
-    render_hook(view, "insert_stdlib", %{"id" => "graze-step"})
+    render_hook(view, "insert_stdlib", %{"id" => "graze"})
     assert render(view) =~ "eat"
     assert render(view) =~ "move"
   end

@@ -30,7 +30,23 @@ defmodule Lenies.StdLib.Catalog do
       {:const, :hi}, {:const, 3}, :store, :dup, {:const, 3}, :load, :sub, {:branch, :jlt, :a2}, :drop, {:const, 3}, :load, {:branch, :jmp, :e2}, {:label, :a2}, {:label, :e2}
     ]},
     %Snippet{id: "mod-k", name: "mod K", category: "Numeric", kind: :param, signature: "( a -- a mod K )", params: [:K], doc: "Remainder of a divided by K.", body: [{:const, :K}, :mod]},
-    %Snippet{id: "const-k", name: "const K", category: "Numeric", kind: :param, signature: "( -- K )", params: [:K], doc: "Build the constant K with a doubling chain.", body: [{:require_pos, :K}, {:const, :K}]}
+    %Snippet{id: "const-k", name: "const K", category: "Numeric", kind: :param, signature: "( -- K )", params: [:K], doc: "Build the constant K with a doubling chain.", body: [{:require_pos, :K}, {:const, :K}]},
+
+    # Foraging
+    %Snippet{id: "graze", name: "graze", category: "Foraging", kind: :inline, signature: "( -- )", doc: "Eat the current cell, then step forward.", body: [:eat, :move]},
+
+    # Control
+    %Snippet{id: "sprint", name: "sprint K", category: "Control", kind: :param, signature: "( -- )", params: [:K], doc: "Move forward K cells (counted loop, slot 2 counter).", body: [{:repeat, :K, [:move]}]},
+    %Snippet{id: "forage", name: "forage K", category: "Control", kind: :param, signature: "( -- )", params: [:K], doc: "Eat then move, K times (slot 2 counter).", body: [{:repeat, :K, [:eat, :move]}]},
+    %Snippet{id: "scan-sweep", name: "scan-sweep K", category: "Control", kind: :param, signature: "( -- )", params: [:K], doc: "Turn right and sense ahead, K times (slot 2 counter).", body: [{:repeat, :K, [:turn_right, :sense_front, :drop]}]},
+    %Snippet{id: "wait-clear", name: "wait until clear", category: "Control", kind: :inline, signature: "( -- )", doc: "Spin until the cell ahead is empty (sense_front == 0).", body: [{:label, :h}, :sense_front, {:branch, :jnz, :h}]},
+
+    # Memory
+    %Snippet{id: "slot-save", name: "save to slot 1", category: "Memory", kind: :inline, signature: "( v -- )", doc: "Store the top value into memory slot 1.", body: [:push1, :store]},
+    %Snippet{id: "slot-load", name: "load slot 1", category: "Memory", kind: :inline, signature: "( -- v )", doc: "Push memory slot 1 onto the stack.", body: [:push1, :load]},
+    %Snippet{id: "slot-inc", name: "increment slot 1", category: "Memory", kind: :inline, signature: "( -- )", doc: "Add 1 to memory slot 1 in place.", body: [:push1, :load, :push1, :add, :push1, :store]},
+    %Snippet{id: "slot-dec", name: "decrement slot 1", category: "Memory", kind: :inline, signature: "( -- )", doc: "Subtract 1 from memory slot 1 in place.", body: [:push1, :load, :push1, :sub, :push1, :store]},
+    %Snippet{id: "slot-acc", name: "accumulate into slot 1", category: "Memory", kind: :inline, signature: "( v -- )", doc: "Add the top value into memory slot 1.", body: [:push1, :load, :add, :push1, :store]}
   ]
 
   @spec all() :: [Snippet.t()]
