@@ -24,10 +24,22 @@ defmodule LeniesWeb.EditorLiveStdLibTest do
     %{world_id: world_id, handle: handle}
   end
 
+  test "std-lib categories are collapsed by default and toggle open", %{conn: conn} do
+    {:ok, view, html} = live(conn, ~p"/sandbox/editor/new")
+    # cards are hidden when all categories are collapsed
+    refute html =~ "std-lib-card"
+    # category headers still render
+    assert html =~ "std-lib-cat-head"
+    html2 = view |> element(~s{[phx-click="toggle_stdlib_cat"][phx-value-cat="Logic"]}) |> render_click()
+    assert html2 =~ "std-lib-card"
+  end
+
   test "std-lib panel lists snippets and inserts one at the caret", %{conn: conn} do
     {:ok, view, html} = live(conn, ~p"/sandbox/editor/new")
     assert html =~ "Std-lib"
-    assert html =~ "graze"
+    # open the Foraging category to see the graze card
+    render_hook(view, "toggle_stdlib_cat", %{"cat" => "Foraging"})
+    assert render(view) =~ "graze"
 
     render_hook(view, "insert_stdlib", %{"id" => "graze"})
     assert render(view) =~ "eat"
@@ -62,8 +74,10 @@ defmodule LeniesWeb.EditorLiveStdLibTest do
   end
 
   test "function button label reflects whether it is already defined", %{conn: conn} do
-    {:ok, view, html} = live(conn, ~p"/sandbox/editor/new")
-    assert html =~ "+ definition &amp; call"
+    {:ok, view, _html} = live(conn, ~p"/sandbox/editor/new")
+    # open the Replication category to see the replicate-self card
+    render_hook(view, "toggle_stdlib_cat", %{"cat" => "Replication"})
+    assert render(view) =~ "+ definition &amp; call"
     render_hook(view, "insert_stdlib", %{"id" => "replicate-self"})
     assert render(view) =~ "+ call"
   end

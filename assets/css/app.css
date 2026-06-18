@@ -840,12 +840,24 @@
 }
 
 .lenies-dashboard .std-lib-cat-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: none;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: rgb(167 139 250 / 0.85); /* violet, matches section dividers */
   padding: 4px 2px 2px;
 }
+.lenies-dashboard .std-lib-cat-head::before { content: "▸ "; }
+.lenies-dashboard .std-lib-cat-head[aria-expanded="true"]::before { content: "▾ "; }
+.lenies-dashboard .std-lib-cat-head:hover { color: #c4b5fd; }
+.lenies-dashboard .std-lib-cat-body { display: flex; flex-direction: column; gap: 4px; }
 
 .lenies-dashboard .std-lib-card {
   display: flex;

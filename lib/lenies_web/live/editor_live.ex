@@ -70,6 +70,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:show_snippet_form, false)
       |> assign(:snippet_form_error, nil)
       |> assign(:std_lib, Lenies.StdLib.Catalog.by_category())
+      |> assign(:std_lib_open, MapSet.new())
       |> assign(:editing_addr, nil)
       |> assign(:commenting_addr, nil)
       |> assign(:inline_edit_error, nil)
@@ -822,6 +823,12 @@ defmodule LeniesWeb.EditorLive do
     {:noreply, assign(socket, :right_tab, if(tab == "debug", do: :debug, else: :genome))}
   end
 
+  def handle_event("toggle_stdlib_cat", %{"cat" => cat}, socket) do
+    open = socket.assigns.std_lib_open
+    open = if MapSet.member?(open, cat), do: MapSet.delete(open, cat), else: MapSet.put(open, cat)
+    {:noreply, assign(socket, :std_lib_open, open)}
+  end
+
   def handle_event("goto_section", %{"section" => sec}, socket) do
     section = decode_section(sec)
 
@@ -1034,6 +1041,7 @@ defmodule LeniesWeb.EditorLive do
         <EditorComponents.StdLibPanel.std_lib_panel
           std_lib={@std_lib}
           defined_fns={defined_stdlib_fns(@genome)}
+          open={@std_lib_open}
         />
 
         <EditorComponents.Listing.listing
