@@ -18,6 +18,25 @@ defmodule Lenies.StdLib.Expander do
     {:ok, %InsertPlan{caret_ops: body}}
   end
 
+  def expand(%Snippet{kind: :function, id: id, body: body}, _params, genome, _caret) do
+    case anchor_for(genome, id) do
+      {:ok, anchor} ->
+        {:ok, %InsertPlan{caret_ops: call_ops(anchor)}}
+
+      :undefined ->
+        with {:ok, anchor} <- allocate_anchor(genome) do
+          appended = [:push0] ++ concretise_function_body(body, anchor)
+          {:ok,
+           %InsertPlan{
+             caret_ops: call_ops(anchor),
+             appended_ops: appended,
+             anchor: anchor,
+             comments: [{1, "stdlib:#{id}:anchor=#{bits_str(anchor)}"}]
+           }}
+        end
+    end
+  end
+
   # Expand a placeholder list that needs NO anchors (const only) into opcodes.
   defp concretise_inline(body, params) do
     Enum.reduce_while(body, {:ok, []}, fn
@@ -51,6 +70,33 @@ defmodule Lenies.StdLib.Expander do
     {:ok, ops}
   end
   defp const_ops(_), do: {:error, :bad_param}
+
+  # ---------------------------------------------------------------------------
+  # Function snippet helpers
+  # ---------------------------------------------------------------------------
+
+  defp call_ops(anchor), do: [:call_t | Lenies.Interpreter.Template.complement(anchor)]
+
+  defp concretise_function_body(body, anchor) do
+    Enum.flat_map(body, fn
+      {:anchor, :self} -> anchor
+      {:sep} -> [:push0]
+      op when is_atom(op) -> [op]
+    end)
+  end
+
+  defp bits_str(anchor), do: Enum.map_join(anchor, "", fn :nop_1 -> "1"; :nop_0 -> "0" end)
+
+  defp anchor_for(genome, id) do
+    genome.comments
+    |> Map.values()
+    |> Enum.find_value(:undefined, fn txt ->
+      case Regex.run(~r/^stdlib:#{Regex.escape(id)}:anchor=([01]{5})$/, txt) do
+        [_, pat] -> {:ok, Enum.map(String.graphemes(pat), fn "1" -> :nop_1; "0" -> :nop_0 end)}
+        _ -> nil
+      end
+    end)
+  end
 
   # ---------------------------------------------------------------------------
   # Anchor allocation

@@ -33,6 +33,37 @@ defmodule Lenies.StdLib.ExpanderTest do
     end
   end
 
+  describe "callable functions" do
+    alias LeniesWeb.GenomeBuffer
+    defp g0, do: GenomeBuffer.new([:nop_0, :sense_front, :eat, :move, :jmp_t])
+
+    test "first insert: body appended, call at caret, anchor recorded in comments" do
+      s = Catalog.get("scan-turn")
+      {:ok, plan} = Expander.expand(s, %{}, g0(), {:chromosome, 2})
+      assert plan.anchor != nil
+      assert [:call_t | _] = plan.caret_ops
+      assert hd(plan.appended_ops) == :push0
+      assert :ret in plan.appended_ops
+      assert [{_offset, "stdlib:scan-turn:anchor=" <> _}] = plan.comments
+    end
+
+    test "second insert when already defined: only a call, nothing appended" do
+      s = Catalog.get("scan-turn")
+      {:ok, p1} = Expander.expand(s, %{}, g0(), {:chromosome, 2})
+      g1 =
+        g0()
+        |> GenomeBuffer.update_section(:chromosome, &(&1 ++ p1.appended_ops))
+        |> then(fn g ->
+          {offset, txt} = hd(p1.comments)
+          GenomeBuffer.put_comment(g, :chromosome, length(g0().chromosome) + offset, txt)
+        end)
+
+      {:ok, p2} = Expander.expand(s, %{}, g1, {:chromosome, 1})
+      assert [:call_t | _] = p2.caret_ops
+      assert p2.appended_ops == []
+    end
+  end
+
   describe "anchor allocation" do
     alias LeniesWeb.GenomeBuffer
 

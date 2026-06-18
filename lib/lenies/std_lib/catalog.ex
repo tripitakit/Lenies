@@ -24,7 +24,11 @@ defmodule Lenies.StdLib.Catalog do
     %Snippet{id: "const-k", name: "const K", category: "Constants",
       kind: :param, signature: "( -- K )", params: [:K],
       doc: "Build the constant K with a doubling chain.",
-      body: [{:const, :K}]}
+      body: [{:const, :K}]},
+    %Snippet{id: "scan-turn", name: "scan & turn", category: "Functions",
+      kind: :function, signature: "( -- )",
+      doc: "Subroutine: sense the front cell, then turn right. Returns to caller.",
+      body: [{:anchor, :self}, :sense_front, :drop, :turn_right, :ret]}
   ]
 
   @spec all() :: [Snippet.t()]
