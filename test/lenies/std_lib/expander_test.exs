@@ -121,6 +121,55 @@ defmodule Lenies.StdLib.ExpanderTest do
     end
   end
 
+  describe "branch/label compiler" do
+    alias Lenies.{Interpreter, Codeome}
+    alias Lenies.Interpreter.State
+    alias Lenies.StdLib.Snippet
+    alias LeniesWeb.GenomeBuffer
+
+    defp g, do: GenomeBuffer.new([:eat, :move, :jmp_t, :ret, :nop_0])
+
+    defp run_top(ops, seed) do
+      st = Enum.reduce(seed, State.new(energy: 1000.0), &State.push(&2, &1))
+      {_, s} = Interpreter.run_k_instructions(st, Codeome.from_list(ops), 200)
+      s.stack
+    end
+
+    defp inline(body), do: %Snippet{id: "t", name: "t", category: "T", kind: :inline, signature: "", body: body}
+
+    test "is-nonzero (bool) via jnz/jz: 0 -> 0, nonzero -> 1" do
+      body = [{:branch, :jnz, :t}, :push0, {:branch, :jmp, :e}, {:label, :t}, :push1, {:label, :e}]
+      {:ok, plan} = Expander.expand(inline(body), %{}, g(), {:chromosome, 0})
+      assert [0 | _] = run_top(plan.caret_ops, [0])
+      assert [1 | _] = run_top(plan.caret_ops, [7])
+    end
+
+    test "lt via sub + jlt: 3<5 -> 1, 5<5 -> 0, 9<5 -> 0" do
+      body = [:sub, {:branch, :jlt, :t}, :push0, {:branch, :jmp, :e}, {:label, :t}, :push1, {:label, :e}]
+      {:ok, plan} = Expander.expand(inline(body), %{}, g(), {:chromosome, 0})
+      # seed order: bottom..top, so push a then b => stack [.. a b], sub = a-b
+      assert [1 | _] = run_top(plan.caret_ops, [3, 5])
+      assert [0 | _] = run_top(plan.caret_ops, [5, 5])
+      assert [0 | _] = run_top(plan.caret_ops, [9, 5])
+    end
+
+    test "backward branch (loop) lands on its own label" do
+      # decrement slot via loop: start counter 3 in slot 2, loop until 0, leave 0 on stack
+      body = [
+        {:label, :h}, {:const, 2}, :load, :push1, :sub, :dup, {:const, 2}, :store,
+        {:branch, :jnz, :h}
+      ]
+      {:ok, plan} = Expander.expand(inline(body), %{}, g(), {:chromosome, 0})
+      seed = [:push1, :push1, :add, :push1, :add, :push1, :push1, :add, :store]  # value 3, index 2 -> slot2 = 3
+      {_, s0} = Interpreter.run_k_instructions(State.new(energy: 5000.0), Codeome.from_list(seed), length(seed))
+      # 50 steps: enough for 3 iterations (3×17 real ops + 3×5 label nops = 66
+      # steps max, but jnz template search resolves in 1 step so ~50 suffices),
+      # stops before circular wrap re-decrements slot 2.
+      {_, s} = Interpreter.run_k_instructions(%{s0 | stack: []}, Codeome.from_list(plan.caret_ops), 50)
+      assert State.load(s, 2) == 0
+    end
+  end
+
   describe "anchor allocation" do
     alias LeniesWeb.GenomeBuffer
 

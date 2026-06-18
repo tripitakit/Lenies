@@ -5,17 +5,16 @@ defmodule Lenies.StdLib.Expander do
   """
   alias Lenies.StdLib.{Snippet, InsertPlan}
 
+  @cond_op %{jz: :jz_t, jnz: :jnz_t, jlt: :jlt_t, jgt: :jgt_t, jmp: :jmp_t}
+
   @spec expand(Snippet.t(), map(), LeniesWeb.GenomeBuffer.t(), {atom(), non_neg_integer()}) ::
           {:ok, InsertPlan.t()} | {:error, atom()}
-  def expand(%Snippet{kind: :param, body: body}, params, genome, _caret) do
-    case concretise_inline(body, params) do
+  def expand(%Snippet{kind: kind, body: body}, params, genome, _caret)
+      when kind in [:inline, :param] do
+    case compile_body(body, params, genome) do
       {:ok, ops} -> finalize(genome, %InsertPlan{caret_ops: ops})
       {:error, r} -> {:error, r}
     end
-  end
-
-  def expand(%Snippet{kind: :inline, body: body}, _params, genome, _caret) do
-    finalize(genome, %InsertPlan{caret_ops: body})
   end
 
   def expand(%Snippet{kind: :function, id: id, body: body}, _params, genome, _caret) do
@@ -48,19 +47,49 @@ defmodule Lenies.StdLib.Expander do
     if length(genome.chromosome) + added > max, do: {:error, :too_long}, else: {:ok, plan}
   end
 
-  # Expand a placeholder list that needs NO anchors (const only) into opcodes.
-  defp concretise_inline(body, params) do
-    Enum.reduce_while(body, {:ok, []}, fn
-      {:const, key}, {:ok, acc} ->
-        case const_ops(fetch_int(params, key)) do
-          {:ok, ops} -> {:cont, {:ok, acc ++ ops}}
-          err -> {:halt, err}
-        end
+  defp compile_body(body, params, genome) do
+    items = expand_repeats(body)
+    labels = items |> Enum.flat_map(fn {:label, n} -> [n]; _ -> [] end) |> Enum.uniq()
 
-      op, {:ok, acc} when is_atom(op) ->
-        {:cont, {:ok, acc ++ [op]}}
-    end)
+    with {:ok, pats} <- allocate_labels(genome, length(labels)) do
+      pmap = labels |> Enum.zip(pats) |> Map.new()
+      emit(items, params, pmap)
+    end
   end
+
+  # Task 4 replaces this with real {:repeat} expansion.
+  defp expand_repeats(items), do: items
+
+  defp emit(items, params, pmap) do
+    {ops, _prev} =
+      Enum.reduce(items, {[], nil}, fn item, {acc, prev} ->
+        {acc ++ emit_item(item, params, pmap, prev), item}
+      end)
+
+    if Enum.any?(ops, &(&1 == :__bad_param__)),
+      do: {:error, :bad_param},
+      else: {:ok, ops}
+  end
+
+  defp emit_item({:const, k}, params, _m, _prev) do
+    case const_ops(resolve_int(k, params)) do
+      {:ok, ops} -> ops
+      {:error, _} -> [:__bad_param__]
+    end
+  end
+
+  defp emit_item({:branch, cond, name}, _p, m, _prev),
+    do: [Map.fetch!(@cond_op, cond) | Lenies.Interpreter.Template.complement(Map.fetch!(m, name))]
+
+  defp emit_item({:label, name}, _p, m, prev) do
+    sep = if match?({:branch, _, _}, prev), do: [:push0], else: []
+    sep ++ Map.fetch!(m, name)
+  end
+
+  defp emit_item(op, _p, _m, _prev) when is_atom(op), do: [op]
+
+  defp resolve_int(k, _params) when is_integer(k), do: k
+  defp resolve_int(k, params) when is_atom(k), do: fetch_int(params, k)
 
   defp fetch_int(params, key) do
     case params[Atom.to_string(key)] || params[key] do
