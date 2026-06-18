@@ -20,7 +20,11 @@ defmodule Lenies.StdLib.Catalog do
       body: [:push1, :load]},
     %Snippet{id: "increment-slot1", name: "increment slot 1", category: "Memory",
       kind: :inline, signature: "( -- )", doc: "Add 1 to memory slot 1 in place.",
-      body: [:push1, :load, :push1, :add, :push1, :store]}
+      body: [:push1, :load, :push1, :add, :push1, :store]},
+    %Snippet{id: "const-k", name: "const K", category: "Constants",
+      kind: :param, signature: "( -- K )", params: [:K],
+      doc: "Build the constant K with a doubling chain.",
+      body: [{:const, :K}]}
   ]
 
   @spec all() :: [Snippet.t()]
