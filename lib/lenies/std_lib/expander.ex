@@ -7,34 +7,42 @@ defmodule Lenies.StdLib.Expander do
 
   @spec expand(Snippet.t(), map(), LeniesWeb.GenomeBuffer.t(), {atom(), non_neg_integer()}) ::
           {:ok, InsertPlan.t()} | {:error, atom()}
-  def expand(%Snippet{kind: :param, body: body}, params, _genome, _caret) do
+  def expand(%Snippet{kind: :param, body: body}, params, genome, _caret) do
     case concretise_inline(body, params) do
-      {:ok, ops} -> {:ok, %InsertPlan{caret_ops: ops}}
+      {:ok, ops} -> finalize(genome, %InsertPlan{caret_ops: ops})
       {:error, r} -> {:error, r}
     end
   end
 
-  def expand(%Snippet{kind: :inline, body: body}, _params, _genome, _caret) do
-    {:ok, %InsertPlan{caret_ops: body}}
+  def expand(%Snippet{kind: :inline, body: body}, _params, genome, _caret) do
+    finalize(genome, %InsertPlan{caret_ops: body})
   end
 
   def expand(%Snippet{kind: :function, id: id, body: body}, _params, genome, _caret) do
     case anchor_for(genome, id) do
       {:ok, anchor} ->
-        {:ok, %InsertPlan{caret_ops: call_ops(anchor)}}
+        finalize(genome, %InsertPlan{caret_ops: call_ops(anchor)})
 
       :undefined ->
         with {:ok, anchor} <- allocate_anchor(genome) do
           appended = [:push0] ++ concretise_function_body(body, anchor)
-          {:ok,
+          finalize(genome,
            %InsertPlan{
              caret_ops: call_ops(anchor),
              appended_ops: appended,
              anchor: anchor,
              comments: [{1, "stdlib:#{id}:anchor=#{bits_str(anchor)}"}]
-           }}
+           })
         end
     end
+  end
+
+  defp finalize(genome, plan), do: guard_length(genome, plan)
+
+  defp guard_length(genome, %InsertPlan{} = plan) do
+    {_min, max} = Lenies.Config.codeome_length_bounds()
+    added = length(plan.caret_ops) + length(plan.appended_ops)
+    if length(genome.chromosome) + added > max, do: {:error, :too_long}, else: {:ok, plan}
   end
 
   # Expand a placeholder list that needs NO anchors (const only) into opcodes.

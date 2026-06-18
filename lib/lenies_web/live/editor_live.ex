@@ -1265,8 +1265,28 @@ defmodule LeniesWeb.EditorLive do
   defp stdlib_error(:anchor_namespace_full), do: "Too many distinct functions in this codeome."
   defp stdlib_error(other), do: "Could not insert snippet (#{inspect(other)})."
 
-  defp apply_insert_plan(socket, %Lenies.StdLib.InsertPlan{caret_ops: caret_ops}) do
-    insert_at_caret(socket, caret_ops)
+  defp apply_insert_plan(socket, %Lenies.StdLib.InsertPlan{} = plan) do
+    genome = socket.assigns.genome
+    tail = length(genome.chromosome)
+
+    genome =
+      if plan.appended_ops == [] do
+        genome
+      else
+        genome
+        |> LeniesWeb.GenomeBuffer.update_section(:chromosome, &(&1 ++ plan.appended_ops))
+        |> apply_plan_comments(tail, plan.comments)
+      end
+
+    socket
+    |> assign(:genome, genome)
+    |> insert_at_caret(plan.caret_ops)
+  end
+
+  defp apply_plan_comments(genome, tail, comments) do
+    Enum.reduce(comments, genome, fn {offset, text}, g ->
+      LeniesWeb.GenomeBuffer.put_comment(g, :chromosome, tail + offset, text)
+    end)
   end
 
   # Inserts `opcodes` at the caret (replace-on-insert when a selection is

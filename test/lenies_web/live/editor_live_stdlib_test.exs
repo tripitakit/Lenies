@@ -41,4 +41,20 @@ defmodule LeniesWeb.EditorLiveStdLibTest do
     assert html =~ "push1"
     assert html =~ "dup"
   end
+
+  defp chromosome_len(view) do
+    :sys.get_state(view.pid).socket.assigns.genome.chromosome |> length()
+  end
+
+  test "inserting a function appends a body and a call; re-inserting adds only a call", %{conn: conn} do
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
+    render_hook(view, "insert_stdlib", %{"id" => "scan-turn"})
+    html1 = render(view)
+    assert html1 =~ "call_t"
+    assert html1 =~ "ret"
+    len1 = chromosome_len(view)
+    render_hook(view, "insert_stdlib", %{"id" => "scan-turn"})
+    len2 = chromosome_len(view)
+    assert len2 - len1 <= 6   # only a small call added, no second body
+  end
 end
