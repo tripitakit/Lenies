@@ -1031,7 +1031,7 @@ defmodule LeniesWeb.EditorLive do
           snippet_form_error={@snippet_form_error}
         />
 
-        <EditorComponents.StdLibPanel.std_lib_panel std_lib={@std_lib} />
+        <EditorComponents.StdLibPanel.std_lib_panel std_lib={@std_lib} defined_fns={defined_stdlib_fns(@genome)} />
 
         <EditorComponents.Listing.listing
           genome={@genome}
@@ -1259,6 +1259,18 @@ defmodule LeniesWeb.EditorLive do
           plasmids: Lenies.Collection.to_plasmid_structs(c)
         }
     end
+  end
+
+  defp defined_stdlib_fns(genome) do
+    genome.comments
+    |> Map.values()
+    |> Enum.flat_map(fn t ->
+      case Regex.run(~r/^stdlib:([^:]+):anchor=/, t) do
+        [_, id] -> [id]
+        _ -> []
+      end
+    end)
+    |> MapSet.new()
   end
 
   defp stdlib_error(:too_long), do: "That would exceed the codeome length limit."

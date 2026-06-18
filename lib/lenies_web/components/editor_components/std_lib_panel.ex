@@ -2,6 +2,7 @@ defmodule LeniesWeb.EditorComponents.StdLibPanel do
   use LeniesWeb, :html
 
   attr :std_lib, :list, required: true
+  attr :defined_fns, :any, default: MapSet.new()
 
   def std_lib_panel(assigns) do
     ~H"""
@@ -21,7 +22,10 @@ defmodule LeniesWeb.EditorComponents.StdLibPanel do
             <label :for={p <- s.params}>{p} <input type="number" name={"params[#{p}]"} value="8" min="1" /></label>
             <button type="submit">insert</button>
           </form>
-          <button :if={s.kind != :param} type="button" class="std-lib-insert" phx-click="insert_stdlib" phx-value-id={s.id}>insert</button>
+          <button :if={s.kind == :inline} type="button" class="std-lib-insert" phx-click="insert_stdlib" phx-value-id={s.id}>insert</button>
+          <button :if={s.kind == :function} type="button" phx-click="insert_stdlib" phx-value-id={s.id}>
+            {if MapSet.member?(@defined_fns, s.id), do: "+ call", else: "+ definition & call"}
+          </button>
         </article>
       </div>
     </section>

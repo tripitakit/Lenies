@@ -57,4 +57,11 @@ defmodule LeniesWeb.EditorLiveStdLibTest do
     len2 = chromosome_len(view)
     assert len2 - len1 <= 6   # only a small call added, no second body
   end
+
+  test "function button label reflects whether it is already defined", %{conn: conn} do
+    {:ok, view, html} = live(conn, ~p"/sandbox/editor/new")
+    assert html =~ "+ definition &amp; call"
+    render_hook(view, "insert_stdlib", %{"id" => "scan-turn"})
+    assert render(view) =~ "+ call"
+  end
 end
