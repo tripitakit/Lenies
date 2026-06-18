@@ -102,6 +102,13 @@ defmodule Lenies.StdLib.Expander do
     end
   end
 
+  defp emit_item({:require_pos, k}, params, _m, _prev) do
+    case resolve_int(k, params) do
+      n when is_integer(n) and n >= 1 -> []
+      _ -> [:__bad_param__]
+    end
+  end
+
   defp emit_item({:branch, cond, name}, _p, m, _prev),
     do: [Map.fetch!(@cond_op, cond) | Lenies.Interpreter.Template.complement(Map.fetch!(m, name))]
 
@@ -131,7 +138,9 @@ defmodule Lenies.StdLib.Expander do
     end
   end
 
-  # Cheapest exact build of K>=1: push1 (MSB), then double-and-add per bit.
+  # Cheapest exact build of K>=0: 0 maps to push0; K>=1 uses a doubling chain.
+  defp const_ops(0), do: {:ok, [:push0]}
+
   defp const_ops(k) when is_integer(k) and k >= 1 do
     [_msb | rest] = Integer.digits(k, 2)
 

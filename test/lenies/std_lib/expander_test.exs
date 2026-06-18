@@ -6,7 +6,7 @@ defmodule Lenies.StdLib.ExpanderTest do
   defp genome, do: GenomeBuffer.new([:nop_0, :sense_front, :eat, :move, :jmp_t])
 
   test "inline snippet → caret_ops are the literal body, nothing appended" do
-    s = Catalog.get("graze-step")
+    s = %Lenies.StdLib.Snippet{id: "x", name: "x", category: "T", kind: :inline, signature: "", body: [:eat, :move]}
 
     assert {:ok, %InsertPlan{caret_ops: [:eat, :move], appended_ops: [], anchor: nil}} =
              Expander.expand(s, %{}, genome(), {:chromosome, 0})
@@ -58,7 +58,7 @@ defmodule Lenies.StdLib.ExpanderTest do
     defp g0, do: GenomeBuffer.new([:nop_0, :sense_front, :eat, :move, :jmp_t])
 
     test "first insert: body appended, call at caret, anchor recorded in comments" do
-      s = Catalog.get("scan-turn")
+      s = %Lenies.StdLib.Snippet{id: "scan-turn", name: "scan & turn", category: "Functions", kind: :function, signature: "( -- )", body: [{:anchor, :self}, :sense_front, :drop, :turn_right, :ret]}
       {:ok, plan} = Expander.expand(s, %{}, g0(), {:chromosome, 2})
       assert plan.anchor != nil
       assert [:call_t | _] = plan.caret_ops
@@ -68,7 +68,7 @@ defmodule Lenies.StdLib.ExpanderTest do
     end
 
     test "second insert when already defined: only a call, nothing appended" do
-      s = Catalog.get("scan-turn")
+      s = %Lenies.StdLib.Snippet{id: "scan-turn", name: "scan & turn", category: "Functions", kind: :function, signature: "( -- )", body: [{:anchor, :self}, :sense_front, :drop, :turn_right, :ret]}
       {:ok, p1} = Expander.expand(s, %{}, g0(), {:chromosome, 2})
 
       g1 =
