@@ -57,8 +57,26 @@ defmodule Lenies.StdLib.Expander do
     end
   end
 
-  # Task 4 replaces this with real {:repeat} expansion.
-  defp expand_repeats(items), do: items
+  @repeat_slot 2
+
+  defp expand_repeats(items) do
+    items
+    |> Enum.with_index()
+    |> Enum.flat_map(fn
+      {{:repeat, key, body}, i} ->
+        lbl = String.to_atom("__rpt#{i}")
+
+        [{:const, key}, {:const, @repeat_slot}, :store, {:label, lbl}] ++
+          expand_repeats(body) ++
+          [
+            {:const, @repeat_slot}, :load, :push1, :sub, {:const, @repeat_slot}, :store,
+            {:const, @repeat_slot}, :load, {:branch, :jnz, lbl}
+          ]
+
+      {item, _} ->
+        [item]
+    end)
+  end
 
   defp emit(items, params, pmap) do
     {ops, _prev} =

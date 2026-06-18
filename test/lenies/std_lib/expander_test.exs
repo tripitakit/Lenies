@@ -170,6 +170,26 @@ defmodule Lenies.StdLib.ExpanderTest do
     end
   end
 
+  describe "repeat macro" do
+    alias Lenies.{Interpreter, Codeome}
+    alias Lenies.Interpreter.State
+    alias Lenies.StdLib.Snippet
+    alias LeniesWeb.GenomeBuffer
+
+    test "body runs exactly K times (observed via a slot-1 counter)" do
+      # body increments slot 1; after the loop a self-jmp sentinel spins harmlessly.
+      body = [
+        {:repeat, :K, [:push1, :load, :push1, :add, :push1, :store]},
+        {:label, :done}, {:branch, :jmp, :done}
+      ]
+      s = %Snippet{id: "t", name: "t", category: "T", kind: :param, signature: "", params: [:K], body: body}
+      g = GenomeBuffer.new([:eat, :move, :jmp_t, :ret, :nop_0])
+      {:ok, plan} = Expander.expand(s, %{"K" => 4}, g, {:chromosome, 0})
+      {_, st} = Interpreter.run_k_instructions(State.new(energy: 100_000.0), Codeome.from_list(plan.caret_ops), 1000)
+      assert State.load(st, 1) == 4
+    end
+  end
+
   describe "anchor allocation" do
     alias LeniesWeb.GenomeBuffer
 
