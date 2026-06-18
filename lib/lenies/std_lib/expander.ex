@@ -51,4 +51,49 @@ defmodule Lenies.StdLib.Expander do
     {:ok, ops}
   end
   defp const_ops(_), do: {:error, :bad_param}
+
+  # ---------------------------------------------------------------------------
+  # Anchor allocation
+  # ---------------------------------------------------------------------------
+
+  @anchor_len 5
+
+  @doc "Allocate a free 5-bit anchor pattern (list of :nop_0/:nop_1) for the genome."
+  @spec allocate_anchor(LeniesWeb.GenomeBuffer.t()) :: {:ok, [atom()]} | {:error, :anchor_namespace_full}
+  def allocate_anchor(genome) do
+    used = used_anchor_bits(genome)
+
+    free =
+      0..(trunc(:math.pow(2, @anchor_len)) - 1)
+      |> Enum.map(&bits/1)
+      |> Enum.find(fn b -> not MapSet.member?(used, b) and not MapSet.member?(used, flip(b)) end)
+
+    case free do
+      nil -> {:error, :anchor_namespace_full}
+      b -> {:ok, Enum.map(b, fn 1 -> :nop_1; 0 -> :nop_0 end)}
+    end
+  end
+
+  defp bits(i), do: i |> Integer.digits(2) |> then(&(List.duplicate(0, @anchor_len - length(&1)) ++ &1))
+  defp flip(b), do: Enum.map(b, &(1 - &1))
+
+  defp used_anchor_bits(genome) do
+    from_comments =
+      genome.comments
+      |> Map.values()
+      |> Enum.flat_map(fn txt ->
+        case Regex.run(~r/anchor=([01]{5})/, txt) do
+          [_, pat] -> [pat |> String.graphemes() |> Enum.map(&String.to_integer/1)]
+          _ -> []
+        end
+      end)
+
+    from_runs =
+      genome.chromosome
+      |> Enum.chunk_every(@anchor_len, 1, :discard)
+      |> Enum.filter(&Enum.all?(&1, fn op -> op in [:nop_0, :nop_1] end))
+      |> Enum.map(fn run -> Enum.map(run, fn :nop_1 -> 1; :nop_0 -> 0 end) end)
+
+    MapSet.new(from_comments ++ from_runs)
+  end
 end

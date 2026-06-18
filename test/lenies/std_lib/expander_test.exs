@@ -32,4 +32,28 @@ defmodule Lenies.StdLib.ExpanderTest do
       assert {:error, :bad_param} = Expander.expand(Catalog.get("const-k"), %{"K" => 0}, GenomeBuffer.new([:nop_0, :eat, :move, :jmp_t, :ret]), {:chromosome, 0})
     end
   end
+
+  describe "anchor allocation" do
+    alias LeniesWeb.GenomeBuffer
+
+    test "picks a 5-nop pattern, avoids used patterns and their complements" do
+      g = GenomeBuffer.new([:nop_1, :nop_1, :nop_1, :nop_1, :nop_1, :eat, :move, :jmp_t])
+      {:ok, anchor} = Expander.allocate_anchor(g)
+      assert length(anchor) == 5
+      assert Enum.all?(anchor, &(&1 in [:nop_0, :nop_1]))
+      refute anchor == [:nop_1, :nop_1, :nop_1, :nop_1, :nop_1]
+      refute anchor == [:nop_0, :nop_0, :nop_0, :nop_0, :nop_0]
+    end
+
+    test "exhaustion → {:error, :anchor_namespace_full}" do
+      # Register all 32 patterns at distinct comment indices.
+      g0 = GenomeBuffer.new([:eat, :move, :jmp_t, :ret, :nop_0])
+      g =
+        Enum.reduce(0..31, g0, fn i, acc ->
+          pat = i |> Integer.to_string(2) |> String.pad_leading(5, "0")
+          GenomeBuffer.put_comment(acc, :chromosome, i, "stdlib:f#{i}:anchor=#{pat}")
+        end)
+      assert {:error, :anchor_namespace_full} = Expander.allocate_anchor(g)
+    end
+  end
 end
