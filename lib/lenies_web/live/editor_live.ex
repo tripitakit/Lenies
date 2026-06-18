@@ -657,6 +657,10 @@ defmodule LeniesWeb.EditorLive do
     end
   end
 
+  def handle_event("insert_stdlib", %{"_id" => id} = params, socket) do
+    handle_event("insert_stdlib", Map.put(params, "id", id), socket)
+  end
+
   def handle_event("insert_stdlib", %{"id" => id} = params, socket) do
     case Lenies.StdLib.Catalog.get(id) do
       nil ->

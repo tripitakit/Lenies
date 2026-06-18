@@ -33,4 +33,12 @@ defmodule LeniesWeb.EditorLiveStdLibTest do
     assert render(view) =~ "eat"
     assert render(view) =~ "move"
   end
+
+  test "inserting const K=8 puts the doubling chain at the caret", %{conn: conn} do
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
+    render_submit(view, "insert_stdlib", %{"id" => "const-k", "params" => %{"K" => "8"}})
+    html = render(view)
+    assert html =~ "push1"
+    assert html =~ "dup"
+  end
 end

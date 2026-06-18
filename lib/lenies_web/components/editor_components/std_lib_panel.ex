@@ -16,7 +16,12 @@ defmodule LeniesWeb.EditorComponents.StdLibPanel do
             <span class="std-lib-sig">{s.signature}</span>
           </div>
           <div :if={s.doc} class="std-lib-doc">{s.doc}</div>
-          <button type="button" class="std-lib-insert" phx-click="insert_stdlib" phx-value-id={s.id}>insert</button>
+          <form :if={s.kind == :param} phx-submit="insert_stdlib" class="std-lib-paramform">
+            <input type="hidden" name="_id" value={s.id} />
+            <label :for={p <- s.params}>{p} <input type="number" name={"params[#{p}]"} value="8" min="1" /></label>
+            <button type="submit">insert</button>
+          </form>
+          <button :if={s.kind != :param} type="button" class="std-lib-insert" phx-click="insert_stdlib" phx-value-id={s.id}>insert</button>
         </article>
       </div>
     </section>
