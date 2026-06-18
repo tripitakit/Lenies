@@ -190,6 +190,29 @@ defmodule Lenies.StdLib.ExpanderTest do
     end
   end
 
+  describe "nested repeats" do
+    alias Lenies.{Interpreter, Codeome}
+    alias Lenies.Interpreter.State
+    alias Lenies.StdLib.Snippet
+    alias LeniesWeb.GenomeBuffer
+
+    test "outer repeat K=2, inner repeat M=3 yields slot-1 value of 6 (2x3)" do
+      # Inner body: increment slot 1 (load slot1, add 1, store slot1)
+      # Inner repeat: run M times => slot1 += M per outer iteration
+      # Outer repeat: run K times => slot1 == K*M == 6
+      # Sentinel: self-jmp so execution spins harmlessly after the loop
+      body = [
+        {:repeat, :K, [{:repeat, :M, [:push1, :load, :push1, :add, :push1, :store]}]},
+        {:label, :done}, {:branch, :jmp, :done}
+      ]
+      s = %Snippet{id: "t", name: "t", category: "T", kind: :param, signature: "", params: [:K, :M], body: body}
+      g = GenomeBuffer.new([:eat, :move, :jmp_t, :ret, :nop_0])
+      {:ok, plan} = Expander.expand(s, %{"K" => 2, "M" => 3}, g, {:chromosome, 0})
+      {_, st} = Interpreter.run_k_instructions(State.new(energy: 100_000.0), Codeome.from_list(plan.caret_ops), 2000)
+      assert State.load(st, 1) == 6
+    end
+  end
+
   describe "anchor allocation" do
     alias LeniesWeb.GenomeBuffer
 

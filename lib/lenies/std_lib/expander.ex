@@ -48,7 +48,7 @@ defmodule Lenies.StdLib.Expander do
   end
 
   defp compile_body(body, params, genome) do
-    items = expand_repeats(body)
+    items = expand_repeats(body, 0, 0) |> elem(0)
     labels = items |> Enum.flat_map(fn {:label, n} -> [n]; _ -> [] end) |> Enum.uniq()
 
     with {:ok, pats} <- allocate_labels(genome, length(labels)) do
@@ -58,23 +58,29 @@ defmodule Lenies.StdLib.Expander do
   end
 
   @repeat_slot 2
+  # Maximum nesting depth is 2 (slots 2 and 3), staying within slots 0-3.
+  @repeat_max_depth 1
 
-  defp expand_repeats(items) do
-    items
-    |> Enum.with_index()
-    |> Enum.flat_map(fn
-      {{:repeat, key, body}, i} ->
-        lbl = String.to_atom("__rpt#{i}")
+  # Public entry: called from compile_body with counter=0, depth=0
+  defp expand_repeats(items, counter, depth) do
+    Enum.reduce(items, {[], counter}, fn
+      {:repeat, key, body}, {acc, c} ->
+        lbl = String.to_atom("__rpt#{c}")
+        slot = @repeat_slot + depth
+        {inner, c2} = expand_repeats(body, c + 1, min(depth + 1, @repeat_max_depth))
 
-        [{:const, key}, {:const, @repeat_slot}, :store, {:label, lbl}] ++
-          expand_repeats(body) ++
-          [
-            {:const, @repeat_slot}, :load, :push1, :sub, {:const, @repeat_slot}, :store,
-            {:const, @repeat_slot}, :load, {:branch, :jnz, lbl}
-          ]
+        loop =
+          [{:const, key}, {:const, slot}, :store, {:label, lbl}] ++
+            inner ++
+            [
+              {:const, slot}, :load, :push1, :sub, {:const, slot}, :store,
+              {:const, slot}, :load, {:branch, :jnz, lbl}
+            ]
 
-      {item, _} ->
-        [item]
+        {acc ++ loop, c2}
+
+      item, {acc, c} ->
+        {acc ++ [item], c}
     end)
   end
 
