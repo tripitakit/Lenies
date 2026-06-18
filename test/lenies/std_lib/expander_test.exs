@@ -85,6 +85,42 @@ defmodule Lenies.StdLib.ExpanderTest do
     end
   end
 
+  describe "allocate_labels/2" do
+    alias LeniesWeb.GenomeBuffer
+
+    test "returns n distinct 5-nop patterns, none equal to another or its complement" do
+      g = GenomeBuffer.new([:eat, :move, :jmp_t, :ret, :nop_0])
+      {:ok, pats} = Expander.allocate_labels(g, 3)
+      assert length(pats) == 3
+      assert Enum.all?(pats, &(length(&1) == 5 and Enum.all?(&1, fn o -> o in [:nop_0, :nop_1] end)))
+      bits = Enum.map(pats, fn p -> Enum.map(p, fn :nop_1 -> 1; :nop_0 -> 0 end) end)
+      assert Enum.uniq(bits) == bits
+      flips = Enum.map(bits, fn b -> Enum.map(b, &(1 - &1)) end)
+      assert MapSet.disjoint?(MapSet.new(bits), MapSet.new(flips))
+    end
+
+    test "n = 0 returns an empty list" do
+      g = GenomeBuffer.new([:eat, :move, :jmp_t, :ret, :nop_0])
+      assert {:ok, []} = Expander.allocate_labels(g, 0)
+    end
+
+    test "avoids 5-nop runs already in the chromosome" do
+      g = GenomeBuffer.new([:nop_1, :nop_1, :nop_1, :nop_1, :nop_1, :eat, :move, :jmp_t])
+      {:ok, [p]} = Expander.allocate_labels(g, 1)
+      refute p == [:nop_1, :nop_1, :nop_1, :nop_1, :nop_1]
+      refute p == [:nop_0, :nop_0, :nop_0, :nop_0, :nop_0]
+    end
+
+    test "exhaustion → {:error, :anchor_namespace_full}" do
+      g0 = GenomeBuffer.new([:eat, :move, :jmp_t, :ret, :nop_0])
+      g = Enum.reduce(0..31, g0, fn i, acc ->
+        pat = i |> Integer.to_string(2) |> String.pad_leading(5, "0")
+        GenomeBuffer.put_comment(acc, :chromosome, i, "stdlib:f#{i}:anchor=#{pat}")
+      end)
+      assert {:error, :anchor_namespace_full} = Expander.allocate_labels(g, 1)
+    end
+  end
+
   describe "anchor allocation" do
     alias LeniesWeb.GenomeBuffer
 

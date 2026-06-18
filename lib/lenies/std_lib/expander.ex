@@ -162,6 +162,32 @@ defmodule Lenies.StdLib.Expander do
     end
   end
 
+  @doc "Allocate n distinct genome-global-unique 5-bit patterns (lists of :nop_0/:nop_1)."
+  @spec allocate_labels(LeniesWeb.GenomeBuffer.t(), non_neg_integer()) ::
+          {:ok, [[atom()]]} | {:error, :anchor_namespace_full}
+  def allocate_labels(_genome, 0), do: {:ok, []}
+
+  def allocate_labels(genome, n) when is_integer(n) and n > 0 do
+    all = 0..(trunc(:math.pow(2, @anchor_len)) - 1) |> Enum.map(&bits/1)
+
+    Enum.reduce_while(1..n, {:ok, [], used_anchor_bits(genome)}, fn _, {:ok, pats, used} ->
+      case Enum.find(all, fn b ->
+             not MapSet.member?(used, b) and not MapSet.member?(used, flip(b))
+           end) do
+        nil ->
+          {:halt, {:error, :anchor_namespace_full}}
+
+        b ->
+          pat = Enum.map(b, fn 1 -> :nop_1; 0 -> :nop_0 end)
+          {:cont, {:ok, pats ++ [pat], MapSet.put(used, b)}}
+      end
+    end)
+    |> case do
+      {:ok, pats, _} -> {:ok, pats}
+      err -> err
+    end
+  end
+
   defp bits(i),
     do: i |> Integer.digits(2) |> then(&(List.duplicate(0, @anchor_len - length(&1)) ++ &1))
 
