@@ -1050,11 +1050,16 @@
    the freed space goes to the listing. */
 .lenies-dashboard .editor-grid {
   display: grid;
-  /* Manual is capped at 50% of the grid container so it never dominates
-     the editor on wide viewports. The remaining horizontal space is
-     split equally between the opcode pane and the codeome listing pane
-     (each gets 1fr → 50% of what's left after the manual). */
-  grid-template-columns: minmax(0, 38%) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr);
+  /* Manual is capped so it never dominates the editor on wide viewports.
+     The remaining horizontal space is shared by the four working panes:
+     palette · std-lib · listing (each 1fr) · genome/debug pane (0.85fr).
+     IMPORTANT: the number of column tracks here MUST equal the number of
+     direct children of #editor-grid in editor_live.ex's render (currently
+     5: manual, palette, std-lib, listing, plasmid/debug pane). Add a child
+     without adding a track and CSS Grid wraps the last pane onto a second
+     implicit row (it slips under the manual and gets clipped). */
+  grid-template-columns:
+    minmax(0, 32%) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.85fr);
   grid-template-rows: minmax(0, 1fr);
   gap: 0.75rem;
   padding: 0.75rem;
@@ -1066,7 +1071,8 @@
 }
 
 .lenies-dashboard .editor-grid.manual-collapsed {
-  grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr);
+  grid-template-columns:
+    24px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.85fr);
 }
 
 .lenies-dashboard .manual-pane {
