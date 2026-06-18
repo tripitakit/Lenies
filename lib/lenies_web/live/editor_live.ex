@@ -69,6 +69,7 @@ defmodule LeniesWeb.EditorLive do
       |> assign(:snippets, Lenies.Snippets.Store.all())
       |> assign(:show_snippet_form, false)
       |> assign(:snippet_form_error, nil)
+      |> assign(:std_lib, Lenies.StdLib.Catalog.by_category())
       |> assign(:editing_addr, nil)
       |> assign(:commenting_addr, nil)
       |> assign(:inline_edit_error, nil)
@@ -656,6 +657,33 @@ defmodule LeniesWeb.EditorLive do
     end
   end
 
+  def handle_event("insert_stdlib", %{"id" => id} = params, socket) do
+    case Lenies.StdLib.Catalog.get(id) do
+      nil ->
+        {:noreply, socket}
+
+      snippet ->
+        caret = socket.assigns.caret
+        sparams = Map.get(params, "params", %{})
+
+        case Lenies.StdLib.Expander.expand(snippet, sparams, socket.assigns.genome, caret) do
+          {:ok, plan} ->
+            {:noreply, apply_insert_plan(socket, plan)}
+
+          {:error, reason} ->
+            {:noreply, assign(socket, :snippet_form_error, stdlib_error(reason))}
+        end
+    end
+  end
+
+  defp stdlib_error(:too_long), do: "That would exceed the codeome length limit."
+  defp stdlib_error(:anchor_namespace_full), do: "Too many distinct functions in this codeome."
+  defp stdlib_error(other), do: "Could not insert snippet (#{inspect(other)})."
+
+  defp apply_insert_plan(socket, %Lenies.StdLib.InsertPlan{caret_ops: caret_ops}) do
+    insert_at_caret(socket, caret_ops)
+  end
+
   def handle_event("insert_snippet_at", %{"id" => id, "section" => sec, "index" => index}, socket) do
     section = decode_section(sec)
     len = length(GenomeBuffer.get_section(socket.assigns.genome, section) || [])
@@ -1006,6 +1034,8 @@ defmodule LeniesWeb.EditorLive do
           show_snippet_form={@show_snippet_form}
           snippet_form_error={@snippet_form_error}
         />
+
+        <EditorComponents.StdLibPanel.std_lib_panel std_lib={@std_lib} />
 
         <EditorComponents.Listing.listing
           genome={@genome}
