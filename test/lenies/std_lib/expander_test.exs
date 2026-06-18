@@ -7,6 +7,7 @@ defmodule Lenies.StdLib.ExpanderTest do
 
   test "inline snippet → caret_ops are the literal body, nothing appended" do
     s = Catalog.get("graze-step")
+
     assert {:ok, %InsertPlan{caret_ops: [:eat, :move], appended_ops: [], anchor: nil}} =
              Expander.expand(s, %{}, genome(), {:chromosome, 0})
   end
@@ -16,20 +17,39 @@ defmodule Lenies.StdLib.ExpanderTest do
     alias Lenies.Interpreter.State
 
     defp run_to_stack(ops) do
-      {:cont, s} = Interpreter.run_k_instructions(State.new(energy: 1000.0), Codeome.from_list(ops), length(ops))
+      {:cont, s} =
+        Interpreter.run_k_instructions(
+          State.new(energy: 1000.0),
+          Codeome.from_list(ops),
+          length(ops)
+        )
+
       s.stack
     end
 
     test "const_ops leaves exactly K on the stack for several K" do
       for k <- [1, 2, 5, 8, 13, 64] do
-        {:ok, plan} = Expander.expand(Catalog.get("const-k"), %{"K" => k}, GenomeBuffer.new([:nop_0, :eat, :move, :jmp_t, :ret]), {:chromosome, 0})
+        {:ok, plan} =
+          Expander.expand(
+            Catalog.get("const-k"),
+            %{"K" => k},
+            GenomeBuffer.new([:nop_0, :eat, :move, :jmp_t, :ret]),
+            {:chromosome, 0}
+          )
+
         assert [^k | _] = run_to_stack(plan.caret_ops), "K=#{k}"
         assert plan.appended_ops == []
       end
     end
 
     test "const rejects K < 1" do
-      assert {:error, :bad_param} = Expander.expand(Catalog.get("const-k"), %{"K" => 0}, GenomeBuffer.new([:nop_0, :eat, :move, :jmp_t, :ret]), {:chromosome, 0})
+      assert {:error, :bad_param} =
+               Expander.expand(
+                 Catalog.get("const-k"),
+                 %{"K" => 0},
+                 GenomeBuffer.new([:nop_0, :eat, :move, :jmp_t, :ret]),
+                 {:chromosome, 0}
+               )
     end
   end
 
@@ -50,6 +70,7 @@ defmodule Lenies.StdLib.ExpanderTest do
     test "second insert when already defined: only a call, nothing appended" do
       s = Catalog.get("scan-turn")
       {:ok, p1} = Expander.expand(s, %{}, g0(), {:chromosome, 2})
+
       g1 =
         g0()
         |> GenomeBuffer.update_section(:chromosome, &(&1 ++ p1.appended_ops))
@@ -79,11 +100,13 @@ defmodule Lenies.StdLib.ExpanderTest do
     test "exhaustion → {:error, :anchor_namespace_full}" do
       # Register all 32 patterns at distinct comment indices.
       g0 = GenomeBuffer.new([:eat, :move, :jmp_t, :ret, :nop_0])
+
       g =
         Enum.reduce(0..31, g0, fn i, acc ->
           pat = i |> Integer.to_string(2) |> String.pad_leading(5, "0")
           GenomeBuffer.put_comment(acc, :chromosome, i, "stdlib:f#{i}:anchor=#{pat}")
         end)
+
       assert {:error, :anchor_namespace_full} = Expander.allocate_anchor(g)
     end
   end

@@ -23,6 +23,7 @@ defmodule Lenies.StdLib.CatalogTest do
 
   test "every inline snippet body is whitelisted opcodes only" do
     ok = Lenies.Codeome.Opcodes.all() |> MapSet.new()
+
     for %Snippet{kind: :inline, body: body, id: id} <- Catalog.all() do
       assert Enum.all?(body, &MapSet.member?(ok, &1)), "#{id} has non-opcode body item"
     end
@@ -36,8 +37,17 @@ defmodule Lenies.StdLib.CatalogTest do
 
     # 9 non-nop ops so even the smallest inline snippet (2 ops) pushes total >= 10
     @base GenomeBuffer.new([
-      :nop_0, :push0, :push1, :eat, :move, :sense_front, :turn_right, :drop, :jmp_t, :ret
-    ])
+            :nop_0,
+            :push0,
+            :push1,
+            :eat,
+            :move,
+            :sense_front,
+            :turn_right,
+            :drop,
+            :jmp_t,
+            :ret
+          ])
 
     test "expansion yields whitelisted opcodes, a valid codeome, and runs without crashing" do
       ok = Lenies.Codeome.Opcodes.all() |> MapSet.new()

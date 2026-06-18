@@ -19,11 +19,26 @@ defmodule LeniesWeb.EditorComponents.StdLibPanel do
           <div :if={s.doc} class="std-lib-doc">{s.doc}</div>
           <form :if={s.kind == :param} phx-submit="insert_stdlib" class="std-lib-paramform">
             <input type="hidden" name="_id" value={s.id} />
-            <label :for={p <- s.params}>{p} <input type="number" name={"params[#{p}]"} value="8" min="1" /></label>
+            <label :for={p <- s.params}>
+              {p} <input type="number" name={"params[#{p}]"} value="8" min="1" />
+            </label>
             <button type="submit">insert</button>
           </form>
-          <button :if={s.kind == :inline} type="button" class="std-lib-insert" phx-click="insert_stdlib" phx-value-id={s.id}>insert</button>
-          <button :if={s.kind == :function} type="button" phx-click="insert_stdlib" phx-value-id={s.id}>
+          <button
+            :if={s.kind == :inline}
+            type="button"
+            class="std-lib-insert"
+            phx-click="insert_stdlib"
+            phx-value-id={s.id}
+          >
+            insert
+          </button>
+          <button
+            :if={s.kind == :function}
+            type="button"
+            phx-click="insert_stdlib"
+            phx-value-id={s.id}
+          >
             {if MapSet.member?(@defined_fns, s.id), do: "+ call", else: "+ definition & call"}
           </button>
         </article>

@@ -7,7 +7,9 @@ defmodule Lenies.StdLib.InsertPlan do
   defstruct caret_ops: [], appended_ops: [], anchor: nil, comments: []
 
   @type t :: %__MODULE__{
-          caret_ops: [atom()], appended_ops: [atom()],
-          anchor: [atom()] | nil, comments: [{non_neg_integer(), String.t()}]
+          caret_ops: [atom()],
+          appended_ops: [atom()],
+          anchor: [atom()] | nil,
+          comments: [{non_neg_integer(), String.t()}]
         }
 end

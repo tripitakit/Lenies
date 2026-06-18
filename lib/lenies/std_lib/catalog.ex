@@ -3,32 +3,79 @@ defmodule Lenies.StdLib.Catalog do
   alias Lenies.StdLib.Snippet
 
   @snippets [
-    %Snippet{id: "random-bit", name: "random bit", category: "Branching",
-      kind: :inline, signature: "( -- 0|1 )", doc: "A 50/50 random bit on the stack.",
-      body: [:pushN, :push1, :add, :mod]},
-    %Snippet{id: "if-food", name: "if food ahead", category: "Branching",
-      kind: :inline, signature: "( -- )", doc: "Senses the front cell; leaves its reading for a following jz_t.",
-      body: [:sense_front, :dup]},
-    %Snippet{id: "graze-step", name: "graze step", category: "Foraging",
-      kind: :inline, signature: "( -- )", doc: "Eat the current cell, then step forward.",
-      body: [:eat, :move]},
-    %Snippet{id: "slot-save", name: "save to slot 1", category: "Memory",
-      kind: :inline, signature: "( v -- )", doc: "Store the top value into memory slot 1.",
-      body: [:push1, :store]},
-    %Snippet{id: "slot-load", name: "load slot 1", category: "Memory",
-      kind: :inline, signature: "( -- v )", doc: "Push memory slot 1 onto the stack.",
-      body: [:push1, :load]},
-    %Snippet{id: "increment-slot1", name: "increment slot 1", category: "Memory",
-      kind: :inline, signature: "( -- )", doc: "Add 1 to memory slot 1 in place.",
-      body: [:push1, :load, :push1, :add, :push1, :store]},
-    %Snippet{id: "const-k", name: "const K", category: "Constants",
-      kind: :param, signature: "( -- K )", params: [:K],
+    %Snippet{
+      id: "random-bit",
+      name: "random bit",
+      category: "Branching",
+      kind: :inline,
+      signature: "( -- 0|1 )",
+      doc: "A 50/50 random bit on the stack.",
+      body: [:pushN, :push1, :add, :mod]
+    },
+    %Snippet{
+      id: "if-food",
+      name: "if food ahead",
+      category: "Branching",
+      kind: :inline,
+      signature: "( -- )",
+      doc: "Senses the front cell; leaves its reading for a following jz_t.",
+      body: [:sense_front, :dup]
+    },
+    %Snippet{
+      id: "graze-step",
+      name: "graze step",
+      category: "Foraging",
+      kind: :inline,
+      signature: "( -- )",
+      doc: "Eat the current cell, then step forward.",
+      body: [:eat, :move]
+    },
+    %Snippet{
+      id: "slot-save",
+      name: "save to slot 1",
+      category: "Memory",
+      kind: :inline,
+      signature: "( v -- )",
+      doc: "Store the top value into memory slot 1.",
+      body: [:push1, :store]
+    },
+    %Snippet{
+      id: "slot-load",
+      name: "load slot 1",
+      category: "Memory",
+      kind: :inline,
+      signature: "( -- v )",
+      doc: "Push memory slot 1 onto the stack.",
+      body: [:push1, :load]
+    },
+    %Snippet{
+      id: "increment-slot1",
+      name: "increment slot 1",
+      category: "Memory",
+      kind: :inline,
+      signature: "( -- )",
+      doc: "Add 1 to memory slot 1 in place.",
+      body: [:push1, :load, :push1, :add, :push1, :store]
+    },
+    %Snippet{
+      id: "const-k",
+      name: "const K",
+      category: "Constants",
+      kind: :param,
+      signature: "( -- K )",
+      params: [:K],
       doc: "Build the constant K with a doubling chain.",
-      body: [{:const, :K}]},
-    %Snippet{id: "scan-turn", name: "scan & turn", category: "Functions",
-      kind: :function, signature: "( -- )",
+      body: [{:const, :K}]
+    },
+    %Snippet{
+      id: "scan-turn",
+      name: "scan & turn",
+      category: "Functions",
+      kind: :function,
+      signature: "( -- )",
       doc: "Subroutine: sense the front cell, then turn right. Returns to caller.",
-      body: [{:anchor, :self}, :sense_front, :drop, :turn_right, :ret]}
+      body: [{:anchor, :self}, :sense_front, :drop, :turn_right, :ret]
+    }
   ]
 
   @spec all() :: [Snippet.t()]

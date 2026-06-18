@@ -1031,7 +1031,10 @@ defmodule LeniesWeb.EditorLive do
           snippet_form_error={@snippet_form_error}
         />
 
-        <EditorComponents.StdLibPanel.std_lib_panel std_lib={@std_lib} defined_fns={defined_stdlib_fns(@genome)} />
+        <EditorComponents.StdLibPanel.std_lib_panel
+          std_lib={@std_lib}
+          defined_fns={defined_stdlib_fns(@genome)}
+        />
 
         <EditorComponents.Listing.listing
           genome={@genome}

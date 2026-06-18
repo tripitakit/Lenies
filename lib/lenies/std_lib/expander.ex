@@ -26,13 +26,16 @@ defmodule Lenies.StdLib.Expander do
       :undefined ->
         with {:ok, anchor} <- allocate_anchor(genome) do
           appended = [:push0] ++ concretise_function_body(body, anchor)
-          finalize(genome,
-           %InsertPlan{
-             caret_ops: call_ops(anchor),
-             appended_ops: appended,
-             anchor: anchor,
-             comments: [{1, "stdlib:#{id}:anchor=#{bits_str(anchor)}"}]
-           })
+
+          finalize(
+            genome,
+            %InsertPlan{
+              caret_ops: call_ops(anchor),
+              appended_ops: appended,
+              anchor: anchor,
+              comments: [{1, "stdlib:#{id}:anchor=#{bits_str(anchor)}"}]
+            }
+          )
         end
     end
   end
@@ -61,22 +64,33 @@ defmodule Lenies.StdLib.Expander do
 
   defp fetch_int(params, key) do
     case params[Atom.to_string(key)] || params[key] do
-      n when is_integer(n) -> n
-      s when is_binary(s) -> (case Integer.parse(s) do {n, _} -> n; :error -> nil end)
-      _ -> nil
+      n when is_integer(n) ->
+        n
+
+      s when is_binary(s) ->
+        case Integer.parse(s) do
+          {n, _} -> n
+          :error -> nil
+        end
+
+      _ ->
+        nil
     end
   end
 
   # Cheapest exact build of K>=1: push1 (MSB), then double-and-add per bit.
   defp const_ops(k) when is_integer(k) and k >= 1 do
     [_msb | rest] = Integer.digits(k, 2)
+
     ops =
       Enum.reduce(rest, [:push1], fn bit, acc ->
         doubled = acc ++ [:dup, :add]
         if bit == 1, do: doubled ++ [:push1, :add], else: doubled
       end)
+
     {:ok, ops}
   end
+
   defp const_ops(_), do: {:error, :bad_param}
 
   # ---------------------------------------------------------------------------
@@ -93,15 +107,27 @@ defmodule Lenies.StdLib.Expander do
     end)
   end
 
-  defp bits_str(anchor), do: Enum.map_join(anchor, "", fn :nop_1 -> "1"; :nop_0 -> "0" end)
+  defp bits_str(anchor),
+    do:
+      Enum.map_join(anchor, "", fn
+        :nop_1 -> "1"
+        :nop_0 -> "0"
+      end)
 
   defp anchor_for(genome, id) do
     genome.comments
     |> Map.values()
     |> Enum.find_value(:undefined, fn txt ->
       case Regex.run(~r/^stdlib:#{Regex.escape(id)}:anchor=([01]{5})$/, txt) do
-        [_, pat] -> {:ok, Enum.map(String.graphemes(pat), fn "1" -> :nop_1; "0" -> :nop_0 end)}
-        _ -> nil
+        [_, pat] ->
+          {:ok,
+           Enum.map(String.graphemes(pat), fn
+             "1" -> :nop_1
+             "0" -> :nop_0
+           end)}
+
+        _ ->
+          nil
       end
     end)
   end
@@ -113,7 +139,8 @@ defmodule Lenies.StdLib.Expander do
   @anchor_len 5
 
   @doc "Allocate a free 5-bit anchor pattern (list of :nop_0/:nop_1) for the genome."
-  @spec allocate_anchor(LeniesWeb.GenomeBuffer.t()) :: {:ok, [atom()]} | {:error, :anchor_namespace_full}
+  @spec allocate_anchor(LeniesWeb.GenomeBuffer.t()) ::
+          {:ok, [atom()]} | {:error, :anchor_namespace_full}
   def allocate_anchor(genome) do
     used = used_anchor_bits(genome)
 
@@ -123,12 +150,21 @@ defmodule Lenies.StdLib.Expander do
       |> Enum.find(fn b -> not MapSet.member?(used, b) and not MapSet.member?(used, flip(b)) end)
 
     case free do
-      nil -> {:error, :anchor_namespace_full}
-      b -> {:ok, Enum.map(b, fn 1 -> :nop_1; 0 -> :nop_0 end)}
+      nil ->
+        {:error, :anchor_namespace_full}
+
+      b ->
+        {:ok,
+         Enum.map(b, fn
+           1 -> :nop_1
+           0 -> :nop_0
+         end)}
     end
   end
 
-  defp bits(i), do: i |> Integer.digits(2) |> then(&(List.duplicate(0, @anchor_len - length(&1)) ++ &1))
+  defp bits(i),
+    do: i |> Integer.digits(2) |> then(&(List.duplicate(0, @anchor_len - length(&1)) ++ &1))
+
   defp flip(b), do: Enum.map(b, &(1 - &1))
 
   defp used_anchor_bits(genome) do
@@ -146,7 +182,12 @@ defmodule Lenies.StdLib.Expander do
       genome.chromosome
       |> Enum.chunk_every(@anchor_len, 1, :discard)
       |> Enum.filter(&Enum.all?(&1, fn op -> op in [:nop_0, :nop_1] end))
-      |> Enum.map(fn run -> Enum.map(run, fn :nop_1 -> 1; :nop_0 -> 0 end) end)
+      |> Enum.map(fn run ->
+        Enum.map(run, fn
+          :nop_1 -> 1
+          :nop_0 -> 0
+        end)
+      end)
 
     MapSet.new(from_comments ++ from_runs)
   end

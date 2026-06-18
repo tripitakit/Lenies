@@ -5,12 +5,21 @@ defmodule Lenies.StdLib.Snippet do
 
   @type kind :: :inline | :param | :function
   @type placeholder ::
-          {:const, atom()} | {:counter, atom(), non_neg_integer()}
-          | {:anchor, :self} | {:call, :self} | {:sep}
+          {:const, atom()}
+          | {:counter, atom(), non_neg_integer()}
+          | {:anchor, :self}
+          | {:call, :self}
+          | {:sep}
   @type body_item :: atom() | placeholder()
   @type t :: %__MODULE__{
-          id: String.t(), name: String.t(), category: String.t(),
-          kind: kind(), signature: String.t(), doc: String.t() | nil,
-          body: [body_item()], params: [atom()], cost: number() | nil
+          id: String.t(),
+          name: String.t(),
+          category: String.t(),
+          kind: kind(),
+          signature: String.t(),
+          doc: String.t() | nil,
+          body: [body_item()],
+          params: [atom()],
+          cost: number() | nil
         }
 end

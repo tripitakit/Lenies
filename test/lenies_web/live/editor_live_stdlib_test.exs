@@ -46,7 +46,9 @@ defmodule LeniesWeb.EditorLiveStdLibTest do
     :sys.get_state(view.pid).socket.assigns.genome.chromosome |> length()
   end
 
-  test "inserting a function appends a body and a call; re-inserting adds only a call", %{conn: conn} do
+  test "inserting a function appends a body and a call; re-inserting adds only a call", %{
+    conn: conn
+  } do
     {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
     render_hook(view, "insert_stdlib", %{"id" => "scan-turn"})
     html1 = render(view)
@@ -55,7 +57,8 @@ defmodule LeniesWeb.EditorLiveStdLibTest do
     len1 = chromosome_len(view)
     render_hook(view, "insert_stdlib", %{"id" => "scan-turn"})
     len2 = chromosome_len(view)
-    assert len2 - len1 <= 6   # only a small call added, no second body
+    # only a small call added, no second body
+    assert len2 - len1 <= 6
   end
 
   test "function button label reflects whether it is already defined", %{conn: conn} do
