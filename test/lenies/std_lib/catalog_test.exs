@@ -39,9 +39,14 @@ defmodule Lenies.StdLib.CatalogTest do
 
     defp top(id, seed, params \\ %{}) do
       s = Catalog.get(id)
-      {:ok, plan} = Expander.expand(s, params, gx(), {:chromosome, 0})
+      # Append a TEST-ONLY spin sentinel so the bare circular codeome cannot wrap
+      # back to position 0 and re-run the operator (which would corrupt the read).
+      # The operator runs once, leaves its result on top, then this sentinel spins
+      # forever with the stack frozen. The catalog body itself stays clean.
+      s2 = %{s | body: s.body ++ [{:label, :__spin}, {:branch, :jmp, :__spin}]}
+      {:ok, plan} = Expander.expand(s2, params, gx(), {:chromosome, 0})
       st = Enum.reduce(seed, State.new(energy: 5000.0), &State.push(&2, &1))
-      {_, out} = Interpreter.run_k_instructions(st, Codeome.from_list(plan.caret_ops), 300)
+      {_, out} = Interpreter.run_k_instructions(st, Codeome.from_list(plan.caret_ops), 400)
       hd(out.stack)
     end
 
@@ -76,10 +81,46 @@ defmodule Lenies.StdLib.CatalogTest do
 
     test "min/max touch only slot 3" do
       s = Catalog.get("min")
-      {:ok, plan} = Expander.expand(s, %{}, gx(), {:chromosome, 0})
+      s2 = %{s | body: s.body ++ [{:label, :__spin}, {:branch, :jmp, :__spin}]}
+      {:ok, plan} = Expander.expand(s2, %{}, gx(), {:chromosome, 0})
       st = State.new(energy: 5000.0) |> State.push(7) |> State.push(2)
-      {_, out} = Interpreter.run_k_instructions(st, Codeome.from_list(plan.caret_ops), 300)
+      {_, out} = Interpreter.run_k_instructions(st, Codeome.from_list(plan.caret_ops), 400)
       assert State.load(out, 0) == 0 and State.load(out, 1) == 0 and State.load(out, 2) == 0
+    end
+
+    test "operators do NOT trap execution (anti-trap guard)" do
+      # For a representative set of operators, build a codeome whose body is the
+      # operator followed by a marker (store 1 into slot 0) and a spin sentinel.
+      # If execution flows THROUGH the operator, the marker runs and slot 0 == 1.
+      # If the operator traps (e.g. an infinite-jump sentinel baked into the body),
+      # the marker is never reached and slot 0 stays 0 -> this test fails.
+      cases = [
+        {"not", [0], %{}},
+        {"and", [1, 1], %{}},
+        {"eq", [4, 4], %{}},
+        {"lt", [3, 5], %{}},
+        {"sign", [-7], %{}},
+        {"min", [3, 9], %{}},
+        {"clamp", [12], %{"lo" => 0, "hi" => 10}}
+      ]
+
+      for {id, seed, params} <- cases do
+        op_body = Catalog.get(id).body
+
+        probe = %Snippet{
+          id: "__probe_#{id}",
+          name: "probe",
+          category: "Test",
+          kind: :inline,
+          signature: "( -- )",
+          body: op_body ++ [:push1, :push0, :store, {:label, :__spin}, {:branch, :jmp, :__spin}]
+        }
+
+        {:ok, plan} = Expander.expand(probe, params, gx(), {:chromosome, 0})
+        st = Enum.reduce(seed, State.new(energy: 5000.0), &State.push(&2, &1))
+        {_, out} = Interpreter.run_k_instructions(st, Codeome.from_list(plan.caret_ops), 400)
+        assert State.load(out, 0) == 1, "#{id} trapped execution (marker never ran)"
+      end
     end
   end
 
