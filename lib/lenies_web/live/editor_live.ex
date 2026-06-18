@@ -680,14 +680,6 @@ defmodule LeniesWeb.EditorLive do
     end
   end
 
-  defp stdlib_error(:too_long), do: "That would exceed the codeome length limit."
-  defp stdlib_error(:anchor_namespace_full), do: "Too many distinct functions in this codeome."
-  defp stdlib_error(other), do: "Could not insert snippet (#{inspect(other)})."
-
-  defp apply_insert_plan(socket, %Lenies.StdLib.InsertPlan{caret_ops: caret_ops}) do
-    insert_at_caret(socket, caret_ops)
-  end
-
   def handle_event("insert_snippet_at", %{"id" => id, "section" => sec, "index" => index}, socket) do
     section = decode_section(sec)
     len = length(GenomeBuffer.get_section(socket.assigns.genome, section) || [])
@@ -1267,6 +1259,14 @@ defmodule LeniesWeb.EditorLive do
           plasmids: Lenies.Collection.to_plasmid_structs(c)
         }
     end
+  end
+
+  defp stdlib_error(:too_long), do: "That would exceed the codeome length limit."
+  defp stdlib_error(:anchor_namespace_full), do: "Too many distinct functions in this codeome."
+  defp stdlib_error(other), do: "Could not insert snippet (#{inspect(other)})."
+
+  defp apply_insert_plan(socket, %Lenies.StdLib.InsertPlan{caret_ops: caret_ops}) do
+    insert_at_caret(socket, caret_ops)
   end
 
   # Inserts `opcodes` at the caret (replace-on-insert when a selection is
