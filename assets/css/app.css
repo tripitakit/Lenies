@@ -804,6 +804,134 @@
   color: #fca5a5;
 }
 
+/* ----- Std-lib panel (built-in functional snippets) -----
+   Its own grid column in the editor; matches the palette/listing pane
+   chrome (cyan-bordered dark pane, cyan uppercase title, violet category
+   labels, violet "insert" affordance) and scrolls internally. */
+.lenies-dashboard .std-lib-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  background: rgba(2, 6, 23, 0.4);
+  padding: 8px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.lenies-dashboard .std-lib-head {
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(34, 211, 238, 0.15);
+  padding-bottom: 4px;
+}
+
+.lenies-dashboard .std-lib-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #22d3ee;
+  opacity: 0.7;
+}
+
+.lenies-dashboard .std-lib-cat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lenies-dashboard .std-lib-cat-head {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgb(167 139 250 / 0.85); /* violet, matches section dividers */
+  padding: 4px 2px 2px;
+}
+
+.lenies-dashboard .std-lib-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.5);
+  padding: 6px;
+}
+
+.lenies-dashboard .std-lib-row1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.lenies-dashboard .std-lib-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.lenies-dashboard .std-lib-kind {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #a78bfa;
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  padding: 0 4px;
+}
+
+.lenies-dashboard .std-lib-sig {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  color: #67e8f9;
+  opacity: 0.85;
+}
+
+.lenies-dashboard .std-lib-doc {
+  font-size: 10px;
+  line-height: 1.4;
+  color: #94a3b8;
+}
+
+.lenies-dashboard .std-lib-paramform {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.lenies-dashboard .std-lib-paramform label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: #cbd5e1;
+}
+
+.lenies-dashboard .std-lib-card input[type="number"] {
+  width: 48px;
+  font-size: 11px;
+  padding: 1px 4px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(2, 6, 23, 0.7);
+  color: #e2e8f0;
+}
+
+/* All card actions (inline insert, param submit, function +call) share
+   the violet "insert" affordance used by my-snippets. */
+.lenies-dashboard .std-lib-card button {
+  align-self: flex-start;
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  background: rgba(2, 6, 23, 0.4);
+  color: #ddd6fe;
+  cursor: pointer;
+}
+
+.lenies-dashboard .std-lib-card button:hover {
+  border-color: #a78bfa;
+  background: rgba(167, 139, 250, 0.12);
+}
+
 /* ----- Codeome editor page ----- */
 /* Flex column so the optional spawn/save forms can slot between the
    header and the editor-grid without breaking the layout: header is
