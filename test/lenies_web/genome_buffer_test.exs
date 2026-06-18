@@ -142,10 +142,11 @@ defmodule LeniesWeb.GenomeBufferTest do
       assert GenomeBuffer.get_comment(g, :chromosome, 0) == nil
     end
 
-    test "put_comment trims and truncates to 32 chars; blank clears" do
-      long = String.duplicate("x", 50)
+    test "put_comment trims and truncates to comment_max_len; blank clears" do
+      long = String.duplicate("x", GenomeBuffer.comment_max_len() + 18)
       g = GenomeBuffer.put_comment(GenomeBuffer.new([:push0, :add]), :chromosome, 0, long)
-      assert String.length(GenomeBuffer.get_comment(g, :chromosome, 0)) == 32
+      assert String.length(GenomeBuffer.get_comment(g, :chromosome, 0)) ==
+               GenomeBuffer.comment_max_len()
 
       g2 = GenomeBuffer.put_comment(g, :chromosome, 0, "   ")
       assert GenomeBuffer.get_comment(g2, :chromosome, 0) == nil
