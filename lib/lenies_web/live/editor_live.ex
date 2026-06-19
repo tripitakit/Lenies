@@ -659,7 +659,9 @@ defmodule LeniesWeb.EditorLive do
   end
 
   def handle_event("insert_stdlib", %{"_id" => id} = params, socket) do
-    handle_event("insert_stdlib", Map.put(params, "id", id), socket)
+    # Param-snippet forms submit a hidden `_id` instead of phx-value-id. Drop
+    # `_id` while re-dispatching, or this same clause re-matches forever.
+    handle_event("insert_stdlib", params |> Map.delete("_id") |> Map.put("id", id), socket)
   end
 
   def handle_event("insert_stdlib", %{"id" => id} = params, socket) do

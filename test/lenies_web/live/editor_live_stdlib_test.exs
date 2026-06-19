@@ -54,6 +54,23 @@ defmodule LeniesWeb.EditorLiveStdLibTest do
     assert html =~ "dup"
   end
 
+  # Regression: a param snippet's real <form> sends the hidden `name="_id"`, NOT
+  # "id" (that's only the inline button's phx-value-id). The "_id" remap clause
+  # must not re-match itself, or the handler infinite-loops and the LiveView
+  # process hangs — making every param-snippet INSERT silently do nothing.
+  @tag timeout: 15_000
+  test "submitting the real param FORM (hidden _id) inserts without hanging", %{conn: conn} do
+    {:ok, view, _} = live(conn, ~p"/sandbox/editor/new")
+    render_hook(view, "toggle_stdlib_cat", %{"cat" => "Numeric"})
+    before = chromosome_len(view)
+
+    view
+    |> element(~s{form.std-lib-paramform:has(input[value="const-k"])})
+    |> render_submit(%{"params" => %{"K" => "8"}})
+
+    assert chromosome_len(view) > before, "const-k form submit should add the doubling chain"
+  end
+
   defp chromosome_len(view) do
     :sys.get_state(view.pid).socket.assigns.genome.chromosome |> length()
   end
